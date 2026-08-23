@@ -2,7 +2,9 @@
 
 A living checklist. Nothing here is decided unless it says DECIDED.
 Tags: **[LB]** load-bearing (expensive to reverse — decide early) ·
-**[OPEN]** needs a decision · **[LATER]** safe to defer.
+**[OPEN]** needs a decision · **[LATER]** safe to defer ·
+**[DEFERRED]** was load-bearing, deliberately postponed with a written reason
+and a trigger for revisiting — distinct from `[LATER]`, which was never urgent.
 
 **On `[LB]` discipline.** Load-bearing means *expensive to reverse* — a
 published interface, a data format, something with multiple implementations
@@ -88,8 +90,27 @@ Known instances (measured 2026-08-22/23):
       re-deciding later.
 - [x] **[LB]** Standalone repository → **[ADR-0002](decisions/0002-separate-repository.md)** *(Accepted)*
 - [x] **[LB]** Decision-recording practice: ADRs → **[ADR-0001](decisions/0001-record-architecture-decisions.md)** *(Accepted)*
-- [ ] **[LB]** Consumption model — git submodule, vendored copy, or prebuilt
-      artifact? Explicitly left unresolved by ADR-0002; see also §15.
+- [ ] **[DEFERRED]** Consumption model — submodule, subtree, vendored copy, or
+      prebuilt artifact. **Deliberately deferred 2026-08-23: nothing consumes
+      Diatom yet.** Choosing an integration model before either side exists means
+      choosing without the information that makes it obvious. Decide when PlayOS
+      actually needs to embed it, by which point how often the two change
+      together will be known.
+
+      Notes for when it is revisited:
+      - **Submodule** — pin is structural, but detached HEAD, `--recursive` on
+        clone, and a two-step pointer bump that is silently easy to forget.
+        Worst precisely during co-development, which is the phase this will be
+        in for months.
+      - **Subtree** — same files-in-tree result as vendoring, but git records the
+        provenance instead of a README claiming it. `--squash` keeps the log
+        clean. Better for co-development: edit in place, `subtree push` upstream.
+      - **Manual vendoring** — what `minarch/overrides/` does today, and the
+        reason PlayOS's docs claim a `v6.11.2` baseline while the build actually
+        reads `v6.11.2-10-g96eeacd9`. The provenance lives in prose and drifts.
+      - Weaker argument than it first appeared: the NextUI drift was a *third
+        party* moving underneath. Diatom is Eric's — it only changes when he
+        changes it.
 - [x] **[OPEN]** Design work migrated into the `diatom` repository 2026-08-23
       under `docs/`. The scoping folder is gone.
 
