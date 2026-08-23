@@ -51,11 +51,10 @@ constrain; they do not determine. PlayOS runs three systems by curation, not
 because the Brick is incapable of more.
 
 - [ ] **[LB]** Ratify or amend the class definition above.
-- [ ] **[LB]** **Must the frontend survive PS1-class workloads?** This is *not*
-      "will PlayOS ship PS1" — that stays deferrable curation. It is whether the
-      architecture must tolerate the heaviest thing the class can run. It sets
-      the memory envelope and decides whether §10 residency is real work or moot.
-      Answering it unblocks the architecture with the system list still open.
+- [x] **[LB]** **Must Diatom survive PS1/Neo-Geo-class workloads? No.**
+      → [ADR-0005](decisions/0005-system-inclusion-criteria.md). Peak loaded game
+      ~10–30 MB estimated, against 956 MB. This is what makes
+      [ADR-0006](decisions/0006-keep-all-cores-resident.md) possible.
 
 Known instances (measured 2026-08-22/23):
 
@@ -335,32 +334,34 @@ usable for iteration.
 - [ ] **[OPEN]** What's the observable win? PlayOS got 1100ms → 200ms with three
       cores resident. Measure before rebuilding it.
 
-### Proposal on the table (2026-08-22) — not decided
+### RESOLVED 2026-08-23 → [ADR-0006](decisions/0006-keep-all-cores-resident.md)
 
-**Never unload a core. Keep the process resident with exactly one core loaded;
-exit the process when the user switches systems.**
+**`dlopen` every core and never `dlclose`. `retro_init` only the one in use.**
 
-Rationale: PlayOS's own `ma_core.c` note puts `dlopen` at ~170ms of the ~900ms
-saved. The bulk of the win is process + GL context persistence, which carries
-no unload risk. Holding N cores is what costs RAM and what forces `dlclose`.
+A proposal of 2026-08-22 — *one core resident, exit the process on system
+switch* — was **rejected**. It bounded memory when Neo Geo was still a
+candidate; [ADR-0005](decisions/0005-system-inclusion-criteria.md) excluded Neo
+Geo, removing the problem it solved. It also paid ~170 ms plus a process restart
+on every system switch, against the snappiness goal.
 
-- Bounds memory at one core regardless of how many systems are curated.
-- Process exit is the only guaranteed reclaim, so leaky cores stop mattering.
-- `dlclose` never happens — §10's gating question stops gating.
-- Crash isolation free. Interacts directly with §3.
-- **Cost:** cross-system switching gets slower. PlayOS has that today.
+Eviction, LRU and tiering are all unnecessary. The three `dlclose` hazards —
+static TLS silently preventing unload, cores leaking across reloads, glibc not
+returning heap to the OS — become non-problems rather than risks, because the
+operation never occurs.
 
-- [ ] **[LB]** Accept, reject, or modify the above.
-- [ ] **[OPEN]** Measure on PlayOS *before* deciding:
-      (a) breakdown of the 1100ms — process+SDL+GL vs `dlopen` vs game load;
-      (b) RSS with one core resident vs three;
-      (c) `dlopen` cost per core — mgba may differ from fceumm.
-      If (a) shows `dlopen` dominating, the proposal weakens and multi-core
-      residency earns its keep. That is the falsifiable part.
-- [ ] **[OPEN]** If eviction is ever needed, note three independent hazards:
-      static TLS makes a library permanently unloadable (silently); cores assume
-      one-shot process lifetime; and glibc does not return freed heap to the OS,
-      so RSS is a misleading metric without care.
+- [x] **[LB]** Residency policy → ADR-0006 *(Accepted)*
+- [x] **[OPEN]** `dlclose` measurement — **no longer required.** Retired from the
+      phase exit criteria; Diatom never calls it.
+- [ ] **[OPEN]** Still worth measuring eventually, but nothing is blocked on it:
+      (a) breakdown of PlayOS's 1100 ms — process+SDL+GL vs `dlopen` vs game load;
+      (b) RSS with all cores mapped and one initialized (ADR-0006 revisit
+      trigger is ~250 MB); (c) `dlopen` cost per core.
+      **Must be measured on the Brick** — the Miniloong is Cortex-A55 against the
+      Brick's A53 and would flatter any timing result.
+- [ ] **[LB]** `nm -D` check on `snes9x2010`, `genesis_plus_gx`, `gambatte`
+      before implementation. Runs on a workstation against the **shipping
+      tg5040 builds** — `nm` inspects a binary and needs no device, and another
+      device's builds prove nothing since exports depend on build flags.
 
 ---
 

@@ -53,3 +53,5 @@ never started.
 | [0002](0002-separate-repository.md) | Build the frontend in its own repository | Accepted |
 | [0003](0003-digital-only-input.md) | Digital-only input — no analog support | Accepted |
 | [0004](0004-name-the-project-diatom.md) | Name the project Diatom | Accepted |
+| [0005](0005-system-inclusion-criteria.md) | System inclusion criteria | Accepted |
+| [0006](0006-keep-all-cores-resident.md) | Keep all cores resident; never unload | Accepted |
