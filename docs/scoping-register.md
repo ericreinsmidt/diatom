@@ -508,13 +508,34 @@ operation never occurs.
       trigger is ~250 MB); (c) `dlopen` cost per core.
       **Must be measured on the Brick** — the Miniloong is Cortex-A55 against the
       Brick's A53 and would flatter any timing result.
-- [ ] **[LB]** `nm -D` check before implementation. PlayOS verified 45/45
-      `fceumm`, 53/53 `mednafen_pce_fast`, 25/25 `mgba`. **Unverified:**
-      `genesis_plus_gx`, `snes9x2010`, and `gambatte` if used. Runs on a
-      workstation against **whichever core builds a host actually ships** —
-      `nm` inspects a
-      binary and needs no device, and another device's builds prove nothing
-      since exports depend on build flags.
+- [x] **[LB]** `nm -D` check — **DONE 2026-08-23. ADR-0006's revisit trigger
+      fired.** → **[ADR-0010](decisions/0010-rtld-local-is-mandatory.md)**
+      *(Accepted)*
+
+      | Core | Exports | `retro_*` | Other |
+      |---|---|---|---|
+      | fceumm | 45 | 45 | 0 |
+      | gambatte | 46 | 46 | 0 |
+      | mednafen_pce_fast | 53 | 53 | 0 |
+      | mgba | 25 | 25 | 0 |
+      | snes9x | 27 | 27 | 0 |
+      | **picodrive** | **1115** | 46 | **1069** |
+
+      PicoDrive exports a complete statically-linked zlib (`crc32`, `inflate`,
+      `deflate`, `gzopen`, …) plus ~1000 internal names generic enough to
+      collide — `Pico`, `cdd`, `ssp`, `decode`, `tcache`, `MyFree`, `g_argv`.
+
+      **ADR-0006's decision stands; one supporting claim does not.** The `nm`
+      check was described there as proving an empty collision surface, "a
+      stronger guarantee" than `RTLD_LOCAL`. False in general. `RTLD_LOCAL` is
+      the *only* mechanism — hence ADR-0010.
+
+      A property of the **build**, not the emulator: the same source with
+      `-fvisibility=hidden` would be clean. No core's exports can be assumed.
+      The check is retained as advisory.
+
+      fceumm 45, mednafen_pce_fast 53 and mgba 25 match PlayOS's earlier counts
+      exactly — independent corroboration.
 
 ---
 
