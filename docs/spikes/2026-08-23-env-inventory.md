@@ -17,10 +17,27 @@ declines the rest — a decline is still a data point. Then `retro_init`,
 
 Command names are generated from `libretro.h` itself, so they cannot drift.
 
-Run inside `ghcr.io/loveretro/tg5040-toolchain` — an aarch64 Linux container, so
-the shipping tg5040 cores load with **no device involved**.
+Run inside an aarch64 Linux container, so aarch64 cores load with **no device
+involved**.
 
 All six cores, real ROMs, full lifecycle.
+
+### On the cores tested
+
+The six were a **convenience sample** — aarch64 binaries already on disk — not a
+core list and not a recommendation. Diatom has no core list; it loads whatever it
+is handed (see `CLAUDE.md`). They were chosen because they cover the systems in
+scope and were to hand.
+
+libretro cores are independent upstream binaries, buildable from `libretro-super`
+by anyone. Substituting `genesis_plus_gx` for `picodrive`, or a lighter `snes9x`
+fork, changes nothing structural — it means re-running this harness, which takes
+minutes.
+
+**What generalizes** beyond these builds: the environment-call inventory (an
+API-usage pattern shared across libretro cores), and the frame and sample rates
+(properties of the emulated hardware). **What does not**: exact option counts, and
+any core-specific quirk.
 
 ## Per-core facts
 
@@ -125,14 +142,19 @@ measurement.
 FCEUmm requests it **every frame**. The zero-copy path ADR-0007 deferred is
 available whenever it is wanted. Still right to defer; good to know it is real.
 
-### 8. Core coverage questions answered
+### 8. One core often covers several systems
 
-- **PicoDrive** advertises `bin|gen|smd|md|32x|cue|iso|chd|sms|gg|sg|sc|m3u|...` —
-  it covers Genesis **and Master System and Game Gear**, closing the
-  `genesis_plus_gx` gap. NextUI ships no `genesis_plus_gx` at all.
-- **mGBA** advertises `gba|gb|gbc|sgb` — it could replace `gambatte` and save a
-  core, at some cost in Game Boy accuracy.
-- NextUI ships **full `snes9x` 1.63**, not `snes9x2010`.
+Reported `valid_extensions`, useful because it means the test matrix needs fewer
+cores than it has systems:
+
+- **PicoDrive** — `bin|gen|smd|md|32x|cue|iso|chd|sms|gg|sg|sc|m3u|...`: Genesis,
+  Master System, Game Gear, 32X, Sega CD.
+- **mGBA** — `gba|gb|gbc|sgb`: GBA and Game Boy both.
+- **Beetle PCE Fast** — `pce|cue|ccd|chd|toc|m3u`: HuCard and CD.
+
+This is an observation about these binaries, not a recommendation. A host might
+reasonably prefer `genesis_plus_gx` for Sega or `gambatte` for Game Boy on
+accuracy grounds — Diatom does not care either way.
 
 ## Harness bugs worth remembering
 

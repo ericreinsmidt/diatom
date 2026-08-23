@@ -179,6 +179,23 @@ answer is a live policy object, not a layer.
 - [ ] **[LB]** Does the **host** own the main loop, or the launcher? Resident
       mode + fifo implies the host owns it.
 - [ ] **[OPEN]** Is the deliverable a **library**, a **binary**, or both?
+- [ ] **[LB]** **Standalone operation as the primary mode.** Diatom should run
+      with no host at all:
+
+      ```
+      diatom --core snes9x_libretro.so --rom parodius.sfc
+      ```
+
+      That is how the desktop backend runs, how it is tested, and how a
+      prospective consumer evaluates it without adopting a firmware. The
+      launcher protocol ([ADR-0009](decisions/0009-launcher-protocol.md)) then
+      becomes an **embedding mode** for hosts wanting a resident process —
+      an additional interface, not the fundamental one.
+
+      Does not supersede ADR-0008 or ADR-0009; both stand. Designing for a
+      program that stands alone is a stricter test than designing for one
+      embedder, and it is what keeps Diatom from being a component of somebody
+      else's launcher.
 - [ ] **[OPEN]** Port selection **compile-time, not runtime** — one binary per
       device, port linked in. Nobody swaps a device backend at runtime; a
       plugin mechanism would be an abstraction with no consumer.
@@ -389,47 +406,52 @@ deliberate target**, not an edge case — Probotector is PAL-only Contra. Pacing
 - [ ] **[OPEN]** Verify the Brick's physical controls (unmeasured). No longer
       blocking after ADR-0003, but §0b's device table is incomplete without it.
 
-### Curation notes (not ADR material — curation lives in firmware config)
+### Test matrix — *not* a core list
 
-Live system list as of **2026-08-23**. Criteria are fixed by
-[ADR-0005](decisions/0005-system-inclusion-criteria.md); this list moves without
+**Diatom has no core list and no system list.** It loads whatever core it is
+handed. The table below is the set Diatom is **verified against**, so its
+envelope and geometry assumptions have evidence behind them. Which core actually
+covers which system is the host application's config decision — for PlayOS,
+`systems.cfg`. See `CLAUDE.md`.
+
+Systems in scope by the criteria in
+[ADR-0005](decisions/0005-system-inclusion-criteria.md); the list moves without
 superseding it.
 
-| System | Core | Max ROM | Integer scale |
-|---|---|---|---|
-| NES | `fceumm` | ~1 MB | 3× → 768×720 |
-| Master System | `genesis_plus_gx` | ~1 MB | 4× on Brick (1024×768 exact), 3× on Miniloong |
-| Game Gear | `genesis_plus_gx` | ~1 MB | 5× → 800×720 |
-| PC Engine (HuCard) | `mednafen_pce_fast` | ~1 MB | 3× → 768×717 |
-| PC Engine CD | `mednafen_pce_fast` | — | 3× |
-| Genesis | `genesis_plus_gx` | 4 MB (8 max) | 3× → 960×672 |
-| SNES | `snes9x2010` (tbd) | 6 MB | 3× → 768×672 |
-| Game Boy / GBC | `gambatte` **or** `mgba` | ~8 MB | 5× → 800×720 |
-| GBA | `mgba` | 32 MB | 4× → 960×640 |
+| System | Max ROM | Integer scale |
+|---|---|---|
+| NES | ~1 MB | 3× → 768×720 |
+| Master System | ~1 MB | 4× on Brick (1024×768 exact), 3× on Miniloong |
+| Game Gear | ~1 MB | 5× → 800×720 |
+| PC Engine (HuCard) | ~1 MB | 3× → 768×717 |
+| PC Engine CD | — | 3× |
+| Genesis | 4 MB (8 max) | 3× → 960×672 |
+| SNES | 6 MB | 3× → 768×672 |
+| Game Boy / GBC | ~8 MB | 5× → 800×720 |
+| GBA | 32 MB | 4× → 960×640 |
 
-**Ten systems, five or six cores.** `genesis_plus_gx` alone covers Genesis,
-Master System and Game Gear (and Sega CD, if ever wanted); `mednafen_pce_fast`
-covers both PC Engine media. Adding a system is often free — cores are the cost
-unit, not systems.
+Largest ROM is GBA's 32 MB, so the
+[ADR-0006](decisions/0006-keep-all-cores-resident.md) envelope holds regardless
+of which cores a host chooses. **Cores, not systems, are the cost unit** — one
+core routinely covers several systems, so adding a system is often free.
 
-Every entry integer-scales cleanly on both panels, and the largest ROM is GBA's
-32 MB, so the [ADR-0006](decisions/0006-keep-all-cores-resident.md) envelope is
-unaffected.
+**Cores verified against so far** (2026-08-23, see the
+[env-inventory spike](spikes/2026-08-23-env-inventory.md)): `fceumm`,
+`gambatte`, `snes9x` 1.63, `picodrive`, `mednafen_pce_fast`, `mgba`.
 
-**Correction 2026-08-23:** NextUI ships **no `genesis_plus_gx`**. It ships
-**`picodrive`**, which advertises `bin|gen|smd|md|32x|cue|iso|chd|sms|gg|sg|...`
-— so PicoDrive covers Genesis, Master System and Game Gear, closing the gap.
-The tg5040 cores actually available are `fceumm`, `gambatte`, `snes9x`,
-`picodrive`, `mednafen_pce_fast`, `mgba`.
+These six were a **convenience sample** — binaries already on disk from a NextUI
+release — not a recommendation and not the available set. libretro cores are
+independent upstream binaries; Eric already builds his own via `libretro-super`.
+Substituting `genesis_plus_gx` for `picodrive`, or a lighter `snes9x` fork, is a
+host decision and only means re-running the spike, which is cheap.
 
-- [ ] **[OPEN]** GB/GBC core: `gambatte`, or reuse `mgba`? **Confirmed 2026-08-23**
-      that mGBA advertises `gba|gb|gbc|sgb`, so reusing it costs zero new cores;
-      `gambatte` is generally held more accurate for original Game Boy.
-      Accuracy vs core count.
-- [ ] **[OPEN]** SNES core: NextUI ships **full `snes9x` 1.63**, not
-      `snes9x2010`. The lighter forks are the norm on 1 GB handhelds because of
-      in-cart coprocessors — SuperFX (Star Fox, Yoshi's Island), SA-1, DSP-1,
-      CX4 cost CPU, not RAM. **Must be judged on the Brick**, not the Miniloong.
+- [ ] **[OPEN]** Verify against a second core for at least one system, to prove
+      nothing in Diatom is tuned to a particular core's behaviour.
+- [ ] **[OPEN]** SNES coprocessors — SuperFX (Star Fox, Yoshi's Island), SA-1,
+      DSP-1, CX4 cost CPU, not RAM, and are the known pinch point on A53-class
+      hardware. Whether a given core keeps up **must be judged on the Brick**,
+      not the Miniloong. A host-side core-choice question, but Diatom's test
+      matrix should include whichever gets chosen.
 
 **Genesis note:** launched 3-button in 1988; the 6-button pad arrived 1993 and
 most of the library predates it. Both fit 4 face + L1/R1. Requires
@@ -489,7 +511,8 @@ operation never occurs.
 - [ ] **[LB]** `nm -D` check before implementation. PlayOS verified 45/45
       `fceumm`, 53/53 `mednafen_pce_fast`, 25/25 `mgba`. **Unverified:**
       `genesis_plus_gx`, `snes9x2010`, and `gambatte` if used. Runs on a
-      workstation against the **shipping tg5040 builds** — `nm` inspects a
+      workstation against **whichever core builds a host actually ships** —
+      `nm` inspects a
       binary and needs no device, and another device's builds prove nothing
       since exports depend on build flags.
 
