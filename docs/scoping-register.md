@@ -286,8 +286,19 @@ Two amendments ADR-0007 makes to the table above:
       at a lower factor, or relax the rule per device?
 - [ ] **[OPEN]** Aspect-ratio and overscan policy. Crop, or show everything?
 - [ ] **[OPEN]** Rotation support (some panels are physically rotated).
-- [ ] **[LATER]** Zero-copy: `GET_CURRENT_SOFTWARE_FRAMEBUFFER` lets some cores
-      render straight into your texture. Real RAM/bandwidth win, not day one.
+- [ ] **[LATER]** Zero-copy: `GET_CURRENT_SOFTWARE_FRAMEBUFFER` — **confirmed
+      2026-08-23: FCEUmm requests it every frame.** The path ADR-0007 deferred
+      is actively offered. Still deferred; good to know it is real.
+- [x] **[OPEN]** Pixel format — **all six cores chose RGB565** (measured). The
+      XRGB8888 path ADR-0007 accepts is currently dead code; do not build or
+      test it until something needs it.
+- [x] **[OPEN]** Geometry changes mid-run are **common, not exotic** — 3/6 cores
+      call `SET_GEOMETRY` during `run`. Snes9x `max 604×478` vs `base 256×224`;
+      Beetle PCE `max 512×243`. Confirms recompute-on-change.
+- [ ] **[OPEN]** **PC Engine breaks integer scale on one device but not the
+      other.** 256×**243** at 3× is 768×**729** — exceeds the Miniloong's 720
+      lines, fits the Brick's 768. So PCE gets 2× on one and 3× on the other.
+      First real instance of ADR-0007's "doesn't fit" default.
 - [ ] **[OPEN]** GL/GLES or software blit on device?
 - [ ] **[LATER]** Shaders/overlays — probably "no" forever. Decide and write it down.
 
@@ -295,24 +306,57 @@ Two amendments ADR-0007 makes to the table above:
 
 ## 6. Audio — expect this to be the hard part
 
+### Measured 2026-08-23 ([spike](spikes/2026-08-23-env-inventory.md))
+
+| Core | fps | Sample rate |
+|---|---|---|
+| FCEUmm (PAL) | **50.0070** | 48000 |
+| Snes9x (PAL) | **50.0070** | **32040** |
+| Gambatte | 59.7275 | 32768 |
+| PicoDrive | 60.0000 | 44100 |
+| Beetle PCE | 59.8200 | 44100 |
+| mGBA | 59.7275 | **65536** |
+
+**Five distinct frame rates, five distinct sample rates.** Only PicoDrive hits
+exactly 60. mGBA emits 65536 Hz, above any device rate. **DRC is mandatory, not
+a refinement** — there is no configuration in which rates line up.
+
+Two levers the spike discovered:
+
+- **`GET_TARGET_SAMPLE_RATE`** (cmd 81) — a core asks what rate we want.
+  Answering lets it generate at the device rate natively and skip resampling
+  for that core entirely.
+- **`SET_AUDIO_BUFFER_STATUS_CALLBACK`** (cmd 62, 3/6 cores) — cores offer to
+  *receive* buffer occupancy and throttle themselves. The core-side half of DRC.
+
 - [ ] **[LB]** Sync strategy: audio-driven, video-driven, or **dynamic rate
       control** (nudge the resample ratio to keep the buffer centered). DRC is
-      what the mature frontends do.
+      what the mature frontends do — and per the table above, unavoidable.
+- [ ] **[OPEN]** Implement `GET_TARGET_SAMPLE_RATE` and/or
+      `SET_AUDIO_BUFFER_STATUS_CALLBACK`, or resample everything centrally?
 - [ ] **[LB]** Resampler: libsamplerate (what minarch uses) or hand-rolled
       linear/cubic? Check libsamplerate's current license before depending on it.
 - [ ] **[OPEN]** Target output rate. Fixed 48k, or follow the device?
 - [ ] **[OPEN]** Buffer size — latency vs underrun tolerance.
 - [ ] **[OPEN]** Behaviour when a frame overruns budget: drop audio, stretch,
       or let it underrun?
-- [ ] **[OPEN]** GBA is the best test case (59.7275Hz, awkward rate). Make it
-      the audio conformance target.
+- [x] **[OPEN]** ~~GBA is the best test case.~~ Superseded by measurement: the
+      hardest case is **PAL at 50.0070 Hz on a 60 Hz panel** (FCEUmm, Snes9x),
+      and the most awkward *rate* is mGBA's **65536 Hz**. Use both as
+      conformance targets, not GBA alone.
 
 ---
 
 ## 7. Timing and pacing
 
-- [ ] **[LB]** Pace to the **core's** rate (from `retro_get_system_av_info`,
-      e.g. 59.7275) or the **panel's**? They disagree on every system.
+**This is now the most interesting open problem in the project.** Measured
+2026-08-23: five distinct core frame rates, and **PAL at 50.0070 Hz is a
+deliberate target**, not an edge case — Probotector is PAL-only Contra. Pacing
+50 Hz content on a 60 Hz panel is the *normal* case for part of the library.
+
+- [ ] **[LB]** Pace to the **core's** rate (from `retro_get_system_av_info`) or
+      the **panel's**? Measured disagreement: 50.0070 · 59.7275 · 59.8200 ·
+      60.0000. Only PicoDrive matches a 60 Hz panel.
 - [ ] **[OPEN]** Frame drop/duplicate policy when they disagree.
 - [ ] **[OPEN]** Miniloong's 120Hz panel is a clean 2× — does that change the
       answer per device, and does the port get a say?
@@ -372,13 +416,20 @@ Every entry integer-scales cleanly on both panels, and the largest ROM is GBA's
 32 MB, so the [ADR-0006](decisions/0006-keep-all-cores-resident.md) envelope is
 unaffected.
 
-- [ ] **[OPEN]** GB/GBC core: `gambatte`, or reuse `mgba` (which emulates GB and
-      GBC too)? Reusing `mgba` costs zero new cores; `gambatte` is generally
-      held more accurate for original Game Boy. Accuracy vs core count.
-- [ ] **[OPEN]** SNES core: `snes9x` vs `snes9x2010` / `2005`. The lighter forks
-      are the norm on 1 GB handhelds because of in-cart coprocessors — SuperFX
-      (Star Fox, Yoshi's Island), SA-1, DSP-1, CX4 cost CPU, not RAM. **Must be
-      judged on the Brick**, not the Miniloong.
+**Correction 2026-08-23:** NextUI ships **no `genesis_plus_gx`**. It ships
+**`picodrive`**, which advertises `bin|gen|smd|md|32x|cue|iso|chd|sms|gg|sg|...`
+— so PicoDrive covers Genesis, Master System and Game Gear, closing the gap.
+The tg5040 cores actually available are `fceumm`, `gambatte`, `snes9x`,
+`picodrive`, `mednafen_pce_fast`, `mgba`.
+
+- [ ] **[OPEN]** GB/GBC core: `gambatte`, or reuse `mgba`? **Confirmed 2026-08-23**
+      that mGBA advertises `gba|gb|gbc|sgb`, so reusing it costs zero new cores;
+      `gambatte` is generally held more accurate for original Game Boy.
+      Accuracy vs core count.
+- [ ] **[OPEN]** SNES core: NextUI ships **full `snes9x` 1.63**, not
+      `snes9x2010`. The lighter forks are the norm on 1 GB handhelds because of
+      in-cart coprocessors — SuperFX (Star Fox, Yoshi's Island), SA-1, DSP-1,
+      CX4 cost CPU, not RAM. **Must be judged on the Brick**, not the Miniloong.
 
 **Genesis note:** launched 3-button in 1988; the 6-button pad arrived 1993 and
 most of the library predates it. Both fit 4 face + L1/R1. Requires
@@ -464,10 +515,15 @@ operation never occurs.
 ## 13. Testing and dev loop
 
 - [ ] **[LB]** Desktop backend **first**, before any device work.
-- [ ] **[OPEN]** Environment-call logging shim — run each target core, record
-      every `RETRO_ENVIRONMENT_*` it asks for. Turns the unknown long tail into
-      a finite checklist. Cheap, high value, useful even if the rewrite is
-      abandoned.
+- [x] **[OPEN]** Environment-call logging shim — **DONE 2026-08-23** →
+      [spike result](spikes/2026-08-23-env-inventory.md). All six cores, real
+      ROMs, full lifecycle, run in the tg5040 container with no device involved.
+
+      **34 of 77 commands appear · ~17 must be implemented · 17 declined by every
+      core with nothing breaking · 43 never appear.** The long tail is a
+      checklist.
+
+      Consequences recorded below in §5, §6, §7 and §12.
 - [ ] **[OPEN]** Headless conformance test: run N frames, checksum framebuffer,
       assert RSS ceiling.
 - [ ] **[LATER]** CI.
