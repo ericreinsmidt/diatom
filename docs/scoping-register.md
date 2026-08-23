@@ -74,8 +74,9 @@ Known instances (measured 2026-08-22/23):
 - [x] **[OPEN]** Collisions checked 2026-08-23 — none in the CFW / libretro
       frontend / handheld firmware space. One accepted out-of-domain hit:
       `diatom-lang/diatom`.
-- [ ] **[OPEN]** Symbol prefix — `dia_` or `diatom_`? Cores export `retro_*`;
-      ours must never be confusable with theirs in a stack trace or `nm` dump.
+- [x] **[OPEN]** Symbol prefix: **`diatom_`** (2026-08-23). Recorded in
+      `CLAUDE.md` as a convention, not an ADR — pervasive but cheap to reverse.
+      Explicit over terse, and `dia_` is a substring of `media_`.
 - [ ] **[OPEN]** Port naming. `flint` / `slate` / `chalk` for
       tg5040 / miniloong / desktop was proposed when the project was itself a
       stone. Still coherent (diatoms → chert → rock) but no longer automatic.
