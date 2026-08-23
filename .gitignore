@@ -1,0 +1,11 @@
+# macOS
+.DS_Store
+._*
+
+# Build products (nothing exists yet — see CLAUDE.md, scoping phase)
+/build/
+/out/
+
+# Spikes are throwaway by definition and must not be committed.
+# See CLAUDE.md rule 7.
+/spike/
