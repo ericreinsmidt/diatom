@@ -5,7 +5,12 @@ as a permissively licensed replacement for the GPL minarch that PlayOS
 currently patches and rebuilds, and as a reusable base for future firmware
 projects.
 
-**Status: scoping. Nothing is built. Nothing is decided.**
+**Status: scoping closed 2026-08-23. Nine decisions recorded, no code yet.**
+Currently in Phase 2 — spikes. See `CLAUDE.md` for phases and their exit criteria.
+
+Ten systems across five or six cores: NES · Master System · Game Gear ·
+PC Engine · PC Engine CD · Genesis · SNES · Game Boy/GBC · GBA. All 2D, all
+digital input, all light enough to keep every core resident at once.
 
 ---
 
