@@ -55,3 +55,4 @@ never started.
 | [0004](0004-name-the-project-diatom.md) | Name the project Diatom | Accepted |
 | [0005](0005-system-inclusion-criteria.md) | System inclusion criteria | Accepted |
 | [0006](0006-keep-all-cores-resident.md) | Keep all cores resident; never unload | Accepted |
+| [0007](0007-port-interface.md) | The port interface | Accepted |

@@ -223,7 +223,20 @@ Every concept admitted to the port interface must be reimplemented per backend,
 including desktop — which is how the desktop backend rots and stops being
 usable for iteration.
 
-- [ ] **[LB]** Ratify or amend the table above.
+- [x] **[LB]** Ratified and superseded in detail by
+      **[ADR-0007](decisions/0007-port-interface.md)** *(Accepted)* — ten
+      functions; the port must never include `libretro.h`.
+
+Two amendments ADR-0007 makes to the table above:
+
+- **Pixel format passes through** (accept RGB565 + XRGB8888, refuse 0RGB1555)
+  rather than the host forcing one on cores. Both convert free on SDL texture
+  upload, so forcing would sometimes *add* a conversion.
+- **Paths leave the port entirely.** `save` and `system` are domain nouns. The
+  launcher supplies paths to the host at startup.
+
+- [x] **[OPEN]** Does the port ever get to refuse a geometry? No — the host
+      computes `dst` and the port blits. Scale policy never reaches the port.
 - [ ] **[OPEN]** Does the port ever get to *refuse* — e.g. "this geometry can't
       be integer-scaled on this panel"? Who handles that?
 - [ ] **[OPEN]** Backends to build: `desktop` (SDL2, first), `tg5040` (Brick),
