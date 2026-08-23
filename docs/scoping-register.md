@@ -347,9 +347,43 @@ Two amendments ADR-0007 makes to the table above:
 
 ### Curation notes (not ADR material — curation lives in firmware config)
 
-- **Genesis is in** (2026-08-23). Passes the no-sticks filter, ≤6 buttons, ROMs
-  typically 1–4 MB so it stays in the cheap tier. Launched 3-button in 1988; the
-  6-button pad arrived 1993 and most of the library predates it.
+Live system list as of **2026-08-23**. Criteria are fixed by
+[ADR-0005](decisions/0005-system-inclusion-criteria.md); this list moves without
+superseding it.
+
+| System | Core | Max ROM | Integer scale |
+|---|---|---|---|
+| NES | `fceumm` | ~1 MB | 3× → 768×720 |
+| Master System | `genesis_plus_gx` | ~1 MB | 4× on Brick (1024×768 exact), 3× on Miniloong |
+| Game Gear | `genesis_plus_gx` | ~1 MB | 5× → 800×720 |
+| PC Engine (HuCard) | `mednafen_pce_fast` | ~1 MB | 3× → 768×717 |
+| PC Engine CD | `mednafen_pce_fast` | — | 3× |
+| Genesis | `genesis_plus_gx` | 4 MB (8 max) | 3× → 960×672 |
+| SNES | `snes9x2010` (tbd) | 6 MB | 3× → 768×672 |
+| Game Boy / GBC | `gambatte` **or** `mgba` | ~8 MB | 5× → 800×720 |
+| GBA | `mgba` | 32 MB | 4× → 960×640 |
+
+**Ten systems, five or six cores.** `genesis_plus_gx` alone covers Genesis,
+Master System and Game Gear (and Sega CD, if ever wanted); `mednafen_pce_fast`
+covers both PC Engine media. Adding a system is often free — cores are the cost
+unit, not systems.
+
+Every entry integer-scales cleanly on both panels, and the largest ROM is GBA's
+32 MB, so the [ADR-0006](decisions/0006-keep-all-cores-resident.md) envelope is
+unaffected.
+
+- [ ] **[OPEN]** GB/GBC core: `gambatte`, or reuse `mgba` (which emulates GB and
+      GBC too)? Reusing `mgba` costs zero new cores; `gambatte` is generally
+      held more accurate for original Game Boy. Accuracy vs core count.
+- [ ] **[OPEN]** SNES core: `snes9x` vs `snes9x2010` / `2005`. The lighter forks
+      are the norm on 1 GB handhelds because of in-cart coprocessors — SuperFX
+      (Star Fox, Yoshi's Island), SA-1, DSP-1, CX4 cost CPU, not RAM. **Must be
+      judged on the Brick**, not the Miniloong.
+
+**Genesis note:** launched 3-button in 1988; the 6-button pad arrived 1993 and
+most of the library predates it. Both fit 4 face + L1/R1. Requires
+`retro_set_controller_port_device` — some early games misbehave with a 6-button
+pad attached, which is why the real pad has a Mode switch.
 
 ---
 
@@ -401,10 +435,12 @@ operation never occurs.
       trigger is ~250 MB); (c) `dlopen` cost per core.
       **Must be measured on the Brick** — the Miniloong is Cortex-A55 against the
       Brick's A53 and would flatter any timing result.
-- [ ] **[LB]** `nm -D` check on `snes9x2010`, `genesis_plus_gx`, `gambatte`
-      before implementation. Runs on a workstation against the **shipping
-      tg5040 builds** — `nm` inspects a binary and needs no device, and another
-      device's builds prove nothing since exports depend on build flags.
+- [ ] **[LB]** `nm -D` check before implementation. PlayOS verified 45/45
+      `fceumm`, 53/53 `mednafen_pce_fast`, 25/25 `mgba`. **Unverified:**
+      `genesis_plus_gx`, `snes9x2010`, and `gambatte` if used. Runs on a
+      workstation against the **shipping tg5040 builds** — `nm` inspects a
+      binary and needs no device, and another device's builds prove nothing
+      since exports depend on build flags.
 
 ---
 
