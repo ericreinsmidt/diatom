@@ -195,14 +195,22 @@ evaporates — but two others remain:
 - Memory reclaim: on 1GB, process exit is the only *guaranteed* way to get
   everything back from a leaky core.
 
-- [ ] **[LB]** Keep the separate process, or link the frontend into the
-      firmware? Note this interacts with residency: a resident process holding
-      cores between games is a very different memory profile from a process per
-      game.
-- [ ] **[OPEN]** If separate: what is the IPC protocol? (fifo today — keep,
-      formalize, or replace?)
-- [ ] **[OPEN]** PlayOS constraint to respect: the boot hook powers the device
-      **off** if the launch loop exits. Any process model must not trip that.
+- [x] **[LB]** Separate, **long-lived** process →
+      **[ADR-0008](decisions/0008-separate-long-lived-process.md)** *(Accepted)*.
+      The GPL reason is gone; what carries it now is that a core segfault must
+      not take the launcher down, because the boot hook powers the device off
+      when the launch loop exits.
+- [x] **[LB]** Protocol → **[ADR-0009](decisions/0009-launcher-protocol.md)**
+      *(Accepted)*. One Unix domain socket, line-based tab-separated
+      `key=value`. Collapses five mechanisms (two fifos, pid file, temp file,
+      signal) into one. `ERROR` = never started; `EXIT` = ran and stopped —
+      a rule about **display ownership**, not error reporting.
+- [x] **[OPEN]** The power-off failsafe is respected: the launcher stays alive
+      as supervisor, and `SIGUSR1` is retained as the escape hatch for a core
+      wedged inside `retro_run` that cannot read the socket.
+- [ ] **[OPEN]** Remaining risk carried by ADR-0008: **display handoff between
+      two processes** on fbdev/DRM. Proven on tg5040 by PlayOS today; will need
+      re-solving per port and is the likeliest source of platform-specific pain.
 
 ---
 

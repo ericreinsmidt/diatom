@@ -57,3 +57,4 @@ never started.
 | [0006](0006-keep-all-cores-resident.md) | Keep all cores resident; never unload | Accepted |
 | [0007](0007-port-interface.md) | The port interface | Accepted |
 | [0008](0008-separate-long-lived-process.md) | Diatom runs as a separate, long-lived process | Accepted |
+| [0009](0009-launcher-protocol.md) | The launcher ↔ Diatom protocol | Accepted |
