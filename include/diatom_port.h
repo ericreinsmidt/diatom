@@ -85,6 +85,13 @@ uint32_t diatom_port_input_state(void);
  * port's own viability, not anything about games, so it belongs here. */
 bool diatom_port_should_quit(void);
 
+/* Write what was last presented. Pixels and a path, no domain nouns, and both
+ * backends want it — on desktop to see what happened, on device because a
+ * screenshot is otherwise unobtainable. Also not in ADR-0007: that interface
+ * specified ten functions and implementation has made it twelve within a day,
+ * which is worth noticing even though both additions look justified. */
+bool diatom_port_capture(const char *path);
+
 uint64_t diatom_port_now_us(void);
 void     diatom_port_log(diatom_log_level lvl, const char *msg);
 

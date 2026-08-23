@@ -170,6 +170,38 @@ void diatom_port_input_poll(void)
 uint32_t diatom_port_input_state(void) { return g_buttons; }
 bool     diatom_port_should_quit(void) { return g_quit; }
 
+bool diatom_port_capture(const char *path)
+{
+	SDL_Surface *s;
+	int w, h;
+	bool ok;
+
+	if (!g_renderer || !path) return false;
+	SDL_GetRendererOutputSize(g_renderer, &w, &h);
+
+	s = SDL_CreateRGBSurfaceWithFormat(0, w, h, 32, SDL_PIXELFORMAT_ARGB8888);
+	if (!s) return false;
+
+	/* Read back what was actually presented, so the capture shows the real
+	 * scaling and letterboxing rather than the core's raw framebuffer. */
+	if (SDL_RenderReadPixels(g_renderer, NULL, SDL_PIXELFORMAT_ARGB8888,
+	                         s->pixels, s->pitch) != 0) {
+		SDL_FreeSurface(s);
+		return false;
+	}
+	/* Save as plain 24-bit RGB. A 32-bit BMP carries a V4/V5 header with alpha
+	 * masks that several readers — macOS ImageIO among them — refuse, and the
+	 * alpha channel is meaningless here anyway. */
+	{
+		SDL_Surface *rgb = SDL_ConvertSurfaceFormat(s, SDL_PIXELFORMAT_RGB24, 0);
+		SDL_FreeSurface(s);
+		if (!rgb) return false;
+		ok = SDL_SaveBMP(rgb, path) == 0;
+		SDL_FreeSurface(rgb);
+	}
+	return ok;
+}
+
 uint64_t diatom_port_now_us(void)
 {
 	return (uint64_t)(SDL_GetPerformanceCounter() * 1000000ULL

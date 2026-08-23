@@ -27,8 +27,7 @@ static bool        g_frame_fresh;
 static diatom_core      g_core;
 static diatom_policy    g_policy;
 static diatom_port_caps g_caps;
-static diatom_rect      g_dst;
-static int              g_dst_src_w, g_dst_src_h;   /* what g_dst was computed for */
+static diatom_rect      g_dst;   /* locked at load — ADR-0011 */
 
 /* Called from inside retro_run. Copy and return; do not present here. */
 void diatom_on_video(const void *data, unsigned w, unsigned h, size_t pitch)
@@ -63,7 +62,7 @@ static void usage(void)
 
 int main(int argc, char **argv)
 {
-	const char *core_path = NULL, *rom_path = NULL;
+	const char *core_path = NULL, *rom_path = NULL, *shot_path = NULL;
 	struct retro_system_av_info av;
 	struct retro_system_info si;
 	uint64_t frame_us, next_us, t_start;
@@ -76,6 +75,7 @@ int main(int argc, char **argv)
 		else if (!strcmp(argv[i], "--system") && i + 1 < argc) g_policy.system_dir = argv[++i];
 		else if (!strcmp(argv[i], "--save") && i + 1 < argc) g_policy.save_dir = argv[++i];
 		else if (!strcmp(argv[i], "--frames") && i + 1 < argc) limit = strtol(argv[++i], NULL, 10);
+		else if (!strcmp(argv[i], "--shot") && i + 1 < argc) shot_path = argv[++i];
 		else { usage(); return 1; }
 	}
 	if (!core_path) { usage(); return 1; }
@@ -119,6 +119,20 @@ int main(int argc, char **argv)
 
 	diatom_audio_configure(av.timing.sample_rate, g_caps.audio_rate);
 
+	/* The display rect is locked here, from BASE geometry, and does not move
+	 * again — ADR-0011.
+	 *
+	 * Cores announce hires by calling SET_GEOMETRY with a larger base_width
+	 * mid-run (measured: 3 of 6 do this). Recomputing an integer factor from
+	 * the new width collapses 3x to 1x and the picture shrinks to a fifth.
+	 * Holding the rect fixed keeps the picture the same size AND is more
+	 * faithful: SNES and PC Engine hires pixels are physically half-width, so
+	 * 512 columns belong in the same screen width as 256. */
+	g_dst = diatom_scale_rect(av.geometry.base_width, av.geometry.base_height,
+	                          g_caps.surface_w, g_caps.surface_h);
+	printf("diatom: display rect locked %dx%d at %d,%d\n",
+	       g_dst.w, g_dst.h, g_dst.x, g_dst.y);
+
 	/* Provisional pacing: sleep to the core's own rate. Register §7 is the real
 	 * problem — nothing runs at 60Hz and PAL at 50.0070 is a deliberate target,
 	 * so this drifts against the panel. It is honest enough to watch a game and
@@ -135,14 +149,9 @@ int main(int argc, char **argv)
 		g_core.run();
 		frames++;
 
-		if (diatom_env_geometry_changed()) { g_dst_src_w = 0; geom_changes++; }
-
-		if (g_frame_w != g_dst_src_w || g_frame_h != g_dst_src_h) {
-			g_dst = diatom_scale_rect(g_frame_w, g_frame_h,
-			                          g_caps.surface_w, g_caps.surface_h);
-			g_dst_src_w = g_frame_w;
-			g_dst_src_h = g_frame_h;
-		}
+		/* Noted, not acted on: the rect is locked (ADR-0011). The port scales
+		 * whatever arrives into it, so a hires frame keeps its screen size. */
+		if (diatom_env_geometry_changed()) geom_changes++;
 
 		diatom_port_present(g_frame_fresh ? g_frame : NULL,
 		                    g_frame_w, g_frame_h, g_frame_pitch,
@@ -160,6 +169,10 @@ int main(int argc, char **argv)
 			next_us = now;      /* fell behind; do not accumulate debt */
 		}
 	}
+
+	if (shot_path)
+		printf("diatom: capture %s: %s\n", shot_path,
+		       diatom_port_capture(shot_path) ? "ok" : "FAILED");
 
 	{
 		double secs = (diatom_port_now_us() - t_start) / 1000000.0;

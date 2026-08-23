@@ -115,7 +115,7 @@ static uint16_t rgb565(int r, int g, int b)
 
 void retro_run(void)
 {
-	int x, y;
+	int x, y, xs;
 	int16_t audio[1024];
 	size_t n = (size_t)(RATE / FPS);      /* one frame of audio */
 	size_t i;
@@ -146,17 +146,34 @@ void retro_run(void)
 		env(RETRO_ENVIRONMENT_SET_GEOMETRY, &g);
 	}
 
+	/* Draw in DISPLAY units, not source pixels.
+	 *
+	 * Hires pixels are physically half-width, so real content in a 512-wide mode
+	 * uses 512-wide coordinates and looks the same size as it did at 256 — just
+	 * with finer detail. A fixture that draws a 32-source-pixel box in both
+	 * modes renders correctly and demonstrates nothing, because the box really
+	 * is half as wide in hires. Scaling x by this factor is what makes the
+	 * comparison honest. */
+	xs = cur_w / BASE_W;                 /* 1 at base, 2 at hires */
+
 	if (box_x < 0) box_x = 0;
 	if (box_y < 0) box_y = 0;
-	if (box_x > cur_w - 32) box_x = cur_w - 32;
+	if (box_x > BASE_W - 32) box_x = BASE_W - 32;
 	if (box_y > cur_h - 32) box_y = cur_h - 32;
 
 	for (y = 0; y < cur_h; y++) {
 		for (x = 0; x < cur_w; x++) {
-			int v = ((x + frame) / 16 + (y / 16)) & 1;
+			int v = ((x / xs + frame) / 16 + (y / 16)) & 1;
 			fb[y * cur_w + x] = v ? rgb565(24, 24, 32) : rgb565(48, 52, 64);
 		}
 	}
+
+	/* Detail that only resolves in hires: vertical lines one SOURCE pixel wide.
+	 * At base these are 3 screen pixels apart, at hires 1.5 — which is the whole
+	 * point of the mode, and the thing a correct implementation should show. */
+	for (y = 24; y < 72 && y < cur_h; y++)
+		for (x = 24 * xs; x < 120 * xs && x < cur_w; x += 2)
+			fb[y * cur_w + x] = rgb565(200, 200, 210);
 	/* Single-pixel border, so integer scaling is checkable by eye: at 3x each
 	 * edge should be exactly three screen pixels, with no smearing. */
 	for (x = 0; x < cur_w; x++) {
@@ -168,7 +185,7 @@ void retro_run(void)
 		fb[y * cur_w + cur_w - 1] = rgb565(255, 255, 255);
 	}
 	for (y = box_y; y < box_y + 32 && y < cur_h; y++)
-		for (x = box_x; x < box_x + 32 && x < cur_w; x++)
+		for (x = box_x * xs; x < (box_x + 32) * xs && x < cur_w; x++)
 			fb[y * cur_w + x] = rgb565(220, 90, 40);
 
 	video_cb(fb, (unsigned)cur_w, (unsigned)cur_h, (size_t)cur_w * sizeof(uint16_t));
