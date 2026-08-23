@@ -62,12 +62,17 @@ Known instances (measured 2026-08-22/23):
 
 | | Brick (tg5040) | Miniloong Pocket 1 |
 |---|---|---|
-| SoC | Allwinner A133, Cortex-A53 | Rockchip RK3566, Cortex-A55 ×4 |
-| RAM | (unmeasured) | 956 MB |
+| SoC | Cortex-A53 (`CPU part 0xd03`, measured) | Rockchip RK3566, Cortex-A55 ×4 |
+| RAM | **975 MB** (998,332 kB, measured) | 956 MB (978,824 kB, measured) |
+| Swap | **0** (measured) | 0 |
+| Kernel | 4.9.191 | 5.10 |
 | Panel | 1024×768 | 720×960 portrait → 960×720 landscape |
-| OS | NextUI/PlayOS on Linux | Buildroot 2021.11, Linux 5.10 |
 | Controls | (unverified — no analog?) | d-pad, A/B/X/Y, L1/R1, L2/R2, Select, Start, Mode, L3, analog |
 | Rotation | not needed | **required** |
+
+Both devices measured 2026-08-22/23. **Zero swap on both** — the fact underneath
+the file-backed-versus-anonymous reasoning in ADR-0006 and ADR-0010, now
+verified rather than assumed.
 
 ## 1. Identity and project shape
 
@@ -502,12 +507,31 @@ operation never occurs.
 - [x] **[LB]** Residency policy → ADR-0006 *(Accepted)*
 - [x] **[OPEN]** `dlclose` measurement — **no longer required.** Retired from the
       phase exit criteria; Diatom never calls it.
-- [ ] **[OPEN]** Still worth measuring eventually, but nothing is blocked on it:
-      (a) breakdown of PlayOS's 1100 ms — process+SDL+GL vs `dlopen` vs game load;
-      (b) RSS with all cores mapped and one initialized (ADR-0006 revisit
-      trigger is ~250 MB); (c) `dlopen` cost per core.
-      **Must be measured on the Brick** — the Miniloong is Cortex-A55 against the
-      Brick's A53 and would flatter any timing result.
+- [x] **[OPEN]** Measured on the Brick 2026-08-23 →
+      [spike result](spikes/2026-08-23-rss-and-dlopen.md).
+
+      **6 cores mapped + 1 running = 15.0 MB.** Trigger is 250 MB; RAM is 975 MB.
+      Residency was never close to a memory problem — ~2 MB resident per mapped
+      core, ~2 MB more for the loaded game.
+
+      **The ADR-0006 estimate was wrong by 10×** (~150 MB predicted). A mapped
+      `.so` costs far less RSS than its file size, because only touched pages
+      become resident. Wrong in the safe direction, but it was a guess with a
+      number attached.
+
+      **The trigger is badly calibrated as a result** — at 250 MB against a
+      150 MB estimate, it needs a 16× regression to fire. ~50 MB would mean
+      something. Noted rather than superseding ADR-0006, whose decision is
+      confirmed.
+
+      `dlopen`: **232 ms cold for all six, 35 ms warm.** Page-cache state changes
+      time, not RSS. Does **not** reproduce PlayOS's `~170 ms` per-core figure
+      (worst cold case here is 70 ms) — recorded as a discrepancy, since the two
+      measurements differ in context and I cannot say why from here.
+
+      FCEUmm executes at **1.81 ms/frame** against a 20.0 ms PAL budget — ~9%,
+      core execution only, no scaling/blit/audio. RSS identical after 120 and
+      720 frames: no leak observed in that span.
 - [x] **[LB]** `nm -D` check — **DONE 2026-08-23. ADR-0006's revisit trigger
       fired.** → **[ADR-0010](decisions/0010-rtld-local-is-mandatory.md)**
       *(Accepted)*
