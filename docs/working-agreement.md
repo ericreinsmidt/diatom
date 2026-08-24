@@ -86,6 +86,20 @@ quietly skipping them.
    archived once answered. It may never become the implementation. The failure
    mode this guards against is a prototype quietly turning into the codebase,
    which is how "I'll clean it up later" projects start.
+
+   **A spike becomes an instrument** the moment its result is cited as evidence
+   and something will need re-running to re-check it. An instrument is tracked,
+   in `tools/`, with its build wired into the Makefile. It is still not part of
+   the runtime and may never be linked into it.
+
+   The distinction is not pedantry. `docs/spikes/` asserts measurements: 34 of 77
+   environment commands, 15.0 MB resident, 232 ms cold `dlopen`. If the
+   instrument that produced those numbers is not versioned, none of them can be
+   re-verified - which is precisely the drift this project exists to avoid.
+   Tracking `tools/envlog.c` immediately paid for itself: rebuilding its
+   generated table exposed a real bug, two commands sharing number 44 and told
+   apart only by the experimental bit, which the throwaway version had silently
+   mislabelled.
 8. **Apply the seam test** (register §0) to every proposed abstraction, and the
    same scepticism to process. Ceremony that does not earn its keep gets cut.
 9. **Flag assumptions explicitly** rather than burying them in prose.

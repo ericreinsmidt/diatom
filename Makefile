@@ -35,9 +35,34 @@ ifeq ($(PORT),desktop)
   endif
 endif
 
-.PHONY: all clean check-seam stub run-stub
+.PHONY: all clean check-seam stub run-stub tools
 
 all: $(BIN)
+
+# Measurement instruments (tools/). Not part of the frontend, never linked into
+# it, and deliberately not built by `all`. Cores and ROMs are supplied locally;
+# see tools/README.md.
+TOOLS_DIR := build/tools
+TOOLS     := $(TOOLS_DIR)/envlog $(TOOLS_DIR)/rssprobe
+TOOL_CFLAGS := -std=gnu11 -Wall -Wextra -Wno-unused-parameter -O1 -Isrc -I$(TOOLS_DIR)
+
+tools: $(TOOLS)
+
+$(TOOLS_DIR)/env_names.h: src/libretro.h tools/gen_env_names.py
+	@mkdir -p $(TOOLS_DIR)
+	python3 tools/gen_env_names.py src/libretro.h > $@
+
+$(TOOLS_DIR)/envlog: tools/envlog.c $(TOOLS_DIR)/env_names.h
+	@mkdir -p $(TOOLS_DIR)
+	$(CC) $(TOOL_CFLAGS) -o $@ $< $(TOOL_LDFLAGS)
+
+$(TOOLS_DIR)/rssprobe: tools/rssprobe.c
+	@mkdir -p $(TOOLS_DIR)
+	$(CC) $(TOOL_CFLAGS) -o $@ $< $(TOOL_LDFLAGS)
+
+ifeq ($(shell uname -s),Linux)
+  TOOL_LDFLAGS += -ldl
+endif
 
 # A libretro core that is not an emulator, so Diatom can be exercised end to end
 # with no third-party binary present. See test/stubcore.c.

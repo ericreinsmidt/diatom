@@ -7,7 +7,7 @@
   revisit trigger - *"measured RSS with all cores mapped and one initialized
   exceeds ~250 MB"* - which until now was backed by an estimate.
 - **Status:** Answered. **Trigger not met, by a factor of ~16.**
-- **Harness:** `~/Projects/diatom-spikes/envlog/rssprobe.c`, outside the repo per
+- **Harness:** [`tools/rssprobe.c`](../../tools/rssprobe.c), built with `make tools`.
   ../working-agreement.md practice 7.
 
 ## Hardware - measured, not assumed

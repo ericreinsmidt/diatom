@@ -4,8 +4,9 @@
 - **Question:** *Which `RETRO_ENVIRONMENT_*` calls do our cores actually make, at
   which lifecycle phase, and which must Diatom implement?*
 - **Status:** Answered.
-- **Harness:** `~/Projects/diatom-spikes/envlog/` - outside this repo per
-  ../working-agreement.md practice 7. Not Diatom code. Re-runnable when a core is added.
+- **Harness:** [`tools/envlog.c`](../../tools/envlog.c), built with `make tools`.
+  Tracked as an *instrument* rather than left as a throwaway spike, so these
+  numbers can be re-checked. Not Diatom code and never linked into it.
 
 ## Method
 
@@ -52,7 +53,7 @@ any core-specific quirk.
 
 ## The headline numbers
 
-**34 of the 77 environment commands appear. About 17 must be implemented. 17 are
+**34 of the environment commands appear. About 17 must be implemented. 17 are
 declined by every core with nothing breaking. 43 never appear at all.**
 
 The long tail turned out to be a checklist.
@@ -166,3 +167,22 @@ Both produced plausible-looking wrong answers before being caught:
 2. **Cores use `SET_CORE_OPTIONS_V2_INTL`, not `SET_CORE_OPTIONS_V2`.** Handling
    only the non-INTL variant reported *zero* core options for every core - a
    believable-looking result that was entirely an artefact.
+
+## Correction, 2026-08-24
+
+Promoting the harness to `tools/` surfaced a bug in it. The command-name table
+was keyed on the low 16 bits, but **two commands share number 44** and are told
+apart only by the experimental bit:
+
+```
+#define RETRO_ENVIRONMENT_SET_SERIALIZATION_QUIRKS 44
+#define RETRO_ENVIRONMENT_SET_HW_SHARED_CONTEXT   (44 | RETRO_ENVIRONMENT_EXPERIMENTAL)
+```
+
+A masked table can hold only one of them and silently mislabels the other; which
+one was lost depended on iteration order. The generator now keys on the full
+value, giving 78 entries rather than 77.
+
+**No result above is affected** - command 44 was never observed in any run. But
+it would have mislabelled any core that used either command, and the throwaway
+version would never have been looked at again.
