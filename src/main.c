@@ -30,6 +30,24 @@ static diatom_policy    g_policy;
 static diatom_port_caps g_caps;
 static diatom_rect      g_dst;   /* locked at load - ADR-0011 */
 
+/* Display mode state. The BASE geometry is kept because that, not the current
+ * geometry, is what a rect is ever computed from: ADR-0011's invariant is
+ * "never recompute from a mid-run SET_GEOMETRY", which a deliberate user-driven
+ * mode change does not violate as long as it recomputes from the base. */
+static int           g_base_w, g_base_h;
+static double        g_base_aspect;
+static int           g_mode;
+static diatom_filter g_filter;
+
+/* Per-combination measurement, so a mode that looks best can be checked
+ * against what it costs. Printed on every change and again at exit. */
+#define SLOT(m, f) ((m) * 2 + (int)(f))
+static struct {
+	long     frames;
+	uint64_t present_us;
+	long     resyncs;
+} g_stat[32];
+
 /* Called from inside retro_run. Copy and return; do not present here. */
 void diatom_on_video(const void *data, unsigned w, unsigned h, size_t pitch)
 {
@@ -57,20 +75,102 @@ void diatom_on_audio_batch_store(const int16_t *data, size_t frames)
 
 static void usage(void)
 {
+	int i;
 	fprintf(stderr,
-		"usage: diatom --core <core.so> --rom <file> [--system <dir>] [--save <dir>]\n");
+		"usage: diatom --core <core.so> --rom <file> [--system <dir>] [--save <dir>]\n"
+		"              [--display <mode>] [--filter nearest|sharp]\n"
+		"              [--frames <n>] [--shot <file.bmp>]\n"
+		"\non device: SELECT+R1 / SELECT+L1 changes mode, SELECT+A toggles filter\n\n");
+	for (i = 0; i < diatom_mode_count; i++)
+		fprintf(stderr, "  %-10s %s\n",
+		        diatom_modes[i].name, diatom_modes[i].note);
+}
+
+static const char *filter_name(diatom_filter f)
+{
+	return f == DIATOM_FILTER_SHARP ? "sharp" : "nearest";
+}
+
+static void apply_display(int mode, diatom_filter filter)
+{
+	g_mode   = mode;
+	g_filter = filter;
+	g_dst = diatom_scale_rect(diatom_modes[mode].mode, g_base_w, g_base_h,
+	                          g_base_aspect, g_caps.surface_w, g_caps.surface_h);
+	printf("diatom: display %-10s %-7s %4dx%-4d at %4d,%-4d  %s\n",
+	       diatom_modes[mode].name, filter_name(filter),
+	       g_dst.w, g_dst.h, g_dst.x, g_dst.y, diatom_modes[mode].note);
+	fflush(stdout);
+}
+
+/* Report what a combination cost, so the look and the price are read together.
+ * A mode that is prettier and misses frames is a trade, not a win. */
+static void report_slot(int mode, diatom_filter filter)
+{
+	int  s = SLOT(mode, filter);
+	long f = g_stat[s].frames;
+
+	if (f <= 0) return;
+	printf("diatom:   %-10s %-7s %5ld frames, present avg %5.2f ms, %ld resync(s)\n",
+	       diatom_modes[mode].name, filter_name(filter), f,
+	       (double)g_stat[s].present_us / (double)f / 1000.0,
+	       g_stat[s].resyncs);
+	fflush(stdout);
+}
+
+/* SELECT is the modifier: SELECT+R1 and SELECT+L1 step the mode, SELECT+A
+ * toggles the filter, all edge-triggered. The keys involved are hidden from
+ * the core while SELECT is held; the very first frame of the press still
+ * leaks, because the core reads input inside retro_run before this runs.
+ * Harmless here and not worth a pre-run poll to fix.
+ *
+ * Returns 1 if anything changed. */
+static int display_chord(uint32_t buttons, uint32_t prev)
+{
+	static const uint32_t chord = DIATOM_BIT(DIATOM_BTN_SELECT);
+	uint32_t pressed = buttons & ~prev;
+
+	if (!(buttons & chord)) {
+		diatom_env_suppress(0);
+		return 0;
+	}
+	diatom_env_suppress(chord | DIATOM_BIT(DIATOM_BTN_L1)
+	                          | DIATOM_BIT(DIATOM_BTN_R1)
+	                          | DIATOM_BIT(DIATOM_BTN_A));
+
+	if (pressed & DIATOM_BIT(DIATOM_BTN_R1)) {
+		report_slot(g_mode, g_filter);
+		apply_display((g_mode + 1) % diatom_mode_count, g_filter);
+		return 1;
+	}
+	if (pressed & DIATOM_BIT(DIATOM_BTN_L1)) {
+		report_slot(g_mode, g_filter);
+		apply_display((g_mode + diatom_mode_count - 1) % diatom_mode_count,
+		              g_filter);
+		return 1;
+	}
+	if (pressed & DIATOM_BIT(DIATOM_BTN_A)) {
+		report_slot(g_mode, g_filter);
+		apply_display(g_mode, g_filter == DIATOM_FILTER_SHARP
+		                    ? DIATOM_FILTER_NEAREST : DIATOM_FILTER_SHARP);
+		return 1;
+	}
+	return 0;
 }
 
 int main(int argc, char **argv)
 {
 	const char *core_path = NULL, *rom_path = NULL, *shot_path = NULL;
+	const char *display = "integer", *filter = "nearest";
 	struct retro_system_av_info av;
 	struct retro_system_info si;
 	double   frame_us, next_us;
 	uint64_t t_start;
+	uint32_t buttons = 0, prev_buttons = 0;
 	long limit = 0, frames = 0, geom_changes = 0, resyncs = 0;
 	size_t q_min = (size_t)-1, q_max = 0;
-	int i;
+	diatom_filter start_filter;
+	int i, start_mode = -1;
 
 	for (i = 1; i < argc; i++) {
 		if (!strcmp(argv[i], "--core") && i + 1 < argc) core_path = argv[++i];
@@ -79,9 +179,26 @@ int main(int argc, char **argv)
 		else if (!strcmp(argv[i], "--save") && i + 1 < argc) g_policy.save_dir = argv[++i];
 		else if (!strcmp(argv[i], "--frames") && i + 1 < argc) limit = strtol(argv[++i], NULL, 10);
 		else if (!strcmp(argv[i], "--shot") && i + 1 < argc) shot_path = argv[++i];
+		else if (!strcmp(argv[i], "--display") && i + 1 < argc) display = argv[++i];
+		else if (!strcmp(argv[i], "--filter") && i + 1 < argc) filter = argv[++i];
 		else { usage(); return 1; }
 	}
 	if (!core_path) { usage(); return 1; }
+
+	for (i = 0; i < diatom_mode_count; i++)
+		if (!strcmp(display, diatom_modes[i].name)) start_mode = i;
+	if (start_mode < 0) {
+		fprintf(stderr, "diatom: unknown display mode '%s'\n", display);
+		usage();
+		return 1;
+	}
+	if (!strcmp(filter, "sharp"))        start_filter = DIATOM_FILTER_SHARP;
+	else if (!strcmp(filter, "nearest")) start_filter = DIATOM_FILTER_NEAREST;
+	else {
+		fprintf(stderr, "diatom: unknown filter '%s'\n", filter);
+		usage();
+		return 1;
+	}
 
 	if (!g_policy.system_dir) g_policy.system_dir = ".";
 	if (!g_policy.save_dir)   g_policy.save_dir   = ".";
@@ -115,28 +232,32 @@ int main(int argc, char **argv)
 	g_core.set_controller_port_device(0, RETRO_DEVICE_JOYPAD);
 
 	g_core.get_system_av_info(&av);
-	printf("diatom: %ux%u (max %ux%u) %.4f fps, %.0f Hz -> %d Hz\n",
+	printf("diatom: %ux%u (max %ux%u) aspect %.4f, %.4f fps, %.0f Hz -> %d Hz\n",
 	       av.geometry.base_width, av.geometry.base_height,
 	       av.geometry.max_width, av.geometry.max_height,
+	       (double)av.geometry.aspect_ratio,
 	       av.timing.fps, av.timing.sample_rate, g_caps.audio_rate);
 
 	diatom_audio_configure(av.timing.sample_rate, g_caps.audio_rate,
 	                       g_caps.audio_buffer_frames);
 	diatom_audio_prime();
 
-	/* The display rect is locked here, from BASE geometry, and does not move
-	 * again - ADR-0011.
+	/* The rect is computed from BASE geometry and does not move again unless
+	 * the user asks - ADR-0011.
 	 *
 	 * Cores announce hires by calling SET_GEOMETRY with a larger base_width
 	 * mid-run (measured: 3 of 6 do this). Recomputing an integer factor from
 	 * the new width collapses 3x to 1x and the picture shrinks to a fifth.
 	 * Holding the rect fixed keeps the picture the same size AND is more
 	 * faithful: SNES and PC Engine hires pixels are physically half-width, so
-	 * 512 columns belong in the same screen width as 256. */
-	g_dst = diatom_scale_rect(av.geometry.base_width, av.geometry.base_height,
-	                          g_caps.surface_w, g_caps.surface_h);
-	printf("diatom: display rect locked %dx%d at %d,%d\n",
-	       g_dst.w, g_dst.h, g_dst.x, g_dst.y);
+	 * 512 columns belong in the same screen width as 256.
+	 *
+	 * A mode change recomputes from these same base values, never from the
+	 * current geometry, which is what keeps the invariant intact. */
+	g_base_w      = (int)av.geometry.base_width;
+	g_base_h      = (int)av.geometry.base_height;
+	g_base_aspect = (double)av.geometry.aspect_ratio;
+	apply_display(start_mode, start_filter);
 
 	/* Pace against a monotonic clock at the core's own rate, on an ABSOLUTE
 	 * schedule kept in floating point.
@@ -163,7 +284,8 @@ int main(int argc, char **argv)
 		for (w = 0; w < 3; w++) {
 			g_core.run();
 			diatom_port_present(g_frame, g_frame_w, g_frame_h, g_frame_pitch,
-			                    g_policy.pixfmt, g_dst);
+			                    g_policy.pixfmt, g_dst,
+			                    g_filter);
 		}
 		printf("diatom: warmup 3 frames in %.1f ms\n",
 		       (diatom_port_now_us() - w0) / 1000.0);
@@ -183,9 +305,22 @@ int main(int argc, char **argv)
 		 * whatever arrives into it, so a hires frame keeps its screen size. */
 		if (diatom_env_geometry_changed()) geom_changes++;
 
-		diatom_port_present(g_frame_fresh ? g_frame : NULL,
-		                    g_frame_w, g_frame_h, g_frame_pitch,
-		                    g_policy.pixfmt, g_dst);
+		{
+			uint64_t p0 = diatom_port_now_us();
+			diatom_port_present(g_frame_fresh ? g_frame : NULL,
+			                    g_frame_w, g_frame_h, g_frame_pitch,
+			                    g_policy.pixfmt, g_dst,
+			                    g_filter);
+			g_stat[SLOT(g_mode, g_filter)].present_us
+				+= diatom_port_now_us() - p0;
+			g_stat[SLOT(g_mode, g_filter)].frames++;
+		}
+
+		/* Display switching lives after present, so the timing above covers
+		 * exactly one combination's work. */
+		buttons = diatom_port_input_state();
+		display_chord(buttons, prev_buttons);
+		prev_buttons = buttons;
 
 		{
 			size_t q = diatom_port_audio_queued();
@@ -211,6 +346,7 @@ int main(int argc, char **argv)
 			 * lying about its frame rate. */
 			next_us = (double)now;
 			resyncs++;
+			g_stat[SLOT(g_mode, g_filter)].resyncs++;
 		}
 		/* Otherwise keep the debt and let the next short sleep repay it. */
 	}
@@ -233,6 +369,11 @@ int main(int argc, char **argv)
 		printf("diatom: %ld geometry change(s), last rect %dx%d at %d,%d\n",
 		       geom_changes, g_dst.w, g_dst.h, g_dst.x, g_dst.y);
 		printf("diatom: %ld resync(s)\n", resyncs);
+		printf("diatom: per display mode:\n");
+		for (i = 0; i < diatom_mode_count; i++) {
+			report_slot(i, DIATOM_FILTER_NEAREST);
+			report_slot(i, DIATOM_FILTER_SHARP);
+		}
 		printf("diatom: audio queued min %zu max %zu final %zu, target %d, capacity %d\n",
 		       q_min == (size_t)-1 ? 0 : q_min, q_max,
 		       diatom_port_audio_queued(),

@@ -19,6 +19,12 @@
 static diatom_policy    *g_policy;
 static diatom_port_caps *g_caps;
 static bool              g_geometry_dirty;
+static uint32_t          g_suppress;
+
+void diatom_env_suppress(uint32_t mask)
+{
+	g_suppress = mask;
+}
 
 bool diatom_env_geometry_changed(void)
 {
@@ -176,7 +182,7 @@ static int16_t cb_input_state(unsigned port, unsigned device,
 	(void)index;
 	if (port != 0 || device != RETRO_DEVICE_JOYPAD) return 0;
 
-	state = diatom_port_input_state();
+	state = diatom_port_input_state() & ~g_suppress;
 	for (b = 0; b < DIATOM_BTN_COUNT; b++)
 		if (button_map[b] == (int)id)
 			return (state & DIATOM_BIT(b)) ? 1 : 0;

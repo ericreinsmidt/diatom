@@ -4,7 +4,8 @@
  * Evaluates ADR-0006's revisit trigger: "measured RSS with all cores mapped and
  * one initialized exceeds ~250 MB".
  *
- * Throwaway. Not Diatom code. See diatom/CLAUDE.md rule 7.
+ * An instrument, not Diatom code, and never linked into it. See
+ * docs/working-agreement.md practice 7 and tools/README.md.
  *
  * usage: rssprobe <rom> <core.so>...     (first core is the one initialized)
  */

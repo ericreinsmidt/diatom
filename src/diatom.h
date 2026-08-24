@@ -66,9 +66,42 @@ void diatom_core_stop(diatom_core *c);
 void diatom_env_bind(diatom_core *c, diatom_policy *p, diatom_port_caps *caps);
 bool diatom_env_geometry_changed(void);   /* consumes the flag */
 
+/* Buttons the host is using for itself this frame and the core must not see.
+ * Diatom owns MENU outright (it never appears in the retropad map); this is
+ * for keys that are normally the core's but are currently part of a host
+ * chord. */
+void diatom_env_suppress(uint32_t mask);
+
 /* scale.c - geometry is arithmetic and lives here, once, so every port agrees.
- * Performing the blit is hardware and belongs to the port. */
-diatom_rect diatom_scale_rect(int src_w, int src_h, int surf_w, int surf_h);
+ * Performing the blit is hardware and belongs to the port.
+ *
+ * Which mode should be default is OPEN (register §5). The set exists so the
+ * question can be answered by looking at a panel rather than by argument. */
+typedef enum {
+	DIATOM_SCALE_NATIVE,         /* 1x, centred                               */
+	DIATOM_SCALE_INTEGER,        /* largest whole factor that fits, boxed     */
+	DIATOM_SCALE_INTEGER_OVER,   /* smallest whole factor that covers, cropped*/
+	DIATOM_SCALE_ASPECT_FIT,     /* fractional, shape kept, boxed             */
+	DIATOM_SCALE_ASPECT_FILL,    /* fractional, shape kept, cropped           */
+	DIATOM_SCALE_STRETCH         /* fills both axes, shape ignored            */
+} diatom_scale_mode;
+
+diatom_rect diatom_scale_rect(diatom_scale_mode mode, int src_w, int src_h,
+                              double aspect, int surf_w, int surf_h);
+
+/* Mode and filter are independent axes, cycled independently on device. They
+ * were briefly modelled as a flat list of (mode, filter) presets on the
+ * assumption that most combinations collapse; measurement killed that. FCEUmm
+ * reports an 8:7 pixel aspect, about 1.219, not 4:3, so on the Brick's 4:3
+ * panel fit, fill and stretch are three different pictures. */
+typedef struct {
+	const char       *name;
+	diatom_scale_mode mode;
+	const char       *note;
+} diatom_display_mode_info;
+
+extern const diatom_display_mode_info diatom_modes[];
+extern const int                      diatom_mode_count;
 
 /* audio.c - cores emit 32040..65536 Hz; the device runs at whatever it runs at.
  * Linear interpolation, with dynamic rate control holding the port's buffer near

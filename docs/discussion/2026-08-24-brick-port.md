@@ -144,8 +144,64 @@ fits the NTSC budget with room, but SNES hires plus a heavier core will
 squeeze; ADR-0013 already names the disp2 hardware scaler as the escape
 hatch if CPU blitting ever stops fitting.
 
+## Display modes, built to be looked at rather than argued about
+
+The letterbox around Contra prompted the obvious question, and the honest
+answer was that integer-fit is a policy with five defensible alternatives and
+no measurement behind the choice. So all six exist now - native, integer,
+integer-overscale, aspect-fit, aspect-fill, stretch - crossed with two filters,
+nearest and sharp-bilinear. Mode and filter cycle independently on device
+(SELECT+shoulders, SELECT+A) because the comparison that matters is one
+geometry with and without blending, which a flat preset list puts two presses
+apart. **Nothing is decided; `integer` stays default only because it already
+was.**
+
+Two assumptions died on contact with the measurement:
+
+**FCEUmm reports an 8:7 pixel aspect, 1.2190, not 4:3.** The prediction that
+fit, fill and stretch would collapse into one rect on a 4:3 panel was wrong:
+they are 936x768, 1024x840 cropped, and 1024x768 - three different pictures.
+The preset model was rebuilt as two independent axes because of it.
+
+**Sharp-bilinear at a whole factor was costing 2.4ms to compute pixels
+identical to nearest.** True by construction, so the map builder now collapses
+any axis whose weights are all 0 or 256 onto the fast path; integer+sharp went
+from 8.34ms to 5.93ms, matching nearest exactly.
+
+Measured on device, Contra on FCEUmm, 240 frames each, **all twelve
+combinations at 60.10fps with zero resyncs**:
+
+| mode | rect | nearest | sharp |
+|---|---|---|---|
+| native | 256x240 | 0.69 ms | 0.68 ms |
+| integer | 768x720 | 5.96 ms | 5.93 ms |
+| aspect | 936x768 | 7.70 ms | 14.98 ms |
+| fill | 1024x840 crop | 8.45 ms | 14.21 ms |
+| stretch | 1024x768 | 8.42 ms | 14.49 ms |
+| overscale | 1024x960 crop | 8.42 ms | 13.84 ms |
+
+The number that matters is the sharp column against a 16.64ms budget: it fits
+NTSC on the lightest core in the test matrix with under 2ms to spare. That is
+not headroom, it is luck, and a heavier core will take it. Filed as an open
+question rather than a working feature.
+
+Nearest at a fractional factor is visibly uneven - at 3.656x horizontally,
+letter strokes in Contra's menu come out three or four pixels wide at random.
+Sharp fixes it for about 6ms. Whether that trade is worth making is the thing
+to look at on the panel.
+
+## Taking the display is now a script, not tribal knowledge
+
+`tools/brick-run.sh` plus the on-device `tools/brick-device-run.sh`: freeze the
+supervisor, kill the UI, run, restore in a trap. Both traps from earlier today
+are encoded in it, which is the point - the operational knowledge that cost a
+power cycle to learn should not live only in a session log. Everything is
+staged at `/mnt/SDCARD/diatom/`, on the card rather than `/tmp`, because `/tmp`
+is tmpfs and a reboot empties it.
+
 ## Open at end of session
 
+- [ ] **Decide the default display mode** by looking at the panel. Register §5.
 - [ ] `[LATER]` volume keys during play: the joystick device emits
       VOLUMEUP/DOWN codes; whose job is volume - port, host application, or
       firmware daemon - is undecided and deferred.

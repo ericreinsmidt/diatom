@@ -71,5 +71,23 @@ The cross build for the TrimUI Brick (TG3040), per
   the device's own libraries over ADB, SDL2 headers from the upstream release,
   pinned by sha256. Needs a connected Brick.
 - `brick-make.sh` - runs `make PORT=brick` inside the container.
+- `brick-run.sh` - builds nothing; pushes the current build and runs it on the
+  device with exclusive use of the display. Arguments pass through to diatom.
+- `brick-device-run.sh` - the on-device half, staged as
+  `/mnt/SDCARD/diatom/run.sh`. Freezes the PlayOS supervisor, kills the UI,
+  runs, and restores in a trap.
+
+Taking the display on this device has two traps in it, both hit for real
+(ADR-0013 and the 2026-08-24 session log): adbd runs under the PlayOS launch
+chain, so sweeping that process group severs ADB; and `launch.sh` is a
+supervisor that respawns the UI, so killing the UI alone leaves two processes
+presenting and wedges the GPU firmware in-kernel. Both need a power cycle to
+recover. The scripts exist so that sequence is never retyped from memory.
+
+```sh
+tools/brick-run.sh                          # staged NES core and ROM
+tools/brick-run.sh --display stretch        # a specific starting mode
+tools/brick-run.sh --core X.so --rom game --frames 600 --shot /tmp/x.bmp
+```
 
 Set `LD_LIBRARY_PATH` if the cores need runtime libraries beside them.

@@ -29,6 +29,7 @@ static SDL_Renderer *g_renderer;
 static SDL_Texture  *g_texture;
 static int           g_tex_w, g_tex_h;
 static Uint32        g_tex_fmt;
+static diatom_filter g_tex_filter;
 static SDL_AudioDeviceID g_audio;
 static bool          g_quit;
 static uint32_t      g_buttons;
@@ -89,14 +90,27 @@ void diatom_port_shutdown(void)
 	SDL_Quit();
 }
 
-static bool ensure_texture(int w, int h, diatom_pixfmt fmt)
+static bool ensure_texture(int w, int h, diatom_pixfmt fmt, diatom_filter filter)
 {
 	Uint32 sdlfmt = (fmt == DIATOM_PIX_RGB565)
 	              ? SDL_PIXELFORMAT_RGB565
 	              : SDL_PIXELFORMAT_ARGB8888;
+	/* SDL has no sharp-bilinear, so this is an APPROXIMATION: linear blends
+	 * across the whole source pixel where sharp-bilinear blends across one
+	 * destination pixel, which reads as blurrier than the device will look.
+	 * Good enough to check the geometry is right on desktop; judgement about
+	 * how a filter actually looks belongs on the panel. */
+	SDL_ScaleMode mode = (filter == DIATOM_FILTER_SHARP)
+	                   ? SDL_ScaleModeLinear
+	                   : SDL_ScaleModeNearest;
 
-	if (g_texture && g_tex_w == w && g_tex_h == h && g_tex_fmt == sdlfmt)
+	if (g_texture && g_tex_w == w && g_tex_h == h && g_tex_fmt == sdlfmt) {
+		if (filter != g_tex_filter) {
+			SDL_SetTextureScaleMode(g_texture, mode);
+			g_tex_filter = filter;
+		}
 		return true;
+	}
 
 	if (g_texture) SDL_DestroyTexture(g_texture);
 	g_texture = SDL_CreateTexture(g_renderer, sdlfmt,
@@ -105,20 +119,18 @@ static bool ensure_texture(int w, int h, diatom_pixfmt fmt)
 		fprintf(stderr, "SDL_CreateTexture: %s\n", SDL_GetError());
 		return false;
 	}
-	/* Integer scaling only, so nearest is the correct filter, not a preference:
-	 * linear on an exact integer factor is just a blurrier version of the same
-	 * pixels. */
-	SDL_SetTextureScaleMode(g_texture, SDL_ScaleModeNearest);
-	g_tex_w = w; g_tex_h = h; g_tex_fmt = sdlfmt;
+	SDL_SetTextureScaleMode(g_texture, mode);
+	g_tex_w = w; g_tex_h = h; g_tex_fmt = sdlfmt; g_tex_filter = filter;
 	return true;
 }
 
 void diatom_port_present(const void *src, int w, int h, size_t pitch,
-                         diatom_pixfmt fmt, diatom_rect dst)
+                         diatom_pixfmt fmt, diatom_rect dst,
+                         diatom_filter filter)
 {
 	SDL_Rect r;
 
-	if (w > 0 && h > 0 && !ensure_texture(w, h, fmt)) return;
+	if (w > 0 && h > 0 && !ensure_texture(w, h, fmt, filter)) return;
 	if (src && g_texture) SDL_UpdateTexture(g_texture, NULL, src, (int)pitch);
 
 	SDL_RenderClear(g_renderer);

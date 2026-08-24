@@ -34,6 +34,21 @@ typedef enum {
 	DIATOM_LOG_ERROR
 } diatom_log_level;
 
+/* How to sample when the destination rect is not an exact integer multiple of
+ * the source. Choosing is policy (host); sampling is hardware (port), the same
+ * split ADR-0007 applies to the rect itself.
+ *
+ * SHARP is sharp-bilinear: interpolate only across the one destination pixel
+ * that straddles a source-pixel boundary, leaving every interior pixel exact.
+ * At an integer factor it is identical to NEAREST by construction.
+ *
+ * Passed per frame rather than set once, so the port holds no policy state and
+ * cannot be asked to present before it has been told how. */
+typedef enum {
+	DIATOM_FILTER_NEAREST,
+	DIATOM_FILTER_SHARP
+} diatom_filter;
+
 typedef struct { int x, y, w, h; } diatom_rect;
 
 typedef struct {
@@ -66,9 +81,16 @@ void diatom_port_shutdown(void);
 
 /* Called AFTER retro_run returns, never from inside the core's video callback.
  * The host owns `src` and has already computed `dst`; the port blits.
- * src == NULL means "repeat the previous frame" (the core signalled a dupe). */
+ * src == NULL means "repeat the previous frame" (the core signalled a dupe).
+ *
+ * `dst` may extend past the surface: a fill or overscale mode deliberately
+ * crops. Ports clip; they never refuse the frame.
+ *
+ * Seven parameters is at the edge of reasonable. If this list grows again it
+ * wants a struct, not an eighth argument. */
 void diatom_port_present(const void *src, int w, int h, size_t pitch,
-                         diatom_pixfmt fmt, diatom_rect dst);
+                         diatom_pixfmt fmt, diatom_rect dst,
+                         diatom_filter filter);
 
 /* Interleaved stereo S16 at caps.audio_rate. NEVER blocks; drops on overflow.
  * A blocking write is a legitimate sync strategy but is incompatible with

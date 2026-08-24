@@ -35,6 +35,7 @@
 
 #include <fcntl.h>
 #include <linux/fb.h>
+#include <math.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -93,17 +94,28 @@ static bool              g_present_debug;
  * alpha. */
 static uint32_t g_opaque;
 
-/* Nearest-neighbour column map, rebuilt only when source size or the
- * destination rect changes. Row indices are cheap enough to compute per row;
- * columns are the hot loop, so they are precomputed. */
-static int   *g_colmap;
-static int    g_map_src_w = -1, g_map_src_h = -1;
-static diatom_rect g_map_dst;
+/* Resampling maps, one entry per destination pixel on each axis, rebuilt only
+ * when the source size, the destination rect or the filter changes.
+ *
+ * `w` is the weight of source pixel idx+1, in 1/256 units. Zero means the
+ * destination pixel sits wholly inside one source pixel, which is the case for
+ * every pixel at an integer factor and for most of them otherwise - so it is
+ * the fast path, not an optimisation for a rare case. */
+typedef struct { int idx; int w; } diatom_tap;
+typedef struct { int r, g, b; }    diatom_rgb;
+
+static diatom_tap  *g_colmap, *g_rowmap;
+static int          g_map_src_w = -1, g_map_src_h = -1;
+static diatom_rect  g_map_dst;
+static diatom_filter g_map_filter;
+static bool          g_map_valid;
 
 static uint8_t *page_base(int page)
 {
 	return g_fb + (size_t)page * g_vinfo.yres * g_finfo.line_length;
 }
+
+static void clear_pages(void);
 
 static void *flip_worker(void *arg)
 {
@@ -178,12 +190,7 @@ bool diatom_port_init(diatom_port_caps *out)
 		g_opaque = ((1u << g_vinfo.transp.length) - 1) << g_vinfo.transp.offset;
 
 	/* Opaque black, not memset zero: zero alpha is invisible, see g_opaque. */
-	{
-		uint32_t *p   = (uint32_t *)g_fb;
-		size_t    n   = g_fb_size / sizeof *p;
-		size_t    i;
-		for (i = 0; i < n; i++) p[i] = g_opaque;
-	}
+	clear_pages();
 
 	/* Start from a known page. The mailbox needs three pages - front, in
 	 * flight, drawing; fewer, or a refused pan, means single-buffered
@@ -247,6 +254,7 @@ void diatom_port_shutdown(void)
 		pthread_join(g_flip_thread, NULL);
 	}
 	free(g_colmap);
+	free(g_rowmap);
 	if (g_fb)         munmap(g_fb, g_fb_size);
 	if (g_fb_fd >= 0) close(g_fb_fd);
 	if (g_joy)        SDL_JoystickClose(g_joy);
@@ -254,84 +262,210 @@ void diatom_port_shutdown(void)
 	SDL_Quit();
 }
 
-static bool ensure_colmap(int src_w, int src_h, diatom_rect dst)
+/* One axis of the resampling map.
+ *
+ * Sharp-bilinear: take the bilinear weight, then steepen the ramp by the scale
+ * factor so the blend spans one DESTINATION pixel rather than one source
+ * pixel. Interior pixels come out exact and only the pixel straddling a source
+ * boundary is mixed, which is why it looks like integer scaling with the
+ * unevenness taken out rather than like a blur.
+ *
+ * At an integer factor the steepened weight lands on 0 or 1 for every pixel,
+ * so the output is identical to nearest by construction - the `integer-sharp`
+ * preset exists to demonstrate exactly that.
+ *
+ * Doubles here are free: this runs once per geometry or filter change, and the
+ * per-pixel work uses only the integers it produces. */
+static diatom_tap *build_map(int src, int dst, diatom_filter filter)
 {
-	int x;
+	diatom_tap *m;
+	double scale;
+	int i;
 
-	if (g_colmap && src_w == g_map_src_w && src_h == g_map_src_h &&
-	    !memcmp(&dst, &g_map_dst, sizeof dst))
+	if (src <= 0 || dst <= 0) return NULL;
+	m = malloc((size_t)dst * sizeof *m);
+	if (!m) return NULL;
+	scale = (double)dst / (double)src;
+
+	for (i = 0; i < dst; i++) {
+		double c  = ((double)i + 0.5) / scale - 0.5;   /* source coordinate */
+		int    p  = (int)floor(c);
+		double fr = c - (double)p;
+
+		fr = (fr - 0.5) * scale + 0.5;
+		if (fr < 0.0) fr = 0.0;
+		if (fr > 1.0) fr = 1.0;
+
+		/* Clamp at the edges: no pixel outside the source to blend towards. */
+		if (p < 0)        { p = 0;       fr = 0.0; }
+		if (p >= src - 1) { p = src - 1; fr = 0.0; }
+
+		if (filter == DIATOM_FILTER_NEAREST) {
+			if (fr >= 0.5 && p + 1 < src) p++;
+			fr = 0.0;
+		}
+
+		m[i].idx = p;
+		m[i].w   = (int)(fr * 256.0 + 0.5);
+		if (m[i].w > 256) m[i].w = 256;
+	}
+
+	/* Collapse a map whose every weight is 0 or 256 onto the fast path. At a
+	 * whole factor sharp-bilinear is a no-op by construction, and this makes it
+	 * a no-op in cost too: measured, sharp on an integer rect was paying 2.4 ms
+	 * a frame to compute the same pixels. */
+	for (i = 0; i < dst; i++)
+		if (m[i].w != 0 && m[i].w != 256) return m;
+	for (i = 0; i < dst; i++)
+		if (m[i].w == 256) { m[i].idx++; m[i].w = 0; }
+	return m;
+}
+
+static bool ensure_maps(int src_w, int src_h, diatom_rect dst,
+                        diatom_filter filter)
+{
+	if (g_map_valid && src_w == g_map_src_w && src_h == g_map_src_h &&
+	    filter == g_map_filter && !memcmp(&dst, &g_map_dst, sizeof dst))
 		return true;
 
 	free(g_colmap);
-	g_colmap = malloc((size_t)dst.w * sizeof *g_colmap);
-	if (!g_colmap) return false;
-	for (x = 0; x < dst.w; x++)
-		g_colmap[x] = x * src_w / dst.w;
+	free(g_rowmap);
+	g_colmap = build_map(src_w, dst.w, filter);
+	g_rowmap = build_map(src_h, dst.h, filter);
+	g_map_valid = g_colmap && g_rowmap;
+	if (!g_map_valid) return false;
+
 	g_map_src_w = src_w;
 	g_map_src_h = src_h;
 	g_map_dst   = dst;
+	g_map_filter = filter;
 	return true;
 }
 
+static inline diatom_rgb un565(uint16_t c)
+{
+	diatom_rgb v;
+	int r = (c >> 11) & 0x1f, g = (c >> 5) & 0x3f, b = c & 0x1f;
+	v.r = (int)((r << 3) | (r >> 2));
+	v.g = (int)((g << 2) | (g >> 4));
+	v.b = (int)((b << 3) | (b >> 2));
+	return v;
+}
+
+static inline diatom_rgb un8888(uint32_t c)
+{
+	diatom_rgb v;
+	v.r = (int)((c >> 16) & 0xff);
+	v.g = (int)((c >>  8) & 0xff);
+	v.b = (int)( c        & 0xff);
+	return v;
+}
+
+static inline diatom_rgb mix(diatom_rgb a, diatom_rgb b, int w)
+{
+	diatom_rgb v;
+	v.r = a.r + (((b.r - a.r) * w) >> 8);
+	v.g = a.g + (((b.g - a.g) * w) >> 8);
+	v.b = a.b + (((b.b - a.b) * w) >> 8);
+	return v;
+}
+
 /* Scale-blit src into the destination rect of one page, converting to the
- * framebuffer's own channel order (offsets read from the driver, not
- * assumed). Nearest-neighbour, same as the desktop texture filter: scaling is
- * integer by policy, and hires frames map exact half-width pixels. */
+ * framebuffer's own channel order (offsets read from the driver, not assumed).
+ *
+ * CLIPS rather than refuses: a fill or overscale mode hands over a rect larger
+ * than the panel on purpose, and dropping the frame would be the wrong answer
+ * to a deliberate crop. */
 static void blit(uint8_t *page, const void *src, int w, int h, size_t pitch,
                  diatom_pixfmt fmt, diatom_rect dst)
 {
 	const unsigned ro = g_vinfo.red.offset;
 	const unsigned go = g_vinfo.green.offset;
 	const unsigned bo = g_vinfo.blue.offset;
-	int x, y;
+	const uint32_t opaque = g_opaque;
+	int x0, x1, y0, y1, y;
 
-	/* Clip: the host computes dst from the surface size it was told, so this
-	 * only matters if something upstream is wrong - in which case clipping
-	 * beats scribbling outside the mapping. */
-	if (dst.x < 0 || dst.y < 0 ||
-	    dst.x + dst.w > (int)g_vinfo.xres || dst.y + dst.h > (int)g_vinfo.yres)
-		return;
+#define PACK(c) (opaque | ((uint32_t)(c).r << ro) \
+                        | ((uint32_t)(c).g << go) \
+                        | ((uint32_t)(c).b << bo))
 
-	for (y = 0; y < dst.h; y++) {
-		const int sy = y * h / dst.h;
-		uint32_t *out = (uint32_t *)(page + (size_t)(dst.y + y) * g_finfo.line_length)
-		                + dst.x;
+/* Two loops, not one with a branch: the vertical weight is constant across a
+ * row, so testing it per pixel would be 1024 redundant branches per row. */
+#define BLIT_ROW(FETCH, TYPE) do {                                           \
+	const TYPE *i0 = (const TYPE *)r0;                                       \
+	const TYPE *i1 = (const TYPE *)r1;                                       \
+	int x;                                                                   \
+	if (!ty.w) {                                                             \
+		for (x = x0; x < x1; x++) {                                          \
+			diatom_tap tx = g_colmap[x - dst.x];                             \
+			diatom_rgb c = FETCH(i0[tx.idx]);                                \
+			if (tx.w) c = mix(c, FETCH(i0[tx.idx + 1]), tx.w);               \
+			out[x] = PACK(c);                                                \
+		}                                                                    \
+	} else {                                                                 \
+		for (x = x0; x < x1; x++) {                                          \
+			diatom_tap tx = g_colmap[x - dst.x];                             \
+			diatom_rgb a = FETCH(i0[tx.idx]);                                \
+			diatom_rgb b = FETCH(i1[tx.idx]);                                \
+			if (tx.w) {                                                      \
+				a = mix(a, FETCH(i0[tx.idx + 1]), tx.w);                     \
+				b = mix(b, FETCH(i1[tx.idx + 1]), tx.w);                     \
+			}                                                                \
+			out[x] = PACK(mix(a, b, ty.w));                                  \
+		}                                                                    \
+	}                                                                        \
+} while (0)
 
-		if (fmt == DIATOM_PIX_RGB565) {
-			const uint16_t *in =
-				(const uint16_t *)((const uint8_t *)src + (size_t)sy * pitch);
-			for (x = 0; x < dst.w; x++) {
-				const uint16_t c = in[g_colmap[x]];
-				const uint32_t r = (c >> 11) & 0x1f, g = (c >> 5) & 0x3f, b = c & 0x1f;
-				out[x] = g_opaque
-				       | (((r << 3) | (r >> 2)) << ro)
-				       | (((g << 2) | (g >> 4)) << go)
-				       | (((b << 3) | (b >> 2)) << bo);
-			}
-		} else {
-			const uint32_t *in =
-				(const uint32_t *)((const uint8_t *)src + (size_t)sy * pitch);
-			for (x = 0; x < dst.w; x++) {
-				const uint32_t c = in[g_colmap[x]];
-				out[x] = g_opaque
-				       | (((c >> 16) & 0xff) << ro)
-				       | (((c >>  8) & 0xff) << go)
-				       | (( c        & 0xff) << bo);
-			}
-		}
+	if (!g_map_valid) return;
+
+	y0 = dst.y > 0 ? dst.y : 0;
+	x0 = dst.x > 0 ? dst.x : 0;
+	y1 = dst.y + dst.h < (int)g_vinfo.yres ? dst.y + dst.h : (int)g_vinfo.yres;
+	x1 = dst.x + dst.w < (int)g_vinfo.xres ? dst.x + dst.w : (int)g_vinfo.xres;
+	if (x1 <= x0 || y1 <= y0) return;
+
+	for (y = y0; y < y1; y++) {
+		diatom_tap ty = g_rowmap[y - dst.y];
+		uint32_t *out = (uint32_t *)(page + (size_t)y * g_finfo.line_length);
+		const uint8_t *r0 = (const uint8_t *)src + (size_t)ty.idx * pitch;
+		const uint8_t *r1 = r0 + (ty.w ? pitch : 0);
+
+		if (fmt == DIATOM_PIX_RGB565) BLIT_ROW(un565,  uint16_t);
+		else                          BLIT_ROW(un8888, uint32_t);
 	}
+
+	/* Letterbox bars are not repainted per frame: pages start opaque black and
+	 * the rect only shrinks when the user changes mode, which clears them. */
+#undef BLIT_ROW
+#undef PACK
+}
+
+/* Wipe every page to opaque black. Needed when the rect shrinks, or the
+ * previous mode's picture stays framing the new one. */
+static void clear_pages(void)
+{
+	uint32_t *p = (uint32_t *)g_fb;
+	size_t n = g_fb_size / sizeof *p, i;
+	for (i = 0; i < n; i++) p[i] = g_opaque;
 }
 
 void diatom_port_present(const void *src, int w, int h, size_t pitch,
-                         diatom_pixfmt fmt, diatom_rect dst)
+                         diatom_pixfmt fmt, diatom_rect dst,
+                         diatom_filter filter)
 {
 	uint64_t t0 = 0, t1 = 0;
+	bool rect_changed;
 	int page;
 
 	/* Dupe frame: the front page already shows it. Nothing to draw, nothing
 	 * to flip. */
 	if (!src || w <= 0 || h <= 0) return;
-	if (!ensure_colmap(w, h, dst)) return;
+
+	rect_changed = !g_map_valid || memcmp(&dst, &g_map_dst, sizeof dst) != 0;
+	if (!ensure_maps(w, h, dst, filter)) return;
+	/* A smaller rect leaves the old picture around the new one. Only on a mode
+	 * change, so the cost of wiping every page does not matter. */
+	if (rect_changed) clear_pages();
 
 	if (g_pan_broken) {
 		blit(page_base(g_front), src, w, h, pitch, fmt, dst);

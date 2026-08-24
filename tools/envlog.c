@@ -1,7 +1,8 @@
 /* SPIKE: which RETRO_ENVIRONMENT_* calls do our cores actually make, and at
  * which lifecycle phase?
  *
- * Throwaway. Not Diatom code. See diatom/CLAUDE.md rule 7.
+ * An instrument, not Diatom code, and never linked into it. See
+ * docs/working-agreement.md practice 7 and tools/README.md.
  *
  * Answers the minimum needed for a core to get going and declines everything
  * else -- a decline is still a data point, which is the whole purpose.

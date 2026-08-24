@@ -1,40 +1,126 @@
 /* Where the picture goes.
  *
- * ADR-0007 splits this deliberately: deciding the factor is arithmetic, so it
+ * ADR-0007 splits this deliberately: deciding the rect is arithmetic, so it
  * lives here once and every port behaves identically. Performing the blit is
  * hardware, so it belongs to the port. Put both in the port and the maths gets
  * duplicated per device and drifts.
  *
- * Integer scaling only, per register §5. Both known panels take clean factors
- * for every system in scope - mostly. Measured counter-example: PC Engine's
- * 256x243 at 3x is 768x729, which exceeds the Miniloong's 720 lines but fits
- * the Brick's 768. Same system, different factor per device. That is the case
- * this function exists to handle rather than assume away.
+ * Six modes, because "how big should the picture be" has six defensible
+ * answers and no universally right one. Which is default is an OPEN question
+ * (register §5), deliberately not decided here: the modes exist so the choice
+ * can be made by looking at a panel instead of by arguing.
+ *
+ * Integer scaling was the original sole policy and remains the default. The
+ * measured counter-example that motivated per-device arithmetic still holds:
+ * PC Engine's 256x243 at 3x is 768x729, which exceeds the Miniloong's 720
+ * lines but fits the Brick's 768.
  */
 #include "diatom.h"
 
-diatom_rect diatom_scale_rect(int src_w, int src_h, int surf_w, int surf_h)
+/* The comparison set, in cycle order on device. Ordered by how much of the
+ * panel gets used, so stepping through is a single monotonic story rather than
+ * a shuffle: boxed, shape-correct, shape-correct-cropped, stretched, uniform-
+ * cropped, then 1:1 as a reference.
+ *
+ * Geometry and filter are cycled separately (mode on the shoulders, filter on
+ * A) because the question worth answering is what a given geometry looks like
+ * WITH and WITHOUT blending, and a single flat list makes that comparison two
+ * presses apart instead of one. */
+const diatom_display_mode_info diatom_modes[] = {
+	{ "integer",   DIATOM_SCALE_INTEGER,
+	  "largest whole factor, letterboxed" },
+	{ "aspect",    DIATOM_SCALE_ASPECT_FIT,
+	  "shape the core asks for, fits inside the panel" },
+	{ "fill",      DIATOM_SCALE_ASPECT_FILL,
+	  "shape kept, covers the panel, edges cropped" },
+	{ "stretch",   DIATOM_SCALE_STRETCH,
+	  "both axes filled, shape ignored" },
+	{ "overscale", DIATOM_SCALE_INTEGER_OVER,
+	  "next whole factor up: uniform pixels, edges cropped" },
+	{ "native",    DIATOM_SCALE_NATIVE,
+	  "1:1, no scaling at all" },
+};
+const int diatom_mode_count =
+	(int)(sizeof diatom_modes / sizeof diatom_modes[0]);
+
+/* Intended display aspect. Cores report one; libretro's own rule is that a
+ * value <= 0 means "assume square pixels", so base geometry decides. NES
+ * content is 256x240 square-pixel but reports 4:3, because a real NES pixel
+ * was wider than tall on a CRT. */
+static double target_aspect(int src_w, int src_h, double aspect)
+{
+	if (aspect > 0.0) return aspect;
+	return (double)src_w / (double)src_h;
+}
+
+static diatom_rect centred(int w, int h, int surf_w, int surf_h)
 {
 	diatom_rect r;
-	int fx, fy, f;
+	r.w = w;
+	r.h = h;
+	/* Truncating division can leave an odd remainder pixel at the bottom or
+	 * right rather than splitting it. Nothing sane to do about a half pixel. */
+	r.x = (surf_w - w) / 2;
+	r.y = (surf_h - h) / 2;
+	return r;
+}
+
+diatom_rect diatom_scale_rect(diatom_scale_mode mode, int src_w, int src_h,
+                              double aspect, int surf_w, int surf_h)
+{
+	double a;
+	int f, fx, fy;
 
 	if (src_w <= 0 || src_h <= 0 || surf_w <= 0 || surf_h <= 0) {
-		r.x = r.y = r.w = r.h = 0;
-		return r;
+		diatom_rect z = { 0, 0, 0, 0 };
+		return z;
 	}
 
-	fx = surf_w / src_w;
-	fy = surf_h / src_h;
-	f  = fx < fy ? fx : fy;
+	switch (mode) {
+	case DIATOM_SCALE_NATIVE:
+		return centred(src_w, src_h, surf_w, surf_h);
 
-	/* Source larger than the surface. Integer scaling cannot help, so show it
-	 * 1:1 and let the port clip rather than refusing the frame outright.
-	 * Reachable today: SNES hires is 512x448, and 2x would need 1024x896. */
-	if (f < 1) f = 1;
+	case DIATOM_SCALE_INTEGER:
+		fx = surf_w / src_w;
+		fy = surf_h / src_h;
+		f  = fx < fy ? fx : fy;
+		/* Source larger than the surface. Integer scaling cannot help, so show
+		 * it 1:1 and let the port clip rather than refusing the frame outright.
+		 * Reachable today: SNES hires is 512x448, and 2x would need 1024x896. */
+		if (f < 1) f = 1;
+		return centred(src_w * f, src_h * f, surf_w, surf_h);
 
-	r.w = src_w * f;
-	r.h = src_h * f;
-	r.x = (surf_w - r.w) / 2;
-	r.y = (surf_h - r.h) / 2;
-	return r;
+	case DIATOM_SCALE_INTEGER_OVER:
+		/* Smallest integer factor that covers the surface on both axes, so the
+		 * overflow is cropped. Keeps pixels perfectly uniform - the one way to
+		 * fill a panel without uneven pixel rows - at the cost of the edges.
+		 * On the Brick that is NES at 4x: 1024x960, losing 96 lines. Often the
+		 * right trade, because the lines lost are the overscan a CRT hid. */
+		fx = (surf_w + src_w - 1) / src_w;
+		fy = (surf_h + src_h - 1) / src_h;
+		f  = fx > fy ? fx : fy;
+		if (f < 1) f = 1;
+		return centred(src_w * f, src_h * f, surf_w, surf_h);
+
+	case DIATOM_SCALE_ASPECT_FIT:
+		a = target_aspect(src_w, src_h, aspect);
+		if ((double)surf_w / a <= (double)surf_h)
+			return centred(surf_w, (int)((double)surf_w / a + 0.5),
+			               surf_w, surf_h);
+		return centred((int)((double)surf_h * a + 0.5), surf_h,
+		               surf_w, surf_h);
+
+	case DIATOM_SCALE_ASPECT_FILL:
+		a = target_aspect(src_w, src_h, aspect);
+		if ((double)surf_w / a >= (double)surf_h)
+			return centred(surf_w, (int)((double)surf_w / a + 0.5),
+			               surf_w, surf_h);
+		return centred((int)((double)surf_h * a + 0.5), surf_h,
+		               surf_w, surf_h);
+
+	case DIATOM_SCALE_STRETCH:
+		return centred(surf_w, surf_h, surf_w, surf_h);
+	}
+
+	return centred(src_w, src_h, surf_w, surf_h);
 }
