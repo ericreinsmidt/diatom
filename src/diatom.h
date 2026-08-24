@@ -71,9 +71,13 @@ bool diatom_env_geometry_changed(void);   /* consumes the flag */
 diatom_rect diatom_scale_rect(int src_w, int src_h, int surf_w, int surf_h);
 
 /* audio.c — cores emit 32040..65536 Hz; the device runs at whatever it runs at.
- * Linear resampling for now. Dynamic rate control is register §6, not yet built,
- * and the measured spread makes it mandatory rather than an improvement. */
-void   diatom_audio_configure(double src_rate, int dst_rate);
+ * Linear interpolation, with dynamic rate control holding the port's buffer near
+ * half full. The resampler itself is still a placeholder; the control loop is
+ * not, because a fixed ratio drifts until the buffer empties or overflows. */
+void   diatom_audio_configure(double src_rate, int dst_rate, int capacity_frames);
 size_t diatom_audio_push(const int16_t *in, size_t frames);
+void   diatom_audio_prime(void);           /* fill to target before frame one */
+void   diatom_audio_sync(void);            /* once per frame, after pushing */
+double diatom_audio_ratio_drift(void);     /* current DRC correction, for reporting */
 
 #endif /* DIATOM_H */

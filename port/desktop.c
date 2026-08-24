@@ -19,7 +19,10 @@
 #define WINDOW_W 960
 #define WINDOW_H 720
 #define AUDIO_RATE 48000
-#define AUDIO_BUFFER_FRAMES 8192
+/* Capacity in FRAMES (one frame = two int16 samples). 4096 at 48kHz is ~85ms,
+ * with rate control aiming to hold it near half that. */
+#define AUDIO_BUFFER_FRAMES 4096
+#define AUDIO_FRAME_BYTES   (2 * (int)sizeof(int16_t))
 
 static SDL_Window   *g_window;
 static SDL_Renderer *g_renderer;
@@ -47,6 +50,18 @@ bool diatom_port_init(diatom_port_caps *out)
 	g_renderer = SDL_CreateRenderer(g_window, -1, SDL_RENDERER_ACCELERATED);
 	if (!g_renderer) { fprintf(stderr, "SDL_CreateRenderer: %s\n", SDL_GetError()); return false; }
 	SDL_SetRenderDrawColor(g_renderer, 0, 0, 0, 255);
+
+	/* Vsync OFF, deliberately.
+	 *
+	 * No console runs at the panel's rate — measured 50.0070, 59.7275, 59.8200,
+	 * 60.0000 across six cores. Blocking on a 60Hz vblank while trying to hold
+	 * 59.7275 leaves 0.07ms of slack per frame, so any jitter misses a vblank
+	 * and costs a whole 16.67ms. That measured as a consistent 1.4% deficit.
+	 *
+	 * The host paces against a monotonic clock instead, and audio drift is
+	 * absorbed by rate control rather than by hoping the panel agrees. */
+	if (SDL_RenderSetVSync(g_renderer, 0) != 0)
+		fprintf(stderr, "note: could not disable vsync: %s\n", SDL_GetError());
 
 	SDL_memset(&want, 0, sizeof want);
 	want.freq     = AUDIO_RATE;
@@ -119,14 +134,14 @@ void diatom_port_audio_write(const int16_t *frames, size_t n)
 	/* Never blocks; drops on overflow. A blocking write would pace the whole
 	 * program off the audio clock, which rules out dynamic rate control. */
 	if (!g_audio || !frames || !n) return;
-	if (SDL_GetQueuedAudioSize(g_audio) > AUDIO_BUFFER_FRAMES * 4 * 2) return;
-	SDL_QueueAudio(g_audio, frames, (Uint32)(n * 2 * sizeof(int16_t)));
+	if (diatom_port_audio_queued() >= (size_t)AUDIO_BUFFER_FRAMES) return;
+	SDL_QueueAudio(g_audio, frames, (Uint32)(n * AUDIO_FRAME_BYTES));
 }
 
 size_t diatom_port_audio_queued(void)
 {
 	if (!g_audio) return 0;
-	return SDL_GetQueuedAudioSize(g_audio) / (2 * sizeof(int16_t));
+	return SDL_GetQueuedAudioSize(g_audio) / AUDIO_FRAME_BYTES;
 }
 
 static const struct { SDL_Scancode key; int btn; } keymap[] = {

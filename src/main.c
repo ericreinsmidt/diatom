@@ -14,6 +14,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <math.h>
 
 #include "diatom.h"
 
@@ -65,8 +66,10 @@ int main(int argc, char **argv)
 	const char *core_path = NULL, *rom_path = NULL, *shot_path = NULL;
 	struct retro_system_av_info av;
 	struct retro_system_info si;
-	uint64_t frame_us, next_us, t_start;
-	long limit = 0, frames = 0, geom_changes = 0;
+	double   frame_us, next_us;
+	uint64_t t_start;
+	long limit = 0, frames = 0, geom_changes = 0, resyncs = 0;
+	size_t q_min = (size_t)-1, q_max = 0;
 	int i;
 
 	for (i = 1; i < argc; i++) {
@@ -117,7 +120,9 @@ int main(int argc, char **argv)
 	       av.geometry.max_width, av.geometry.max_height,
 	       av.timing.fps, av.timing.sample_rate, g_caps.audio_rate);
 
-	diatom_audio_configure(av.timing.sample_rate, g_caps.audio_rate);
+	diatom_audio_configure(av.timing.sample_rate, g_caps.audio_rate,
+	                       g_caps.audio_buffer_frames);
+	diatom_audio_prime();
 
 	/* The display rect is locked here, from BASE geometry, and does not move
 	 * again — ADR-0011.
@@ -133,14 +138,39 @@ int main(int argc, char **argv)
 	printf("diatom: display rect locked %dx%d at %d,%d\n",
 	       g_dst.w, g_dst.h, g_dst.x, g_dst.y);
 
-	/* Provisional pacing: sleep to the core's own rate. Register §7 is the real
-	 * problem — nothing runs at 60Hz and PAL at 50.0070 is a deliberate target,
-	 * so this drifts against the panel. It is honest enough to watch a game and
-	 * nothing more. */
-	frame_us = (uint64_t)(1000000.0 / (av.timing.fps > 0 ? av.timing.fps : 60.0));
-	next_us  = diatom_port_now_us();
+	/* Pace against a monotonic clock at the core's own rate, on an ABSOLUTE
+	 * schedule kept in floating point.
+	 *
+	 * Absolute matters: an incremental "sleep frame_us each time" accumulates
+	 * every scheduler overshoot forever, while a running deadline absorbs them —
+	 * a long sleep is followed by a correspondingly short one.
+	 *
+	 * Floating point matters too, if less: 1000000/59.7275 is 16742.63us, and
+	 * truncating loses 38ms per hour.
+	 *
+	 * Audio drift is not this loop's problem. It is handled by rate control,
+	 * because no panel and no core will ever agree on a rate. */
+	frame_us = 1000000.0 / (av.timing.fps > 0 ? av.timing.fps : 60.0);
+
+	/* Warm up before starting the clock. The first frames create the texture,
+	 * fault in code paths and prime the audio device; measured, they overrun the
+	 * frame budget badly enough to trip a resync every single run. Timing them
+	 * reports a rate the loop never actually sustains — and, worse, hides
+	 * whether the steady-state loop is correct. */
+	{
+		uint64_t w0 = diatom_port_now_us();
+		int w;
+		for (w = 0; w < 3; w++) {
+			g_core.run();
+			diatom_port_present(g_frame, g_frame_w, g_frame_h, g_frame_pitch,
+			                    g_policy.pixfmt, g_dst);
+		}
+		printf("diatom: warmup 3 frames in %.1f ms\n",
+		       (diatom_port_now_us() - w0) / 1000.0);
+	}
 
 	t_start = diatom_port_now_us();
+	next_us = (double)t_start;
 
 	while (!diatom_port_should_quit() && (limit <= 0 || frames < limit)) {
 		uint64_t now;
@@ -157,17 +187,32 @@ int main(int argc, char **argv)
 		                    g_frame_w, g_frame_h, g_frame_pitch,
 		                    g_policy.pixfmt, g_dst);
 
+		{
+			size_t q = diatom_port_audio_queued();
+			if (q < q_min) q_min = q;
+			if (q > q_max) q_max = q;
+		}
+		diatom_audio_sync();
+
 		next_us += frame_us;
 		now = diatom_port_now_us();
-		if (next_us > now) {
+
+		if (next_us > (double)now) {
 			struct timespec ts;
-			uint64_t d = next_us - now;
-			ts.tv_sec  = (time_t)(d / 1000000);
-			ts.tv_nsec = (long)((d % 1000000) * 1000);
+			double d = next_us - (double)now;
+			ts.tv_sec  = (time_t)(d / 1000000.0);
+			ts.tv_nsec = (long)(fmod(d, 1000000.0) * 1000.0);
 			nanosleep(&ts, NULL);
-		} else {
-			next_us = now;      /* fell behind; do not accumulate debt */
+		} else if ((double)now - next_us > frame_us * 4.0) {
+			/* More than four frames behind. Something stalled — the scheduler,
+			 * a page fault, a slow core — and trying to catch up would just run
+			 * fast for a while, which looks worse than dropping the debt.
+			 * Counted, because a loop that resyncs often is a loop that is
+			 * lying about its frame rate. */
+			next_us = (double)now;
+			resyncs++;
 		}
+		/* Otherwise keep the debt and let the next short sleep repay it. */
 	}
 
 	if (shot_path)
@@ -180,8 +225,13 @@ int main(int argc, char **argv)
 		       frames, secs, secs > 0 ? frames / secs : 0.0, av.timing.fps);
 		printf("diatom: %ld geometry change(s), last rect %dx%d at %d,%d\n",
 		       geom_changes, g_dst.w, g_dst.h, g_dst.x, g_dst.y);
-		printf("diatom: audio queued at exit %zu frames (capacity %d)\n",
-		       diatom_port_audio_queued(), g_caps.audio_buffer_frames);
+		printf("diatom: %ld resync(s)\n", resyncs);
+		printf("diatom: audio queued min %zu max %zu final %zu, target %d, capacity %d\n",
+		       q_min == (size_t)-1 ? 0 : q_min, q_max,
+		       diatom_port_audio_queued(),
+		       g_caps.audio_buffer_frames / 2, g_caps.audio_buffer_frames);
+		printf("diatom: rate control drift %+.3f%% (max %+.3f%%)\n",
+		       diatom_audio_ratio_drift() * 100.0, 0.5);
 	}
 
 	diatom_core_stop(&g_core);

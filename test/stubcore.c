@@ -30,6 +30,8 @@
 #define MAX_H  448
 #define FPS    59.7275
 #define RATE   32040.0
+/* 32040/59.7275 = 536.44, so 1024 is ample headroom. */
+#define AUDIO_MAX_FRAMES 1024
 
 static retro_environment_t   env;
 static retro_video_refresh_t video_cb;
@@ -42,6 +44,7 @@ static int      cur_w = BASE_W, cur_h = BASE_H;
 static unsigned frame;
 static int      box_x = 96, box_y = 80;
 static double   phase;
+static double   audio_accum;
 
 void retro_set_environment(retro_environment_t cb)
 {
@@ -116,10 +119,22 @@ static uint16_t rgb565(int r, int g, int b)
 void retro_run(void)
 {
 	int x, y, xs;
-	int16_t audio[1024];
-	size_t n = (size_t)(RATE / FPS);      /* one frame of audio */
-	size_t i;
+	int16_t audio[AUDIO_MAX_FRAMES * 2];
+	size_t n, i;
 	int16_t held;
+
+	/* One frame's worth of audio, with the fraction carried.
+	 *
+	 * 32040/59.7275 is 536.44 frames per video frame. An earlier version of this
+	 * clamped to 512 to fit a smaller buffer, which under-produced by 4.6% —
+	 * nine times what rate control can correct — and starved the frontend's audio
+	 * queue. The frontend was behaving correctly on a starved input; the fixture
+	 * was lying. A test core that produces the wrong amount of audio tests
+	 * nothing useful. */
+	audio_accum += RATE / FPS;
+	n = (size_t)audio_accum;
+	audio_accum -= (double)n;
+	if (n > AUDIO_MAX_FRAMES) n = AUDIO_MAX_FRAMES;   /* cannot happen; guard anyway */
 
 	poll_cb();
 
@@ -190,7 +205,6 @@ void retro_run(void)
 
 	video_cb(fb, (unsigned)cur_w, (unsigned)cur_h, (size_t)cur_w * sizeof(uint16_t));
 
-	if (n > 512) n = 512;
 	for (i = 0; i < n; i++) {
 		int16_t s = (int16_t)(sin(phase) * 2200.0);
 		audio[i * 2] = audio[i * 2 + 1] = s;
