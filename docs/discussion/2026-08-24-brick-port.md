@@ -122,6 +122,28 @@ map in port/brick.c is now measured, not argued.
 inside bounds, clean exit, pattern verified on the physical panel, every
 button verified by press.** The Brick port is real.
 
+## First real game
+
+Contra (USA) on FCEUmm (the exact binary the environment inventory
+measured), same evening. FCEUmm reports NTSC 60.0998fps and native 48000 Hz,
+so the resampler ran at near-unity - a good test of rate control around 1.0.
+Display rect locked at 768x720, the largest integer scale of 256x240 that
+fits the panel (ADR-0007 policy; the letterbox prompted the question and the
+answer is intentional).
+
+Scripted run: 900 frames at 60.10fps, 0 resyncs, drift +0.04%.
+
+Then a human played it for three minutes - jungle stage cleared, into
+Base 1: **10,664 frames in 177.44s = 60.10fps against 60.0998, 0 resyncs,
+drift -0.21%, audio holding around target throughout.** Player's verdict:
+felt smooth.
+
+One number to keep an eye on: the blit costs 9.3ms under a real core
+against 4.7ms under the stub - same destination size, colder caches. It
+fits the NTSC budget with room, but SNES hires plus a heavier core will
+squeeze; ADR-0013 already names the disp2 hardware scaler as the escape
+hatch if CPU blitting ever stops fitting.
+
 ## Open at end of session
 
 - [ ] `[LATER]` volume keys during play: the joystick device emits
