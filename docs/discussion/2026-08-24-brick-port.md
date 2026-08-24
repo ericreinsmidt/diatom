@@ -63,17 +63,74 @@ mask). What stays provisional is which physical cap emits which code -
 `DIATOM_INPUT_DEBUG=1` logs raw events to settle that in one session with
 hands on the device.
 
+## The single-owner measurement, and a measurement bug
+
+Getting exclusive display ownership took three attempts, each teaching one
+device fact:
+
+1. Sweeping every PlayOS process killed adbd - it lives under the launch
+   chain.
+2. `killall playos.elf minarch.elf` alone does not stick: **`launch.sh` is a
+   supervisor loop and respawns them**, which quietly re-created the
+   two-client display fight mid-test and wedged the GPU firmware so hard that
+   PVR could not free the dead process's context ("Retry limit reached");
+   only a reboot clears that state.
+3. The sequence that works: `kill -STOP` the supervisor, then kill the UI
+   processes while healthy. Zombies remain (frozen parent cannot reap);
+   harmless.
+
+The lingering 2.8% fps deficit then turned out not to exist. The stats clock
+was read *after* `diatom_port_capture()`, and writing a full-screen BMP costs
+~430ms; the loop was pacing perfectly while the report said otherwise. A
+measurement bug wearing the costume of a pacing bug - fixed by reading the
+clock before the capture.
+
+**Final, sole owner, 900 frames: 59.73fps against 59.7275, 0 resyncs, rate
+control drift +0.06%, audio holding around target, clean exit.** The capture
+shows the stub pattern pixel-exact: border intact, hires stripes resolved,
+letterbox at the locked rect.
+
+## Capture is not scanout: the alpha lesson
+
+With pacing perfect and the capture pixel-exact, the panel showed black.
+The disp2 engine composites the fb layer in per-pixel alpha mode
+(`a[pixel 255]` in the engine dump), the framebuffer format is ARGB
+(transp at 24+8), and the blit was writing zero alpha: every pixel fully
+transparent, composited over black. Capture reads memory; the panel reads
+alpha. The port now fills the format's transparency channel opaque, read
+from the driver like the colour offsets, and the pattern showed on glass.
+
+The general lesson joins the register's themes: each stage of today's
+pipeline validated the previous one and something orthogonal still failed -
+link proved load, load proved run, run proved blit, blit proved memory, and
+memory is still not light. The only proof of the last step was eyes on the
+panel.
+
+## Input map verified by hand
+
+Two ordered pass-throughs of every control under `DIATOM_INPUT_DEBUG=1`.
+The derived index table held exactly; the positional label assumption was
+wrong in one place: **X and Y are swapped** relative to position - the top
+cap (X) emits BTN_WEST, the left cap (Y) emits BTN_NORTH. A=1, B=0
+confirmed; L1=4, R1=5; L2/R2 are axes 2/5 resting at -32768 and slamming to
++32767; Select=6, Start=7, Menu=8 (confirmed by exiting the session). The
+map in port/brick.c is now measured, not argued.
+
+## Where the port stands
+
+**59.73fps against a 59.7275 target, 0 resyncs, rate control drift well
+inside bounds, clean exit, pattern verified on the physical panel, every
+button verified by press.** The Brick port is real.
+
 ## Open at end of session
 
-- [ ] Re-measure pacing with Diatom as sole display owner (blocked on a
-      power cycle at time of writing).
-- [ ] Physical button verification: press each cap under
-      `DIATOM_INPUT_DEBUG=1`, correct the A/B/X/Y assumption if wrong.
-- [ ] Visual confirmation on the panel: the capture proves the blit, not the
-      scanout; eyes on the screen prove scanout.
 - [ ] `[LATER]` volume keys during play: the joystick device emits
       VOLUMEUP/DOWN codes; whose job is volume - port, host application, or
       firmware daemon - is undecided and deferred.
 - [ ] Audio queue accounting: `audio_write` admits a batch when *any* space
       remains, so `queued` can overshoot capacity by one batch (measured max
       4816 of 4096). Harmless slop or fix; decide when touching audio next.
+- [ ] Next milestone: a real core and a real game on the Brick - cores are
+      already on the device from the spike runs.
+- [ ] Restoring the device UI after tests: `kill -CONT` the frozen
+      `launch.sh` (its loop respawns the UI) or reboot.

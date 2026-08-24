@@ -215,12 +215,19 @@ int main(int argc, char **argv)
 		/* Otherwise keep the debt and let the next short sleep repay it. */
 	}
 
-	if (shot_path)
-		printf("diatom: capture %s: %s\n", shot_path,
-		       diatom_port_capture(shot_path) ? "ok" : "FAILED");
-
+	/* Read the clock before the capture: converting and writing a full-screen
+	 * BMP costs hundreds of milliseconds, and it happens after the last frame.
+	 * Measured on the Brick: leaving it inside the timed span understated a
+	 * perfectly paced 59.73fps loop as 58.1 - a measurement bug wearing the
+	 * costume of a pacing bug. */
 	{
-		double secs = (diatom_port_now_us() - t_start) / 1000000.0;
+		uint64_t t_end = diatom_port_now_us();
+
+		if (shot_path)
+			printf("diatom: capture %s: %s\n", shot_path,
+			       diatom_port_capture(shot_path) ? "ok" : "FAILED");
+
+		double secs = (t_end - t_start) / 1000000.0;
 		printf("diatom: %ld frames in %.2fs = %.2f fps (target %.4f)\n",
 		       frames, secs, secs > 0 ? frames / secs : 0.0, av.timing.fps);
 		printf("diatom: %ld geometry change(s), last rect %dx%d at %d,%d\n",

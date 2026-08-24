@@ -98,6 +98,16 @@ now, and the number is in the present-debug log the day it is not.
 side of ADR-0009 exists. During development that means stopping the device UI
 before running Diatom by hand.
 
+## Postscript, same day
+
+The single-owner re-measurement closed the deficit entirely: **59.73fps
+against 59.7275, 0 resyncs, drift +0.06%**. The 58.1 figure was a measurement
+bug - the stats clock was read after the screenshot write - not a pacing
+deficit. One more scanout fact joined the pile: the disp2 engine composites
+the fb layer with per-pixel alpha, so the blit must write the alpha channel
+opaque or the panel shows black while capture reads back perfect frames. See
+the session log.
+
 ## Revisit if
 
 - a firmware update gives SDL a non-blocking present or a real KMS path; or

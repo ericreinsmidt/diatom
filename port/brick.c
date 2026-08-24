@@ -85,6 +85,14 @@ static uint32_t          g_buttons;
 static bool              g_input_debug;
 static bool              g_present_debug;
 
+/* Opaque value for the framebuffer's alpha channel, zero if it has none.
+ * The disp2 engine composites the fb layer in PER-PIXEL alpha mode: pixels
+ * with a zero alpha byte are invisible, composited over black. Measured the
+ * hard way 2026-08-24 - a pipeline that paced and captured perfectly while
+ * the panel showed nothing, because capture reads memory and the panel reads
+ * alpha. */
+static uint32_t g_opaque;
+
 /* Nearest-neighbour column map, rebuilt only when source size or the
  * destination rect changes. Row indices are cheap enough to compute per row;
  * columns are the hot loop, so they are precomputed. */
@@ -166,7 +174,16 @@ bool diatom_port_init(diatom_port_caps *out)
 	g_fb = mmap(NULL, g_fb_size, PROT_READ | PROT_WRITE, MAP_SHARED, g_fb_fd, 0);
 	if (g_fb == MAP_FAILED) { perror("mmap fb0"); g_fb = NULL; return false; }
 
-	memset(g_fb, 0, g_fb_size);
+	if (g_vinfo.transp.length > 0)
+		g_opaque = ((1u << g_vinfo.transp.length) - 1) << g_vinfo.transp.offset;
+
+	/* Opaque black, not memset zero: zero alpha is invisible, see g_opaque. */
+	{
+		uint32_t *p   = (uint32_t *)g_fb;
+		size_t    n   = g_fb_size / sizeof *p;
+		size_t    i;
+		for (i = 0; i < n; i++) p[i] = g_opaque;
+	}
 
 	/* Start from a known page. The mailbox needs three pages - front, in
 	 * flight, drawing; fewer, or a refused pan, means single-buffered
@@ -204,9 +221,10 @@ bool diatom_port_init(diatom_port_caps *out)
 	{
 		char msg[160];
 		snprintf(msg, sizeof msg,
-		         "brick: fb %ux%u stride %u, %d page(s), rgb at %u/%u/%u, audio %d Hz, joystick %s",
+		         "brick: fb %ux%u stride %u, %d page(s), rgba at %u/%u/%u/%u+%u, audio %d Hz, joystick %s",
 		         g_vinfo.xres, g_vinfo.yres, g_finfo.line_length, g_pages,
 		         g_vinfo.red.offset, g_vinfo.green.offset, g_vinfo.blue.offset,
+		         g_vinfo.transp.offset, g_vinfo.transp.length,
 		         have.freq, g_joy ? SDL_JoystickName(g_joy) : "none");
 		diatom_port_log(DIATOM_LOG_INFO, msg);
 	}
@@ -285,7 +303,8 @@ static void blit(uint8_t *page, const void *src, int w, int h, size_t pitch,
 			for (x = 0; x < dst.w; x++) {
 				const uint16_t c = in[g_colmap[x]];
 				const uint32_t r = (c >> 11) & 0x1f, g = (c >> 5) & 0x3f, b = c & 0x1f;
-				out[x] = (((r << 3) | (r >> 2)) << ro)
+				out[x] = g_opaque
+				       | (((r << 3) | (r >> 2)) << ro)
 				       | (((g << 2) | (g >> 4)) << go)
 				       | (((b << 3) | (b >> 2)) << bo);
 			}
@@ -294,7 +313,8 @@ static void blit(uint8_t *page, const void *src, int w, int h, size_t pitch,
 				(const uint32_t *)((const uint8_t *)src + (size_t)sy * pitch);
 			for (x = 0; x < dst.w; x++) {
 				const uint32_t c = in[g_colmap[x]];
-				out[x] = (((c >> 16) & 0xff) << ro)
+				out[x] = g_opaque
+				       | (((c >> 16) & 0xff) << ro)
 				       | (((c >>  8) & 0xff) << go)
 				       | (( c        & 0xff) << bo);
 			}
@@ -371,40 +391,40 @@ size_t diatom_port_audio_queued(void)
 
 /* SDL joystick button index -> Diatom button.
  *
- * The index side is DERIVED, not guessed. Measured 2026-08-24 on firmware
- * 1.1.1: the kernel capability bitmask for "TRIMUI Player1"
- * (/proc/bus/input/devices, B: KEY=) decodes to exactly these codes, and
- * SDL's Linux joystick driver assigns indices in ascending code order,
- * gamepad range before low keycodes:
+ * The index side is DERIVED: the kernel capability bitmask for "TRIMUI
+ * Player1" (/proc/bus/input/devices, B: KEY=) decodes to exactly these
+ * codes, and SDL's Linux joystick driver assigns indices in ascending code
+ * order, gamepad range before low keycodes:
  *
  *   0  304 BTN_SOUTH    4  310 BTN_TL      8  316 BTN_MODE    12  60 KEY_F2
  *   1  305 BTN_EAST     5  311 BTN_TR      9  317 BTN_THUMBL  13 114 VOL_DN
  *   2  307 BTN_NORTH    6  314 BTN_SELECT 10  318 BTN_THUMBR  14 115 VOL_UP
  *   3  308 BTN_WEST     7  315 BTN_START  11   59 KEY_F1
  *
- * The dpad is ABS_HAT0 and L2/R2 are axes; neither appears here.
+ * The label side is MEASURED: every cap pressed in a known order under
+ * DIATOM_INPUT_DEBUG, twice, 2026-08-24, firmware 1.1.1. A and B follow the
+ * positional reading (EAST = right cap = A, SOUTH = bottom = B), but X and Y
+ * are the other way around from position: the top cap (X) emits BTN_WEST and
+ * the left cap (Y) emits BTN_NORTH. Positional reasoning got exactly those
+ * two wrong, which is why this table is measured and not argued.
  *
- * The label side is PROVISIONAL until the caps are physically pressed:
- * assumed positional kernel semantics on a Nintendo-labelled deck, so
- * SOUTH = bottom cap = B, EAST = right cap = A, NORTH = top = X,
- * WEST = left = Y. If A and B come out swapped in play, this is why;
- * DIATOM_INPUT_DEBUG=1 settles it in one session.
- *
+ * The dpad is ABS_HAT0 - hat values are semantic, no attribution needed.
  * THUMBL/THUMBR/F1/F2 exist in the mask because the same driver serves
  * stick-bearing siblings; volume is the host OS's business. All unmapped. */
 static const struct { int idx; int btn; } joymap[] = {
 	{ 0, DIATOM_BTN_B },      { 1, DIATOM_BTN_A },
-	{ 2, DIATOM_BTN_X },      { 3, DIATOM_BTN_Y },
+	{ 2, DIATOM_BTN_Y },      { 3, DIATOM_BTN_X },
 	{ 4, DIATOM_BTN_L1 },     { 5, DIATOM_BTN_R1 },
 	{ 6, DIATOM_BTN_SELECT }, { 7, DIATOM_BTN_START },
 	{ 8, DIATOM_BTN_MENU },
 };
 
 /* L2/R2 are digital switches surfaced as axes (the KEY mask has no
- * BTN_TL2/TR2, the ABS mask advertises X Y Z RX RY RZ). PROVISIONALLY
- * ABS_Z and ABS_RZ - SDL axis indices 2 and 5 - with the other four there
- * for the stick-bearing siblings. Digital switch through an axis means the
- * value slams between extremes, so half travel is a safe threshold. */
+ * BTN_TL2/TR2, the ABS mask advertises X Y Z RX RY RZ). Measured 2026-08-24:
+ * L2 is SDL axis 2 (ABS_Z), R2 is axis 5 (ABS_RZ), resting at -32768 and
+ * slamming to +32767 when pressed - a digital switch in axis clothing, so
+ * half travel is a comfortable threshold. The other four axes belong to the
+ * stick-bearing siblings this driver also serves. */
 #define AXIS_L2 2
 #define AXIS_R2 5
 #define AXIS_PRESSED 16384
