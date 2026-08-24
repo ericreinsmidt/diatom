@@ -5,7 +5,8 @@
 # and an abstraction with no consumer is a tax (register §0).
 #
 #   make                 desktop build (SDL2), the development target
-#   make PORT=brick      device build for the TrimUI Brick (TG3040)
+#   make PORT=brick      device build for the TrimUI Brick (TG3040); needs the
+#                        cross toolchain, so run it as  tools/brick-make.sh
 
 PORT ?= desktop
 
@@ -14,9 +15,12 @@ CFLAGS  += -std=gnu11 -Wall -Wextra -Wno-unused-parameter -O2
 CFLAGS  += -Iinclude -Isrc
 LDFLAGS +=
 
-SRC := src/main.c src/core.c src/env.c src/scale.c src/audio.c port/$(PORT).c
-OBJ := $(SRC:.c=.o)
-BIN := build/diatom
+# Objects live under build/$(PORT)/ so host and cross builds cannot collide:
+# a leftover x86 main.o in a device link fails late and confusingly.
+BUILD := build/$(PORT)
+SRC   := src/main.c src/core.c src/env.c src/scale.c src/audio.c port/$(PORT).c
+OBJ   := $(SRC:%.c=$(BUILD)/%.o)
+BIN   := $(BUILD)/diatom
 
 ifeq ($(PORT),desktop)
   # sdl2-config ships with SDL2 itself; pkg-config is a separate install and is
@@ -35,6 +39,23 @@ ifeq ($(PORT),desktop)
   endif
 endif
 
+ifeq ($(PORT),brick)
+  # TrimUI Brick (TG3040) - ADR-0012. Stock Debian cross-compiler; SDL2 is the
+  # device's own library plus version-matched upstream headers, assembled into
+  # sysroot/brick by tools/fetch-brick-sysroot.sh and never committed.
+  CROSS   ?= aarch64-linux-gnu-
+  CC       = $(CROSS)gcc
+  SYSROOT ?= sysroot/brick
+  ifeq ($(wildcard $(SYSROOT)/usr/trimui/lib/libSDL2.so),)
+    $(error brick sysroot missing: run tools/fetch-brick-sysroot.sh)
+  endif
+  CFLAGS  += -I$(SYSROOT)/usr/include/SDL2 -D_REENTRANT
+  LDFLAGS += -L$(SYSROOT)/usr/trimui/lib -Wl,-rpath-link,$(SYSROOT)/usr/trimui/lib
+  # Explicit -ldl/-lpthread: the toolchain's glibc 2.31 predates their merge
+  # into libc proper (2.34).
+  LDFLAGS += -lSDL2 -lm -ldl -lpthread
+endif
+
 .PHONY: all clean check-seam stub run-stub tools
 
 all: $(BIN)
@@ -42,7 +63,7 @@ all: $(BIN)
 # Measurement instruments (tools/). Not part of the frontend, never linked into
 # it, and deliberately not built by `all`. Cores and ROMs are supplied locally;
 # see tools/README.md.
-TOOLS_DIR := build/tools
+TOOLS_DIR := $(BUILD)/tools
 TOOLS     := $(TOOLS_DIR)/envlog $(TOOLS_DIR)/rssprobe
 TOOL_CFLAGS := -std=gnu11 -Wall -Wextra -Wno-unused-parameter -O1 -Isrc -I$(TOOLS_DIR)
 
@@ -66,12 +87,12 @@ endif
 
 # A libretro core that is not an emulator, so Diatom can be exercised end to end
 # with no third-party binary present. See test/stubcore.c.
-STUB := build/stubcore.so
+STUB := $(BUILD)/stubcore.so
 
 stub: $(STUB)
 
 $(STUB): test/stubcore.c
-	@mkdir -p build
+	@mkdir -p $(BUILD)
 	$(CC) -std=gnu11 -Wall -Wextra -Wno-unused-parameter -O2 -Isrc \
 	      -shared -fPIC -o $@ $< -lm
 
@@ -79,10 +100,11 @@ run-stub: $(BIN) $(STUB)
 	./$(BIN) --core $(STUB)
 
 $(BIN): $(OBJ)
-	@mkdir -p build
+	@mkdir -p $(BUILD)
 	$(CC) -o $@ $(OBJ) $(LDFLAGS)
 
-%.o: %.c
+$(BUILD)/%.o: %.c
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 # The seam test from ADR-0007, mechanised. A port that includes libretro.h can
@@ -98,4 +120,4 @@ check-seam:
 	fi
 
 clean:
-	rm -rf build $(OBJ)
+	rm -rf build

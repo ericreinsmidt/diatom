@@ -233,6 +233,10 @@ evaporates - but two others remain:
 - [ ] **[OPEN]** Remaining risk carried by ADR-0008: **display handoff between
       two processes** on fbdev/DRM. Proven on tg5040 by PlayOS today; will need
       re-solving per port and is the likeliest source of platform-specific pain.
+      **Measured instance 2026-08-24** ([ADR-0013](decisions/0013-brick-fbdev-flip-thread.md)):
+      Diatom panning fb0 while another process presented through EGL deadlocked
+      the pan in-kernel behind a stalled PowerVR fence. On the Brick the rule is
+      one display client, enforced by the host, full stop.
 
 ---
 
