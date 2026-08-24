@@ -3,7 +3,7 @@
  * ADR-0006: every core is dlopen'd once and NEVER unloaded. dlclose does not
  * appear in this file, or anywhere else in Diatom.
  * ADR-0010: RTLD_LOCAL always. It is the only thing preventing symbol collision
- * between resident cores — measured, picodrive exports 1069 non-retro_* symbols
+ * between resident cores - measured, picodrive exports 1069 non-retro_* symbols
  * including a complete static zlib. RTLD_GLOBAL would let its crc32 answer for
  * everyone, silently.
  */
@@ -134,7 +134,7 @@ bool diatom_core_start(diatom_core *c, const char *rom_path)
 	return true;
 }
 
-/* Stops the GAME, not the core. The core stays initialised and stays mapped —
+/* Stops the GAME, not the core. The core stays initialised and stays mapped -
  * that is the whole of ADR-0006. */
 void diatom_core_stop(diatom_core *c)
 {

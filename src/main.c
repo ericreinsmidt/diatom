@@ -1,4 +1,4 @@
-/* Diatom — a minimal libretro frontend.
+/* Diatom - a minimal libretro frontend.
  *
  * Standalone is the primary mode:  diatom --core X.so --rom game.nes
  * A host application driving a resident Diatom over a socket (ADR-0009) is an
@@ -6,7 +6,7 @@
  * alone is a stricter test than designing for one embedder.
  *
  * The frame is copied inside the core's video callback and presented AFTER
- * retro_run returns — ADR-0007. Cores emit video and audio from inside
+ * retro_run returns - ADR-0007. Cores emit video and audio from inside
  * retro_run in an order that varies, so presenting from the callback means
  * committing to a frame before knowing how much audio it produced.
  */
@@ -28,7 +28,7 @@ static bool        g_frame_fresh;
 static diatom_core      g_core;
 static diatom_policy    g_policy;
 static diatom_port_caps g_caps;
-static diatom_rect      g_dst;   /* locked at load — ADR-0011 */
+static diatom_rect      g_dst;   /* locked at load - ADR-0011 */
 
 /* Called from inside retro_run. Copy and return; do not present here. */
 void diatom_on_video(const void *data, unsigned w, unsigned h, size_t pitch)
@@ -108,7 +108,7 @@ int main(int argc, char **argv)
 	}
 	if (!diatom_core_start(&g_core, rom_path)) return 4;
 
-	/* Genesis 3-button vs 6-button is a correctness issue, not a preference —
+	/* Genesis 3-button vs 6-button is a correctness issue, not a preference -
 	 * some early games misbehave with a 6-button pad attached, which is why the
 	 * real pad has a Mode switch. Digital-only (ADR-0003) removes axes, not
 	 * device types. */
@@ -125,7 +125,7 @@ int main(int argc, char **argv)
 	diatom_audio_prime();
 
 	/* The display rect is locked here, from BASE geometry, and does not move
-	 * again — ADR-0011.
+	 * again - ADR-0011.
 	 *
 	 * Cores announce hires by calling SET_GEOMETRY with a larger base_width
 	 * mid-run (measured: 3 of 6 do this). Recomputing an integer factor from
@@ -142,7 +142,7 @@ int main(int argc, char **argv)
 	 * schedule kept in floating point.
 	 *
 	 * Absolute matters: an incremental "sleep frame_us each time" accumulates
-	 * every scheduler overshoot forever, while a running deadline absorbs them —
+	 * every scheduler overshoot forever, while a running deadline absorbs them -
 	 * a long sleep is followed by a correspondingly short one.
 	 *
 	 * Floating point matters too, if less: 1000000/59.7275 is 16742.63us, and
@@ -155,7 +155,7 @@ int main(int argc, char **argv)
 	/* Warm up before starting the clock. The first frames create the texture,
 	 * fault in code paths and prime the audio device; measured, they overrun the
 	 * frame budget badly enough to trip a resync every single run. Timing them
-	 * reports a rate the loop never actually sustains — and, worse, hides
+	 * reports a rate the loop never actually sustains - and, worse, hides
 	 * whether the steady-state loop is correct. */
 	{
 		uint64_t w0 = diatom_port_now_us();
@@ -204,8 +204,8 @@ int main(int argc, char **argv)
 			ts.tv_nsec = (long)(fmod(d, 1000000.0) * 1000.0);
 			nanosleep(&ts, NULL);
 		} else if ((double)now - next_us > frame_us * 4.0) {
-			/* More than four frames behind. Something stalled — the scheduler,
-			 * a page fault, a slow core — and trying to catch up would just run
+			/* More than four frames behind. Something stalled - the scheduler,
+			 * a page fault, a slow core - and trying to catch up would just run
 			 * fast for a while, which looks worse than dropping the debt.
 			 * Counted, because a loop that resyncs often is a loop that is
 			 * lying about its frame rate. */

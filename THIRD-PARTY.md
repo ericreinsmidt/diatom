@@ -1,7 +1,7 @@
 # Third-party notices
 
 Diatom's own code is intended to be permissively licensed (see ADR-0002 for why
-that matters — escaping GPL inheritance is a founding goal of the project).
+that matters - escaping GPL inheritance is a founding goal of the project).
 
 ## `src/libretro.h`
 
@@ -20,7 +20,7 @@ Full text is at the top of the file.
 ## Cores
 
 **Diatom ships no cores and has no core list.** It loads whatever shared library
-it is handed at runtime. Cores keep their own licences — commonly GPL — and are
+it is handed at runtime. Cores keep their own licences - commonly GPL - and are
 the responsibility of whoever distributes them.
 
 `test/stubcore.c` is Diatom's own code: a libretro core that is not an emulator,

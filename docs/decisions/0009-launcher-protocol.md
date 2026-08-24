@@ -2,8 +2,8 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-23
-- **Supersedes:** —
-- **Superseded by:** —
+- **Supersedes:** -
+- **Superseded by:** -
 
 ## Context
 
@@ -23,8 +23,8 @@ SIGUSR1               signal     ends the game (power button)
 ```
 
 **Five mechanisms doing one job**, and PlayOS's own comments record why each
-appeared. The fifos cannot report liveness — *"a resident that crashed leaves
-both nodes behind and a check that just stats them says yes forever"* — so a pid
+appeared. The fifos cannot report liveness - *"a resident that crashed leaves
+both nodes behind and a check that just stats them says yes forever"* - so a pid
 file was added. The request line could not carry the resume slot, so a temp file
 was added. There was no way to say *stop*, so a signal was added.
 
@@ -39,7 +39,7 @@ not express what was needed. Three costs follow:
 
 Two further facts shape the design:
 
-- PlayOS's launcher **already polls** rather than blocking — `plat_resident_wait()`
+- PlayOS's launcher **already polls** rather than blocking - `plat_resident_wait()`
   is a 20 ms `usleep` loop that reads the fifo non-blocking, drains the power
   button, and checks `kill(res, 0)`.
 - The launcher **keeps drawing its launch animation while the game loads**:
@@ -52,7 +52,7 @@ Two further facts shape the design:
 
 **Two fifos (status quo).** Familiar, filesystem-visible. But no connection
 semantics, so peer death needs a separate pid mechanism, and both ends must be
-held `O_RDWR` to dodge blocking-on-open and EOF races — a workaround PlayOS
+held `O_RDWR` to dodge blocking-on-open and EOF races - a workaround PlayOS
 already carries.
 
 **`socketpair` + fork.** Simplest lifecycle, but ties Diatom's life to the
@@ -60,15 +60,15 @@ launcher. Incompatible with `launch.sh`'s restart loop, which depends on the
 resident process surviving a launcher restart.
 
 **Unix domain socket, `SOCK_STREAM`, Diatom listening.** Bidirectional over one
-fd. **Peer death is native** — `read()` returns 0 on EOF, `connect()` fails when
-Diatom is absent — which deletes the pid file outright. Supports `SCM_RIGHTS` if
+fd. **Peer death is native** - `read()` returns 0 on EOF, `connect()` fails when
+Diatom is absent - which deletes the pid file outright. Supports `SCM_RIGHTS` if
 display handoff ever needs fd passing. Connection-oriented but not
 lifetime-coupled.
 
 ### Encoding
 
-**Positional tab fields (status quo)** — no extensibility. **JSON** — needs a
-parser for a handful of message types. **Tab-separated `key=value`** — parses
+**Positional tab fields (status quo)** - no extensibility. **JSON** - needs a
+parser for a handful of message types. **Tab-separated `key=value`** - parses
 with `strtok`, readable, `socat`-debuggable, and named keys mean a new field does
 not break an older peer.
 
@@ -108,11 +108,11 @@ RUN\tcore=/mnt/SDCARD/PlayOS/cores/fceumm_libretro.so\trom=/mnt/SDCARD/Roms/NES/
 > **`ERROR` means the game never started. `EXIT` means it ran and stopped.**
 
 After `RUN`, exactly one of `{RUNNING, ERROR}`. After `RUNNING`, exactly one of
-`{EXIT, ERROR}` — where a post-`RUNNING` failure is `EXIT reason=crash`.
+`{EXIT, ERROR}` - where a post-`RUNNING` failure is `EXIT reason=crash`.
 
 This is about the **display**, not error reporting. `RUNNING` means "stop
 drawing". If a missing BIOS were reported as `RUNNING` then immediately `EXIT`,
-the launcher would relinquish the screen for a game that never existed — a black
+the launcher would relinquish the screen for a game that never existed - a black
 frame before the shelf returns. The launcher must always know whether it still
 owns the display.
 
@@ -122,7 +122,7 @@ Diatom owns the display; `EXIT` → the launcher takes it back.
 
 ### Supervision
 
-The launcher keeps a loop while a game runs — **not to wait, but to supervise.**
+The launcher keeps a loop while a game runs - **not to wait, but to supervise.**
 Normally Diatom handles the power button itself while it owns input. But **a core
 wedged inside `retro_run` cannot answer anything**, and the launcher's independent
 power watch is then the only way out of a hung game. A supervisor that blocks
@@ -133,7 +133,7 @@ Shape it as `poll({socket_fd, power_input_fd}, -1)` rather than the current 20 m
 spinning.
 
 **One connection at a time.** A second concurrent connect is refused. Dead
-launchers clean themselves up via EOF — including on `SIGKILL` — so the restart
+launchers clean themselves up via EOF - including on `SIGKILL` - so the restart
 case needs no policy about displacing a live connection.
 
 **`state=` on connect exists for that restart case.** `launch.sh` can restart the
@@ -157,7 +157,7 @@ transport rather than by a pid file that lies after a crash.
 | one-byte reply | `EXIT reason=` and `ERROR code=` |
 
 **Harder:** More code than a fifo write. PlayOS must be changed on both sides,
-and the protocol becomes a compatibility surface once another firmware adopts it —
+and the protocol becomes a compatibility surface once another firmware adopts it -
 which `proto=` exists to manage.
 
 **Retained deliberately:** `SIGUSR1` stays documented as a **last-resort escape
@@ -167,7 +167,7 @@ five-mechanisms-to-one story keeps a second channel, and it earns it.
 
 ## Revisit if
 
-- Another firmware needs a message the verb set cannot express — bump `proto=`
+- Another firmware needs a message the verb set cannot express - bump `proto=`
   rather than overloading an existing verb; or
 - the launcher needs to hand Diatom a file descriptor for display handoff, at
   which point `SCM_RIGHTS` is available and the transport already supports it; or

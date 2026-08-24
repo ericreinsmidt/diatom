@@ -33,7 +33,7 @@ typedef struct {
 
 /* ---- a loaded core ------------------------------------------------------- */
 typedef struct {
-	void       *handle;          /* dlopen'd RTLD_NOW|RTLD_LOCAL — ADR-0010 */
+	void       *handle;          /* dlopen'd RTLD_NOW|RTLD_LOCAL - ADR-0010 */
 	const char *path;
 	bool        initialised;     /* retro_init has run */
 	bool        game_loaded;
@@ -66,11 +66,11 @@ void diatom_core_stop(diatom_core *c);
 void diatom_env_bind(diatom_core *c, diatom_policy *p, diatom_port_caps *caps);
 bool diatom_env_geometry_changed(void);   /* consumes the flag */
 
-/* scale.c — geometry is arithmetic and lives here, once, so every port agrees.
+/* scale.c - geometry is arithmetic and lives here, once, so every port agrees.
  * Performing the blit is hardware and belongs to the port. */
 diatom_rect diatom_scale_rect(int src_w, int src_h, int surf_w, int surf_h);
 
-/* audio.c — cores emit 32040..65536 Hz; the device runs at whatever it runs at.
+/* audio.c - cores emit 32040..65536 Hz; the device runs at whatever it runs at.
  * Linear interpolation, with dynamic rate control holding the port's buffer near
  * half full. The resampler itself is still a placeholder; the control loop is
  * not, because a fixed ratio drifts until the buffer empties or overflows. */

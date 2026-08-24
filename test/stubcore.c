@@ -126,8 +126,8 @@ void retro_run(void)
 	/* One frame's worth of audio, with the fraction carried.
 	 *
 	 * 32040/59.7275 is 536.44 frames per video frame. An earlier version of this
-	 * clamped to 512 to fit a smaller buffer, which under-produced by 4.6% —
-	 * nine times what rate control can correct — and starved the frontend's audio
+	 * clamped to 512 to fit a smaller buffer, which under-produced by 4.6% -
+	 * nine times what rate control can correct - and starved the frontend's audio
 	 * queue. The frontend was behaving correctly on a starved input; the fixture
 	 * was lying. A test core that produces the wrong amount of audio tests
 	 * nothing useful. */
@@ -164,7 +164,7 @@ void retro_run(void)
 	/* Draw in DISPLAY units, not source pixels.
 	 *
 	 * Hires pixels are physically half-width, so real content in a 512-wide mode
-	 * uses 512-wide coordinates and looks the same size as it did at 256 — just
+	 * uses 512-wide coordinates and looks the same size as it did at 256 - just
 	 * with finer detail. A fixture that draws a 32-source-pixel box in both
 	 * modes renders correctly and demonstrates nothing, because the box really
 	 * is half as wide in hires. Scaling x by this factor is what makes the
@@ -184,7 +184,7 @@ void retro_run(void)
 	}
 
 	/* Detail that only resolves in hires: vertical lines one SOURCE pixel wide.
-	 * At base these are 3 screen pixels apart, at hires 1.5 — which is the whole
+	 * At base these are 3 screen pixels apart, at hires 1.5 - which is the whole
 	 * point of the mode, and the thing a correct implementation should show. */
 	for (y = 24; y < 72 && y < cur_h; y++)
 		for (x = 24 * xs; x < 120 * xs && x < cur_w; x += 2)

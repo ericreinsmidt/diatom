@@ -55,7 +55,7 @@ static bool env_cb(unsigned cmd, void *data)
 		else if (f == RETRO_PIXEL_FORMAT_XRGB8888)
 			g_policy->pixfmt = DIATOM_PIX_XRGB8888;
 		else
-			return false;              /* 0RGB1555 refused — ADR-0007 */
+			return false;              /* 0RGB1555 refused - ADR-0007 */
 		g_policy->pixfmt_set = true;
 		return true;
 	}
@@ -69,7 +69,7 @@ static bool env_cb(unsigned cmd, void *data)
 		*(bool *)data = true;
 		return true;
 	case MASK(RETRO_ENVIRONMENT_SET_ROTATION):
-		/* Declined by default — the port already owns panel rotation, and
+		/* Declined by default - the port already owns panel rotation, and
 		 * honouring this would mean rotation twice over. Logged so we find out
 		 * if the assumption is wrong. */
 		diatom_port_log(DIATOM_LOG_INFO, "core asked for SET_ROTATION; declined");
@@ -85,7 +85,7 @@ static bool env_cb(unsigned cmd, void *data)
 		*(int *)data = 3;              /* both enabled; asked every frame */
 		return true;
 
-	/* ---- paths — supplied by the host, never by the port ----------------- */
+	/* ---- paths - supplied by the host, never by the port ----------------- */
 	case MASK(RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY):
 		*(const char **)data = g_policy->system_dir;
 		return g_policy->system_dir != NULL;
@@ -184,7 +184,7 @@ static int16_t cb_input_state(unsigned port, unsigned device,
 }
 
 /* Video and audio callbacks live in main.c, which owns the frame buffer and
- * the pacing decision — ADR-0007 has the frame consumed after retro_run
+ * the pacing decision - ADR-0007 has the frame consumed after retro_run
  * returns, not from inside the callback. */
 extern void diatom_on_video(const void *data, unsigned w, unsigned h, size_t pitch);
 extern void diatom_on_audio_batch_store(const int16_t *data, size_t frames);

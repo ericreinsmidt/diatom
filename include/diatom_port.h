@@ -1,4 +1,4 @@
-/* Diatom port interface — ADR-0007.
+/* Diatom port interface - ADR-0007.
  *
  * THIS HEADER MUST NOT INCLUDE libretro.h, AND NEITHER MAY ANY PORT.
  * That is the mechanical test for whether the seam holds: a port that needs a
@@ -6,7 +6,7 @@
  * iteration loop the desktop backend exists to provide.
  *
  * The port deals in pixels, samples, buttons and time. Nothing else. If a
- * function name here grows a domain noun — game, save, core, menu — it is in
+ * function name here grows a domain noun - game, save, core, menu - it is in
  * the wrong layer.
  *
  * Port selection is compile-time: one binary per device, no plugin mechanism.
@@ -21,7 +21,7 @@
 
 /* Cores may emit 0RGB1555 too; Diatom refuses it. Measured 2026-08-23: all six
  * cores tested chose RGB565 when offered both. The XRGB8888 path is accepted
- * because it costs nothing, but it is currently untested — see the spike. */
+ * because it costs nothing, but it is currently untested - see the spike. */
 typedef enum {
 	DIATOM_PIX_RGB565,
 	DIATOM_PIX_XRGB8888
@@ -38,7 +38,7 @@ typedef struct { int x, y, w, h; } diatom_rect;
 
 typedef struct {
 	/* Logical and ALWAYS landscape. A port whose panel is physically rotated
-	 * — the Miniloong's framebuffer is 720x960 portrait — hides that here.
+	 * - the Miniloong's framebuffer is 720x960 portrait - hides that here.
 	 * Nothing above the port may learn the panel's true orientation. */
 	int  surface_w, surface_h;
 
@@ -47,11 +47,11 @@ typedef struct {
 	bool present_blocks;        /* does present() wait for vblank? */
 } diatom_port_caps;
 
-/* Canonical Diatom buttons. Digital only — ADR-0003, no analog axes anywhere.
+/* Canonical Diatom buttons. Digital only - ADR-0003, no analog axes anywhere.
  * Bit positions within diatom_port_input_state(). Deliberately NOT libretro's
  * RETRO_DEVICE_ID_JOYPAD_*: the near-identity mapping is what keeps libretro.h
- * out of the port. Device quirks — the Brick reporting its front keys as
- * L3/R3, say — are resolved here and never travel upward. */
+ * out of the port. Device quirks - the Brick reporting its front keys as
+ * L3/R3, say - are resolved here and never travel upward. */
 enum {
 	DIATOM_BTN_UP = 0, DIATOM_BTN_DOWN, DIATOM_BTN_LEFT, DIATOM_BTN_RIGHT,
 	DIATOM_BTN_A, DIATOM_BTN_B, DIATOM_BTN_X, DIATOM_BTN_Y,
@@ -80,13 +80,13 @@ size_t diatom_port_audio_queued(void);
 void     diatom_port_input_poll(void);
 uint32_t diatom_port_input_state(void);
 
-/* True once the port's surface has gone away — a closed window on desktop.
+/* True once the port's surface has gone away - a closed window on desktop.
  * Not anticipated by ADR-0007; surfaced during implementation. It concerns the
  * port's own viability, not anything about games, so it belongs here. */
 bool diatom_port_should_quit(void);
 
 /* Write what was last presented. Pixels and a path, no domain nouns, and both
- * backends want it — on desktop to see what happened, on device because a
+ * backends want it - on desktop to see what happened, on device because a
  * screenshot is otherwise unobtainable. Also not in ADR-0007: that interface
  * specified ten functions and implementation has made it twelve within a day,
  * which is worth noticing even though both additions look justified. */

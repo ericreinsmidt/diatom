@@ -1,21 +1,21 @@
-# Libretro cores for the in-scope systems — survey
+# Libretro cores for the in-scope systems - survey
 
 **Date:** 2026-08-23. A survey, not a recommendation. Diatom has no core list
-(see `CLAUDE.md`); this exists so the **test matrix** is chosen from a known
+(see `working-agreement.md`); this exists so the **test matrix** is chosen from a known
 field rather than from whatever happened to be on disk.
 
 ## Sources, and what each is worth
 
 | Tag | Source | What it actually proves |
 |---|---|---|
-| `[org]` | The `libretro` GitHub organisation's repositories — 280 repos, 276 active, enumerated via `gh api` 2026-08-23 | That a repo of that name exists in that org. **Not** a registry: a libretro core is any shared library implementing the API, and it need not live there. |
+| `[org]` | The `libretro` GitHub organisation's repositories - 280 repos, 276 active, enumerated via `gh api` 2026-08-23 | That a repo of that name exists in that org. **Not** a registry: a libretro core is any shared library implementing the API, and it need not live there. |
 | `[docs]` | [docs.libretro.com/guides/core-list](https://docs.libretro.com/guides/core-list/) | That libretro documents it. A curated view, and curation lags. |
 | `[measured]` | The [env-inventory spike](../spikes/2026-08-23-env-inventory.md), run here | A fact about a specific binary I ran. |
-| `[community]` | Forums, guides, wikis — cited inline | **Opinion.** Widely-held opinion is still opinion. |
-| `[unverified]` | — | No evidence for Cortex-A53 / 1 GB. Must be measured on the Brick. |
+| `[community]` | Forums, guides, wikis - cited inline | **Opinion.** Widely-held opinion is still opinion. |
+| `[unverified]` | - | No evidence for Cortex-A53 / 1 GB. Must be measured on the Brick. |
 
 **Neither catalogue is complete, and they disagree.** `Geargrafx`, `Gearsystem`
-and `ClownMDEmu` appear in `[docs]` but are **not** repos in the libretro org —
+and `ClownMDEmu` appear in `[docs]` but are **not** repos in the libretro org -
 they are their authors' own projects. Treating either source as authoritative
 would miss cores.
 
@@ -29,10 +29,10 @@ would miss cores.
 | **Nestopia (UE)** | `[org]` `[docs]` | Accurate, moderate cost `[community]` |
 | **FCEUmm** | `[org]` `[docs]` `[measured]` | Fast, broad compatibility. Measured: 48000 Hz, requests `GET_CURRENT_SOFTWARE_FRAMEBUFFER` every frame |
 | **QuickNES** | `[org]` `[docs]` | Fastest, lowest accuracy `[community]` |
-| **fixNES** | `[org]` `[docs]` | — |
+| **fixNES** | `[org]` `[docs]` | - |
 | **bnes** | `[org]` `[docs]` | Older |
 
-> "Mesen is the most accurate NES core… on a low-power device like a Raspberry Pi 3, FCEUmm is lighter" — `[community]`
+> "Mesen is the most accurate NES core… on a low-power device like a Raspberry Pi 3, FCEUmm is lighter" - `[community]`
 
 ## Master System / Game Gear
 
@@ -41,7 +41,7 @@ would miss cores.
 | **Genesis Plus GX** | `[org]` `[docs]` | Covers SMS, GG, SG-1000, Genesis, Sega CD. Accurate `[community]` |
 | **SMS Plus GX** | `[org]` `[docs]` | SMS/GG only, lighter |
 | **Gearsystem** | `[docs]` **not `[org]`** | drhelius's own repo |
-| **PicoDrive** | `[org]` `[docs]` `[measured]` | Advertises `sms\|gg\|sg` — covers these too `[measured]` |
+| **PicoDrive** | `[org]` `[docs]` `[measured]` | Advertises `sms\|gg\|sg` - covers these too `[measured]` |
 
 ## PC Engine / TurboGrafx-16 (+ CD)
 
@@ -57,11 +57,11 @@ would miss cores.
 | Core | Sources | Character |
 |---|---|---|
 | **Genesis Plus GX** | `[org]` `[docs]` | The accuracy default `[community]`; `-Wide` variant also in org |
-| **PicoDrive** | `[org]` `[docs]` `[measured]` | "written having ARM-based handheld devices in mind" `[community]`. Adds 32X + Sega CD. Measured: 60.0000 fps exactly — the only in-scope core that does |
+| **PicoDrive** | `[org]` `[docs]` `[measured]` | "written having ARM-based handheld devices in mind" `[community]`. Adds 32X + Sega CD. Measured: 60.0000 fps exactly - the only in-scope core that does |
 | **BlastEm** | `[org]` `[docs]` | High accuracy, heavier `[community]` |
 | **ClownMDEmu** | `[docs]` **not `[org]`** | Clownacy's own repo |
 
-## SNES — the widest field, and the one that matters most
+## SNES - the widest field, and the one that matters most
 
 Accuracy/performance spread is larger here than anywhere else, and SNES is the
 system whose coprocessors (SuperFX, SA-1, DSP-1, CX4) are the known pinch point
@@ -77,8 +77,8 @@ on A53-class hardware `[unverified for the Brick]`.
 | **Snes9x 2010** | `[org]` `[docs]` | "serving more games in more low powered devices like a Raspberry Pi" `[community]` |
 | **Snes9x 2005** · **2005 Plus** | `[org]` `[docs]` | Lighter again `[community]` |
 | **Snes9x 2002** | `[org]` `[docs]` | Lightest, least accurate |
-| **Beetle Supafaust** | `[org]` `[docs]` | Explicitly targeted at "low-end devices, such as multicore ARM Cortex A7, A9, A15, **A53** Linux platforms" `[community]` — the only core whose own description names our exact CPU |
-| **ChimeraSNES** | neither — `jamsilva/chimerasnes` | Fork aimed at low-end |
+| **Beetle Supafaust** | `[org]` `[docs]` | Explicitly targeted at "low-end devices, such as multicore ARM Cortex A7, A9, A15, **A53** Linux platforms" `[community]` - the only core whose own description names our exact CPU |
+| **ChimeraSNES** | neither - `jamsilva/chimerasnes` | Fork aimed at low-end |
 
 ## Game Boy / Game Boy Color
 
@@ -89,7 +89,7 @@ on A53-class hardware `[unverified for the Brick]`.
 | **Gearboy** | `[org]` `[docs]` | Lighter `[community]` |
 | **TGB Dual** | `[org]` `[docs]` | Link-cable / dual |
 | **Emux GB** | `[org]` `[docs]` | Obscure |
-| **mGBA** | `[org]` `[docs]` `[measured]` | Advertises `gb\|gbc\|sgb` — covers these too `[measured]` |
+| **mGBA** | `[org]` `[docs]` `[measured]` | Advertises `gb\|gbc\|sgb` - covers these too `[measured]` |
 
 ## Game Boy Advance
 
@@ -105,7 +105,7 @@ on A53-class hardware `[unverified for the Brick]`.
 
 ## What this changes for Diatom
 
-**Nothing structural** — Diatom loads whatever core it is handed. Two practical
+**Nothing structural** - Diatom loads whatever core it is handed. Two practical
 consequences:
 
 1. **The test matrix should span the accuracy/performance spread, not sit in one

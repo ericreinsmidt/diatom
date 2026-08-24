@@ -7,7 +7,10 @@
 /out/
 
 # Spikes are throwaway by definition and must not be committed.
-# See CLAUDE.md rule 7.
+# See docs/working-agreement.md practice 7.
 /spike/
 
 *.o
+
+# Local scratch notes, not part of the project.
+CLAUDE.md

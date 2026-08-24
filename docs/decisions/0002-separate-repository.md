@@ -3,8 +3,8 @@
 - **Status:** Accepted
 - **Date:** 2026-08-22
 - **Accepted:** 2026-08-23
-- **Supersedes:** —
-- **Superseded by:** —
+- **Supersedes:** -
+- **Superseded by:** -
 
 ## Context
 
@@ -25,20 +25,20 @@ where it should live:
 
 ## Options considered
 
-### Option A — inside PlayOS
+### Option A - inside PlayOS
 Simplest start, no cross-repo coordination. But it entangles a
 permissively licensed component with a repo that vendors GPL code, ties the
 frontend's lifecycle to one device, and guarantees a painful extraction later.
 
-### Option B — separate repository
+### Option B - separate repository
 Clean provenance, independent lifecycle, desktop-first development, consumable
 by every firmware. Costs cross-repo coordination and a decision about *how*
-consumers pull it in (submodule, vendored copy, or prebuilt artifact) — which
+consumers pull it in (submodule, vendored copy, or prebuilt artifact) - which
 is not yet decided and is tracked in register §1 and §15.
 
-### Option C — monorepo containing all firmwares plus the frontend
+### Option C - monorepo containing all firmwares plus the frontend
 Would solve coordination, but means restructuring four existing working
-projects — including Leaf, which has users and ships OTA updates — to solve a
+projects - including Leaf, which has users and ships OTA updates - to solve a
 problem that doesn't exist yet.
 
 ## Decision
@@ -54,7 +54,7 @@ freely. Other firmwares adopt it without inheriting PlayOS's structure.
 **Harder:** Changes spanning frontend and firmware now cross a repo boundary.
 The consumption model becomes a decision that must be made rather than avoided.
 
-**Foreclosed:** Nothing permanently — merging into a monorepo later is possible,
+**Foreclosed:** Nothing permanently - merging into a monorepo later is possible,
 just tedious.
 
 ## Revisit if

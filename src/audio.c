@@ -7,7 +7,7 @@
  *
  * This is LINEAR INTERPOLATION and it is a placeholder. Register §6 has the
  * real design open: dynamic rate control, nudging the ratio to keep the port's
- * buffer near half full. That is not optional here — no console runs at 60Hz
+ * buffer near half full. That is not optional here - no console runs at 60Hz
  * (measured: 50.0070 PAL, 59.7275, 59.8200, 60.0000), so a fixed ratio drifts
  * against the panel forever and eventually underruns or overflows.
  *
@@ -50,7 +50,7 @@ void diatom_audio_configure(double src_rate, int dst_rate, int capacity_frames)
  * Without this the buffer starts empty and stays there: the core produces
  * exactly one frame of audio per video frame, so production matches consumption
  * and nothing ever fills the gap. Rate control can only pull at 0.5%, which
- * takes about eight seconds to accumulate 2048 frames — and until it does, every
+ * takes about eight seconds to accumulate 2048 frames - and until it does, every
  * scheduling hiccup underruns. Measured before this existed: `queued min 0`.
  *
  * Priming with silence costs one buffer of latency at startup, which is the
@@ -74,7 +74,7 @@ void diatom_audio_prime(void)
  *
  * The device consumes at its own crystal's idea of 48kHz; the core produces at
  * its own idea of 32040. Nothing keeps those aligned, and a fixed ratio drifts
- * until the buffer either empties or overflows — the only question is which,
+ * until the buffer either empties or overflows - the only question is which,
  * and how long it takes. Nudging the ratio toward keeping the buffer half full
  * closes the loop, and it is why the port must expose capacity and not just
  * occupancy (ADR-0007).
@@ -98,7 +98,7 @@ void diatom_audio_sync(void)
 	 * Proportional alone cannot sit on target: a persistent correction requires
 	 * a persistent error, so the buffer stabilises wherever the error happens to
 	 * generate the needed nudge. Measured with P only: it held around 500-770
-	 * frames against a 2048 target, and dipped to 26 — a stall of 10ms from
+	 * frames against a 2048 target, and dipped to 26 - a stall of 10ms from
 	 * underrunning. The integral term accumulates the residual and drives the
 	 * steady-state error to zero.
 	 *
@@ -113,7 +113,7 @@ void diatom_audio_sync(void)
 	if (adjust >  1.0) adjust =  1.0;
 
 	/* Buffer filling up means we are producing too fast, so consume more source
-	 * per output frame — a larger ratio yields fewer output frames. */
+	 * per output frame - a larger ratio yields fewer output frames. */
 	g_ratio = g_base_ratio * (1.0 + adjust * MAX_DEVIATION);
 }
 
@@ -142,7 +142,7 @@ size_t diatom_audio_push(const int16_t *in, size_t frames)
 
 	if (!in || !frames) return 0;
 
-	/* Pass-through when the rates already match — a core answering
+	/* Pass-through when the rates already match - a core answering
 	 * GET_TARGET_SAMPLE_RATE lands here, which is the point of implementing it.
 	 * Rate control is skipped too; there is nothing to nudge. */
 	if (g_ratio > 0.9999 && g_ratio < 1.0001) {
@@ -158,7 +158,7 @@ size_t diatom_audio_push(const int16_t *in, size_t frames)
 
 	/* g_phase is the read position in the virtual stream and PERSISTS across
 	 * calls. The previous implementation broke out when the block ran dry and
-	 * dropped the pending output frame — about one per call, ~60/second against
+	 * dropped the pending output frame - about one per call, ~60/second against
 	 * 48000, a 0.125% leak. Small enough to look like clock drift and big enough
 	 * to drain the buffer to empty in twenty seconds, with rate control pinned at
 	 * its limit the whole way. */

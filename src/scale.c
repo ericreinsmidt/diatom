@@ -6,7 +6,7 @@
  * duplicated per device and drifts.
  *
  * Integer scaling only, per register §5. Both known panels take clean factors
- * for every system in scope — mostly. Measured counter-example: PC Engine's
+ * for every system in scope - mostly. Measured counter-example: PC Engine's
  * 256x243 at 3x is 768x729, which exceeds the Miniloong's 720 lines but fits
  * the Brick's 768. Same system, different factor per device. That is the case
  * this function exists to handle rather than assume away.

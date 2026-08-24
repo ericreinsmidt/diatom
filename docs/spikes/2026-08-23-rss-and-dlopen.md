@@ -1,16 +1,16 @@
-# Spike result — RSS with all cores resident, and `dlopen` cost
+# Spike result - RSS with all cores resident, and `dlopen` cost
 
 - **Date:** 2026-08-23
 - **Question:** *What does holding every core resident actually cost in RSS, and
   what does `dlopen` cost on this CPU?*
 - **Purpose:** evaluate [ADR-0006](../decisions/0006-keep-all-cores-resident.md)'s
-  revisit trigger — *"measured RSS with all cores mapped and one initialized
-  exceeds ~250 MB"* — which until now was backed by an estimate.
+  revisit trigger - *"measured RSS with all cores mapped and one initialized
+  exceeds ~250 MB"* - which until now was backed by an estimate.
 - **Status:** Answered. **Trigger not met, by a factor of ~16.**
 - **Harness:** `~/Projects/diatom-spikes/envlog/rssprobe.c`, outside the repo per
-  CLAUDE.md rule 7.
+  ../working-agreement.md practice 7.
 
-## Hardware — measured, not assumed
+## Hardware - measured, not assumed
 
 TrimUI Brick over USB ADB:
 
@@ -48,7 +48,7 @@ Against a 250 MB trigger and 975 MB of RAM. **1.5% of the device's memory.**
 
 ## The estimate was wrong by 10×
 
-ADR-0006 reasoned from *"peak loaded game roughly 10–30 MB… ~150 MB with five to
+ADR-0006 reasoned from *"peak loaded game roughly 10-30 MB… ~150 MB with five to
 seven cores resident."* Actual: **15 MB**.
 
 Where the estimate went wrong: a mapped `.so` costs far less RSS than its file
@@ -57,7 +57,7 @@ is 4.3 MB on disk and adds 3.6 MB; `picodrive` is 1.4 MB on disk and adds 0.8 MB
 Roughly **2 MB resident per mapped core**, and the loaded game adds only ~2 MB
 more.
 
-The estimate was wrong in the safe direction and the decision was never close —
+The estimate was wrong in the safe direction and the decision was never close -
 but it was a guess presented with a number attached, and this is what it is worth.
 
 **The trigger is now badly calibrated.** Set at 250 MB against an estimate of
@@ -65,7 +65,7 @@ but it was a guess presented with a number attached, and this is what it is wort
 A trigger around 50 MB would actually mean something. Recorded here rather than
 by superseding ADR-0006, since the decision itself is confirmed.
 
-## `dlopen` cost — cache state dominates
+## `dlopen` cost - cache state dominates
 
 | Core | Cold (caches dropped) | Warm |
 |---|---|---|
@@ -77,13 +77,13 @@ by superseding ADR-0006, since the decision itself is confirmed.
 | mgba | 45.1 ms | 4.2 ms |
 | **all six** | **232 ms** | **35 ms** |
 
-RSS is effectively identical in both cases (12.9 vs 13.1 MB) — page-cache state
+RSS is effectively identical in both cases (12.9 vs 13.1 MB) - page-cache state
 changes *time*, not resident memory.
 
 **This does not reproduce PlayOS's `~170 ms` per-core figure.** Worst cold case
-here is 70 ms; warm is single digits. The two measurements differ in context —
+here is 70 ms; warm is single digits. The two measurements differ in context -
 PlayOS's number may cover more than the `dlopen` call, or have been taken under
-different card and cache conditions — and I cannot say which from here. Recorded
+different card and cache conditions - and I cannot say which from here. Recorded
 as a discrepancy, not as a correction to that comment.
 
 The practical consequence stands either way: **mapping all six cores once costs
@@ -93,7 +93,7 @@ The practical consequence stands either way: **mapping all six cores once costs
 
 FCEUmm, NES, PAL:
 
-- 120 frames in 217.6 ms and 600 frames in 1087.4 ms — **1.81 ms/frame**, dead
+- 120 frames in 217.6 ms and 600 frames in 1087.4 ms - **1.81 ms/frame**, dead
   steady across both.
 - PAL budget at 50.0070 Hz is **20.0 ms/frame**.
 - So core execution uses **~9% of frame budget** on a Cortex-A53.
@@ -104,7 +104,7 @@ headroom.
 
 ## No leak observed
 
-RSS was **identical at 15,404 kB after 120 frames and after 720** — not a
+RSS was **identical at 15,404 kB after 120 frames and after 720** - not a
 kilobyte of growth. One core, one game, one session, so this is not proof that
 cores never leak. It is evidence that this one does not, over that span.
 
@@ -112,7 +112,7 @@ cores never leak. It is evidence that this one does not, over that span.
 
 - **ADR-0006 confirmed with a real number**, not an estimate. Residency was never
   close to a memory problem.
-- **ADR-0010's premise verified** — zero swap, so anonymous memory is
+- **ADR-0010's premise verified** - zero swap, so anonymous memory is
   unreclaimable, and the file-backed/anonymous distinction is real on this device.
 - **The Brick's row in the device table** (§0b) is no longer blank: 975 MB,
   Cortex-A53, no swap.

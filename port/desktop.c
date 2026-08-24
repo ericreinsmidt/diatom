@@ -1,4 +1,4 @@
-/* Desktop port — SDL2.
+/* Desktop port - SDL2.
  *
  * Built FIRST, before any device backend, and that ordering is deliberate: an
  * interface with only one implementation behind it grows that implementation's
@@ -53,7 +53,7 @@ bool diatom_port_init(diatom_port_caps *out)
 
 	/* Vsync OFF, deliberately.
 	 *
-	 * No console runs at the panel's rate — measured 50.0070, 59.7275, 59.8200,
+	 * No console runs at the panel's rate - measured 50.0070, 59.7275, 59.8200,
 	 * 60.0000 across six cores. Blocking on a 60Hz vblank while trying to hold
 	 * 59.7275 leaves 0.07ms of slack per frame, so any jitter misses a vblank
 	 * and costs a whole 16.67ms. That measured as a consistent 1.4% deficit.
@@ -205,7 +205,7 @@ bool diatom_port_capture(const char *path)
 		return false;
 	}
 	/* Save as plain 24-bit RGB. A 32-bit BMP carries a V4/V5 header with alpha
-	 * masks that several readers — macOS ImageIO among them — refuse, and the
+	 * masks that several readers - macOS ImageIO among them - refuse, and the
 	 * alpha channel is meaningless here anyway. */
 	{
 		SDL_Surface *rgb = SDL_ConvertSurfaceFormat(s, SDL_PIXELFORMAT_RGB24, 0);

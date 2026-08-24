@@ -1,17 +1,17 @@
-# Spike result — environment-call inventory
+# Spike result - environment-call inventory
 
 - **Date:** 2026-08-23
 - **Question:** *Which `RETRO_ENVIRONMENT_*` calls do our cores actually make, at
   which lifecycle phase, and which must Diatom implement?*
 - **Status:** Answered.
-- **Harness:** `~/Projects/diatom-spikes/envlog/` — outside this repo per
-  CLAUDE.md rule 7. Not Diatom code. Re-runnable when a core is added.
+- **Harness:** `~/Projects/diatom-spikes/envlog/` - outside this repo per
+  ../working-agreement.md practice 7. Not Diatom code. Re-runnable when a core is added.
 
 ## Method
 
 A ~200-line throwaway harness `dlopen`s a core, installs an environment callback
 that logs every command with its lifecycle phase, answers a minimal set, and
-declines the rest — a decline is still a data point. Then `retro_init`,
+declines the rest - a decline is still a data point. Then `retro_init`,
 `retro_load_game` with a real ROM, 120 × `retro_run`, `retro_unload_game`,
 `retro_deinit`.
 
@@ -24,14 +24,14 @@ All six cores, real ROMs, full lifecycle.
 
 ### On the cores tested
 
-The six were a **convenience sample** — aarch64 binaries already on disk — not a
+The six were a **convenience sample** - aarch64 binaries already on disk - not a
 core list and not a recommendation. Diatom has no core list; it loads whatever it
-is handed (see `CLAUDE.md`). They were chosen because they cover the systems in
+is handed (see `../working-agreement.md`). They were chosen because they cover the systems in
 scope and were to hand.
 
 libretro cores are independent upstream binaries, buildable from `libretro-super`
 by anyone. Substituting `genesis_plus_gx` for `picodrive`, or a lighter `snes9x`
-fork, changes nothing structural — it means re-running this harness, which takes
+fork, changes nothing structural - it means re-running this harness, which takes
 minutes.
 
 **What generalizes** beyond these builds: the environment-call inventory (an
@@ -57,7 +57,7 @@ declined by every core with nothing breaking. 43 never appear at all.**
 
 The long tail turned out to be a checklist.
 
-### Universal — all six cores
+### Universal - all six cores
 
 `GET_SYSTEM_DIRECTORY` · `SET_PIXEL_FORMAT` · `SET_INPUT_DESCRIPTORS` ·
 `GET_VARIABLE` · `GET_VARIABLE_UPDATE` · `GET_LOG_INTERFACE` · `GET_LANGUAGE` ·
@@ -75,7 +75,7 @@ The long tail turned out to be a checklist.
 | 37 | `SET_GEOMETRY` | 3/6 | **fires during `run`** |
 | 47 | `GET_AUDIO_VIDEO_ENABLE` | 1/6 | **every frame** (snes9x) |
 | 52 · 68 | `GET_CORE_OPTIONS_VERSION` · `SET_CORE_OPTIONS_V2_INTL` | 6/6 | the only options path any core uses |
-| 3 · 8 · 11 · 27 · 35 · 36 · 39 · 42 | can-dupe, perf level, input descriptors, log, controller info, memory maps, language, achievements | 1–6/6 | accept, mostly ignore |
+| 3 · 8 · 11 · 27 · 35 · 36 · 39 · 42 | can-dupe, perf level, input descriptors, log, controller info, memory maps, language, achievements | 1-6/6 | accept, mostly ignore |
 
 ### Safely declined by every core that asked
 
@@ -93,13 +93,13 @@ The long tail turned out to be a checklist.
 
 Five distinct frame rates across six cores: **50.0070, 59.7275, 59.8200,
 60.0000**. Only PicoDrive hits exactly 60. Both PAL ROMs report 50.0070, and PAL
-is a deliberate target — Probotector is PAL-only Contra.
+is a deliberate target - Probotector is PAL-only Contra.
 
 **Pacing 50 Hz content on a 60 Hz panel is the normal case, not an edge case.**
 Dynamic rate control moves from "the mature approach" to mandatory. This makes
 §6/§7 pacing the most interesting open problem in the project.
 
-### 2. Sample rates span 32040 – 65536 Hz
+### 2. Sample rates span 32040 - 65536 Hz
 
 Five distinct values. mGBA outputs at **65536 Hz**, above any device rate, so
 resampling happens in both directions and never with a tidy ratio. Confirms
@@ -107,10 +107,10 @@ ADR-0007's decision to have the host resample to the port's reported rate.
 
 ### 3. Two pacing levers we did not know existed
 
-- **`GET_TARGET_SAMPLE_RATE`** (81) — one core *asks what rate we want*. Answering
+- **`GET_TARGET_SAMPLE_RATE`** (81) - one core *asks what rate we want*. Answering
   it lets that core generate audio at the device rate natively, skipping
   resampling entirely for that core. Cheap win.
-- **`SET_AUDIO_BUFFER_STATUS_CALLBACK`** (62) — three of six offer to *receive*
+- **`SET_AUDIO_BUFFER_STATUS_CALLBACK`** (62) - three of six offer to *receive*
   buffer occupancy, so the core can throttle itself. That is the core-side half
   of dynamic rate control. Declining works; implementing it is a second lever.
 
@@ -119,12 +119,12 @@ Neither was on the radar before this spike.
 ### 4. The XRGB8888 path is currently dead code
 
 **All six cores chose RGB565.** ADR-0007 accepts both formats, which costs
-nothing and remains right — but the 8888 path should not be built or tested
+nothing and remains right - but the 8888 path should not be built or tested
 until something actually needs it.
 
 ### 5. `SET_GEOMETRY` during `run` is common, not exotic
 
-Three of six — snes9x, picodrive, Beetle PCE. Confirms ADR-0007's requirement to
+Three of six - snes9x, picodrive, Beetle PCE. Confirms ADR-0007's requirement to
 recompute `dst` **on change** rather than at load. Snes9x reports `max 604×478`
 against `base 256×224`; Beetle PCE reports `max 512×243`.
 
@@ -133,7 +133,7 @@ against `base 256×224`; Beetle PCE reports `max 512×243`.
 Beetle PCE's 256×**243** at 3× is 768×**729**. That exceeds the Miniloong's
 720-line surface, so PCE gets 2× (512×486) there and 3× on the Brick's 768 lines.
 
-**The same system scales differently per device** — a live instance of ADR-0007's
+**The same system scales differently per device** - a live instance of ADR-0007's
 "when integer scale doesn't fit" default, appearing on the very first real
 measurement.
 
@@ -147,14 +147,14 @@ available whenever it is wanted. Still right to defer; good to know it is real.
 Reported `valid_extensions`, useful because it means the test matrix needs fewer
 cores than it has systems:
 
-- **PicoDrive** — `bin|gen|smd|md|32x|cue|iso|chd|sms|gg|sg|sc|m3u|...`: Genesis,
+- **PicoDrive** - `bin|gen|smd|md|32x|cue|iso|chd|sms|gg|sg|sc|m3u|...`: Genesis,
   Master System, Game Gear, 32X, Sega CD.
-- **mGBA** — `gba|gb|gbc|sgb`: GBA and Game Boy both.
-- **Beetle PCE Fast** — `pce|cue|ccd|chd|toc|m3u`: HuCard and CD.
+- **mGBA** - `gba|gb|gbc|sgb`: GBA and Game Boy both.
+- **Beetle PCE Fast** - `pce|cue|ccd|chd|toc|m3u`: HuCard and CD.
 
 This is an observation about these binaries, not a recommendation. A host might
 reasonably prefer `genesis_plus_gx` for Sega or `gambatte` for Game Boy on
-accuracy grounds — Diatom does not care either way.
+accuracy grounds - Diatom does not care either way.
 
 ## Harness bugs worth remembering
 
@@ -164,5 +164,5 @@ Both produced plausible-looking wrong answers before being caught:
    the incoming command but not the `case` labels made every experimental
    command fall through to "declined". Mask both sides.
 2. **Cores use `SET_CORE_OPTIONS_V2_INTL`, not `SET_CORE_OPTIONS_V2`.** Handling
-   only the non-INTL variant reported *zero* core options for every core — a
+   only the non-INTL variant reported *zero* core options for every core - a
    believable-looking result that was entirely an artefact.
