@@ -210,6 +210,35 @@ only the vertical blends, costing about 2 ms rather than 7.
 So which mode is affordable depends on which filter is on, and it inverts. Worth
 remembering before assuming a "cheap" mode stays cheap.
 
+## Scaffolding removed, and what is left standing
+
+The on-screen mode overlay was written to make the display comparison possible
+and **removed the same day the comparison ended**, per practice 7: the failure
+mode being guarded against is a prototype quietly becoming the codebase, and an
+overlay nobody decided to ship is exactly that. It lives in commit `b7f1258`
+with its 5x7 font, host-side placement and visible-region arithmetic intact, so
+re-adding it is a revert rather than a rewrite. If a real overlay is ever
+wanted, note that ADR-0009 puts menus and UI in the host application, so the
+question to answer first is whether Diatom should draw text at all.
+
+Still standing, deliberately, with a trigger rather than by inertia:
+
+- **Display chords** (SELECT+shoulders, SELECT+A) and the **per-combination
+  timing table**. Both were built for the comparison, and both are the
+  instruments for the one display question still open: how Game Boy at +20%
+  and NES look on the panel, and how `integer-vertical` reads now that it
+  exists. **Remove both once that is answered**, unless the socket protocol
+  gives runtime mode changes a reason to exist.
+- **`DIATOM_INPUT_DEBUG`** in `port/brick.c`. Not comparison scaffolding: it is
+  how the Brick's button map was derived from raw events, and any new device
+  port needs exactly that again.
+- **`DIATOM_PRESENT_DEBUG`** in `port/brick.c`. How the 30 ms EGL swap and the
+  25 ms pan were both found. Same argument, weaker: keep while ports are still
+  being written.
+- **`--frames`** and **`--shot`**. Not scaffolding. Every measurement in these
+  logs is reproducible because of them, and `--shot` is backed by a seam
+  function ADR-0007 justified on its own terms.
+
 ## Open at end of session
 
 - [x] **Default display mode decided** by looking at the panel across two

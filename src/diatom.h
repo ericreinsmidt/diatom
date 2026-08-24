@@ -104,16 +104,6 @@ typedef struct {
 extern const diatom_display_mode_info diatom_modes[];
 extern const int                      diatom_mode_count;
 
-/* osd.c - transient on-screen text naming what Diatom is doing. A debug
- * affordance, not a user interface: overlays and menus belong to the host
- * application (ADR-0009). Drawn host-side into the frame the host already
- * owns, so the port seam does not grow and every backend gets it free. */
-void diatom_osd_show(const char *text, int frames);
-bool diatom_osd_active(void);
-void diatom_osd_tick(void);
-void diatom_osd_draw(void *frame, int w, int h, size_t pitch,
-                     diatom_pixfmt fmt, int ox, int oy);
-
 /* audio.c - cores emit 32040..65536 Hz; the device runs at whatever it runs at.
  * Linear interpolation, with dynamic rate control holding the port's buffer near
  * half full. The resampler itself is still a placeholder; the control loop is

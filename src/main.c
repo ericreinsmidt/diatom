@@ -101,32 +101,6 @@ static void apply_display(int mode, diatom_filter filter)
 	       diatom_modes[mode].name, filter_name(filter),
 	       g_dst.w, g_dst.h, g_dst.x, g_dst.y, diatom_modes[mode].note);
 	fflush(stdout);
-
-	/* Name it on the panel too. Cycling blind through six geometries and two
-	 * filters is exactly the situation where a terminal on another machine is
-	 * no help. Two seconds, then out of the way. */
-	{
-		char msg[64];
-		snprintf(msg, sizeof msg, "%s %s %dX%d",
-		         diatom_modes[mode].name, filter_name(filter),
-		         g_dst.w, g_dst.h);
-		diatom_osd_show(msg, 120);
-	}
-}
-
-/* Where the visible part of the source starts, in SOURCE pixels.
- *
- * Crop modes hand the port a rect wider or taller than the panel, so the top
- * left of the frame may be off screen - and that is precisely where an overlay
- * would otherwise go, invisible in the modes where knowing the mode matters
- * most. Inverting the scale is host arithmetic, same rule as scale.c. */
-static void visible_origin(int src_w, int src_h, diatom_rect dst,
-                           int *ox, int *oy)
-{
-	int cx = dst.x < 0 ? -dst.x : 0;
-	int cy = dst.y < 0 ? -dst.y : 0;
-	*ox = dst.w > 0 ? cx * src_w / dst.w : 0;
-	*oy = dst.h > 0 ? cy * src_h / dst.h : 0;
 }
 
 /* Report what a combination cost, so the look and the price are read together.
@@ -335,16 +309,6 @@ int main(int argc, char **argv)
 		 * whatever arrives into it, so a hires frame keeps its screen size. */
 		if (diatom_env_geometry_changed()) geom_changes++;
 
-		if (diatom_osd_active() && g_frame) {
-			int ox, oy;
-			visible_origin(g_frame_w, g_frame_h, g_dst, &ox, &oy);
-			diatom_osd_draw(g_frame, g_frame_w, g_frame_h, g_frame_pitch,
-			                g_policy.pixfmt, ox + 2, oy + 2);
-			/* A duped frame would otherwise leave the overlay frozen on the
-			 * page after it expires, so force a real present while it is up. */
-			g_frame_fresh = true;
-		}
-
 		{
 			uint64_t p0 = diatom_port_now_us();
 			diatom_port_present(g_frame_fresh ? g_frame : NULL,
@@ -358,8 +322,6 @@ int main(int argc, char **argv)
 
 		/* Display switching lives after present, so the timing above covers
 		 * exactly one combination's work. */
-		diatom_osd_tick();
-
 		buttons = diatom_port_input_state();
 		display_chord(buttons, prev_buttons);
 		prev_buttons = buttons;

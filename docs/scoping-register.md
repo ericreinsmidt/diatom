@@ -334,6 +334,14 @@ Two amendments ADR-0007 makes to the table above:
       modes; +7.3ms on `aspect`, the only geometry with two fractional axes and
       the only combination that has ever dropped a frame. Nothing visible was
       gained at these factors, so `nearest` is the default.
+- [ ] **[DEFERRED]** **Remove the display chords and the per-combination timing
+      table** from `src/main.c`. Both were built for the mode comparison and
+      both are still the instruments for the last open display question (Game
+      Boy at +20% and `integer-vertical`, on the panel). **Trigger: that look is
+      done.** Then either delete them, or justify runtime mode changes on their
+      own merits once ADR-0009's protocol exists - ADR-0014 leaves hotkey
+      ownership open. Recorded so they cannot persist by inertia; the on-screen
+      overlay from the same session was already removed (commit `b7f1258`).
 - [ ] **[OPEN]** Rotation support (some panels are physically rotated).
 - [ ] **[LATER]** Zero-copy: `GET_CURRENT_SOFTWARE_FRAMEBUFFER` - **confirmed
       2026-08-23: FCEUmm requests it every frame.** The path ADR-0007 deferred

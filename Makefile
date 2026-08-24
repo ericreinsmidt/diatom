@@ -18,7 +18,7 @@ LDFLAGS +=
 # Objects live under build/$(PORT)/ so host and cross builds cannot collide:
 # a leftover x86 main.o in a device link fails late and confusingly.
 BUILD := build/$(PORT)
-SRC   := src/main.c src/core.c src/env.c src/scale.c src/audio.c src/osd.c port/$(PORT).c
+SRC   := src/main.c src/core.c src/env.c src/scale.c src/audio.c port/$(PORT).c
 OBJ   := $(SRC:%.c=$(BUILD)/%.o)
 BIN   := $(BUILD)/diatom
 
