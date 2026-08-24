@@ -199,9 +199,27 @@ power cycle to learn should not live only in a session log. Everything is
 staged at `/mnt/SDCARD/diatom/`, on the card rather than `/tmp`, because `/tmp`
 is tmpfs and a reboot empties it.
 
+## The filter finding that inverted the cost model
+
+`aspect` is the cheapest geometry with nearest (7.73 ms) and by far the most
+expensive with sharp (14.98 ms). It is the only mode where both axes are
+fractional: 936/256 = 3.656 across, 768/240 = 3.2 down. Every fullscreen mode is
+exactly 4.0 horizontally, so its horizontal map collapses onto the fast path and
+only the vertical blends, costing about 2 ms rather than 7.
+
+So which mode is affordable depends on which filter is on, and it inverts. Worth
+remembering before assuming a "cheap" mode stays cheap.
+
 ## Open at end of session
 
-- [ ] **Decide the default display mode** by looking at the panel. Register §5.
+- [x] **Default display mode decided** by looking at the panel across two
+      sessions, ~20 minutes of play, 27825 frames in the second alone:
+      **`stretch` + `nearest`**, all six modes shipped and selectable
+      ([ADR-0014](../decisions/0014-display-modes-and-default.md)). A handheld's
+      screen is its whole interface and full use of it beat both the letterbox
+      and the crop. Sharp earned nothing visible at these factors and is the only
+      thing that has ever made the loop miss a frame - 2 resyncs, both in
+      `aspect sharp`, the only combination over 11 ms.
 - [ ] `[LATER]` volume keys during play: the joystick device emits
       VOLUMEUP/DOWN codes; whose job is volume - port, host application, or
       firmware daemon - is undecided and deferred.

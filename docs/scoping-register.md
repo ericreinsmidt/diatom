@@ -305,27 +305,31 @@ Two amendments ADR-0007 makes to the table above:
 ## 5. Video
 
 - [ ] **[OPEN]** Force a single pixel format on cores, or support all three?
-- [ ] **[LB]** Integer-scale-only as a hard rule? Brick's 1024×768 makes 3×/4×/5×
-      work for essentially every 2D system. Other panels (640×480, 720×720,
-      1280×720) may break it.
-- [ ] **[OPEN]** What happens when integer scaling doesn't fit - refuse, letterbox
-      at a lower factor, or relax the rule per device?
-- [ ] **[LB] [OPEN]** **Which display mode is default.** Six are implemented and
-      measured on the Brick with FCEUmm (2026-08-24, see the session log): all
-      six hold 60.10fps with zero resyncs, present cost 0.7ms native · 5.9ms
-      integer · 7.7ms aspect · 8.4ms fill/stretch/overscale · 13.8-15.0ms with
-      sharp filtering. Awaiting a look at the panel; nothing is decided and
-      `integer` remains the default only because it was already.
+- [x] **[LB]** Integer-scale-only as a hard rule? **No** -
+      [ADR-0014](decisions/0014-display-modes-and-default.md). It is one of six
+      modes and no longer the default. Kept as `--display integer` for anyone who
+      wants uniform pixels, and it remains the sharpest option by construction.
+- [x] **[OPEN]** What happens when integer scaling doesn't fit - answered by
+      [ADR-0014](decisions/0014-display-modes-and-default.md): the question
+      dissolves, because integer is now one choice among six rather than the
+      rule. `integer` still letterboxes at the largest factor that fits.
+- [x] **[LB]** **Which display mode is default** →
+      **[ADR-0014](decisions/0014-display-modes-and-default.md)** *(Accepted)*.
+      Six modes ship, all selectable; default `stretch` with `nearest`. Decided
+      by cycling them live on the panel across ~20 minutes of play, not by
+      argument. Scope noted in the ADR: judged on a 4:3 panel showing near-4:3
+      content, where stretch distorts 9.4%.
 - [ ] **[OPEN]** Aspect-ratio and overscan policy. Crop, or show everything?
       Measured input to it: **FCEUmm reports an 8:7 pixel aspect (1.2190), not
       4:3**, so on a 4:3 panel fit, fill and stretch are three different
       pictures, not one. Whether to trust the core's number, force 4:3, or
       assume square pixels is exactly this open item.
-- [ ] **[OPEN]** Whether sharp-bilinear is worth its cost. It removes the uneven
-      pixel rows fractional scaling causes (verified by eye at 3.656x) for about
-      6ms a frame. Fits NTSC on the lightest core with 1.7ms to spare, which is
-      not enough headroom to call it settled - and it collapses to free at whole
-      factors, where it is a no-op by construction.
+- [x] **[OPEN]** Whether sharp-bilinear is worth its cost. **Shipped, not
+      default** ([ADR-0014](decisions/0014-display-modes-and-default.md)). Free
+      at whole factors once trivial weights collapse; +2ms on the fullscreen
+      modes; +7.3ms on `aspect`, the only geometry with two fractional axes and
+      the only combination that has ever dropped a frame. Nothing visible was
+      gained at these factors, so `nearest` is the default.
 - [ ] **[OPEN]** Rotation support (some panels are physically rotated).
 - [ ] **[LATER]** Zero-copy: `GET_CURRENT_SOFTWARE_FRAMEBUFFER` - **confirmed
       2026-08-23: FCEUmm requests it every frame.** The path ADR-0007 deferred

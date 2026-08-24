@@ -187,7 +187,11 @@ static int display_chord(uint32_t buttons, uint32_t prev)
 int main(int argc, char **argv)
 {
 	const char *core_path = NULL, *rom_path = NULL, *shot_path = NULL;
-	const char *display = "integer", *filter = "nearest";
+	/* ADR-0014: stretch by default, judged on the panel. A handheld's screen
+	 * is its whole interface, and full use of it beat both the letterbox and
+	 * the crop. nearest because sharp earned nothing visible at these factors
+	 * and is the only thing that has made this loop miss a frame. */
+	const char *display = "stretch", *filter = "nearest";
 	struct retro_system_av_info av;
 	struct retro_system_info si;
 	double   frame_us, next_us;
