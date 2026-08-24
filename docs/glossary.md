@@ -64,9 +64,14 @@ seam, it's overhead.
 keep the output buffer near half full, absorbing drift between the core's frame
 rate and the device's actual audio clock. The mature answer to A/V sync.
 
-**tg5040** - The platform identifier for the TrimUI Brick / Smart Pro family,
-used throughout NextUI and PlayOS. Also the name of the toolchain container
-image.
+**tg5040** - ⚠ **misleading.** MinUI and NextUI use this as an umbrella platform
+label across TrimUI Brick, Smart Pro and Smart Pro S, because one build serves all
+three on the shared Allwinner A133. Per TrimUI's own repositories it is the model
+code for the **Smart Pro** specifically. The **Brick is TG3040**. Diatom's device
+port is named `brick`; see [ADR-0012](decisions/0012-independent-toolchain.md).
+
+**TG3040** - TrimUI's model code for the Brick. Siblings: TG2040 Smart, TG4040
+Brick Pro, TG5040 Smart Pro, TG5050 Smart Pro S.
 
 **ADR** - Architecture Decision Record. One decision per file: context, options,
 choice, consequences. Immutable once accepted; superseded rather than edited.

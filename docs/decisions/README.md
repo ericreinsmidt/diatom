@@ -60,3 +60,4 @@ never started.
 | [0009](0009-launcher-protocol.md) | The launcher ↔ Diatom protocol | Accepted |
 | [0010](0010-rtld-local-is-mandatory.md) | `RTLD_LOCAL` is mandatory, and load-bearing | Accepted |
 | [0011](0011-lock-the-display-rect.md) | Lock the display rect at load from base geometry | Accepted |
+| [0012](0012-independent-toolchain.md) | Build our own toolchain; depend on nothing from NextUI or MinUI | Accepted |

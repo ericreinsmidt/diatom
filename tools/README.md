@@ -51,7 +51,7 @@ cores are third-party binaries, ROMs are copyrighted.
 
 ```sh
 make tools                    # builds for the host
-make tools PORT=tg5040        # cross-builds in the toolchain container
+make tools PORT=brick         # cross-builds in the Brick toolchain container
 
 ./build/tools/envlog   <core.so> [rom]
 ./build/tools/rssprobe <rom> <core.so>...

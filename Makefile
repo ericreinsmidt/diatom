@@ -5,7 +5,7 @@
 # and an abstraction with no consumer is a tax (register §0).
 #
 #   make                 desktop build (SDL2), the development target
-#   make PORT=tg5040     device build   (not yet written)
+#   make PORT=brick      device build for the TrimUI Brick (TG3040)
 
 PORT ?= desktop
 

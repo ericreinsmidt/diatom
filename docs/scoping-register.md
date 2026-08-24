@@ -60,7 +60,7 @@ because the Brick is incapable of more.
 
 Known instances (measured 2026-08-22/23):
 
-| | Brick (tg5040) | Miniloong Pocket 1 |
+| | Brick (TG3040) | Miniloong Pocket 1 |
 |---|---|---|
 | SoC | Cortex-A53 (`CPU part 0xd03`, measured) | Rockchip RK3566, Cortex-A55 ×4 |
 | RAM | **975 MB** (998,332 kB, measured) | 956 MB (978,824 kB, measured) |
@@ -141,7 +141,7 @@ firmware: PlayOS / EROS / future
       ├── core loading + env callbacks + run loop   (one module)
       └── port ..... video · audio · input · clock · paths
             ↓
-      backend:  desktop │ tg5040 │ miniloong
+      backend:  desktop │ brick │ miniloong
 ```
 
 **Only one seam here is load-bearing: host ↔ port.** It has three real
@@ -291,7 +291,7 @@ Two amendments ADR-0007 makes to the table above:
       computes `dst` and the port blits. Scale policy never reaches the port.
 - [ ] **[OPEN]** Does the port ever get to *refuse* - e.g. "this geometry can't
       be integer-scaled on this panel"? Who handles that?
-- [ ] **[OPEN]** Backends to build: `desktop` (SDL2, first), `tg5040` (Brick),
+- [ ] **[OPEN]** Backends to build: `desktop` (SDL2, first), `brick` (TG3040),
       Miniloong later.
 - [ ] **[LB]** SDL2 as the baseline for both desktop and device, or SDL2 on
       desktop and something lower on device?
@@ -585,7 +585,7 @@ operation never occurs.
 - [ ] **[LB]** Desktop backend **first**, before any device work.
 - [x] **[OPEN]** Environment-call logging shim - **DONE 2026-08-23** →
       [spike result](spikes/2026-08-23-env-inventory.md). All six cores, real
-      ROMs, full lifecycle, run in the tg5040 container with no device involved.
+      ROMs, full lifecycle, run in an aarch64 container with no device involved.
 
       **34 of 77 commands appear · ~17 must be implemented · 17 declined by every
       core with nothing breaking · 43 never appear.** The long tail is a
