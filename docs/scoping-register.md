@@ -318,7 +318,11 @@ Two amendments ADR-0007 makes to the table above:
       Six modes ship, all selectable; default `stretch` with `nearest`. Decided
       by cycling them live on the panel across ~20 minutes of play, not by
       argument. Scope noted in the ADR: judged on a 4:3 panel showing near-4:3
-      content, where stretch distorts 9.4%.
+      content, where stretch distorts 9.4%. Extended by
+      **[ADR-0015](decisions/0015-integer-vertical-mode.md)**: seven modes now,
+      after measurement showed integer scaling is *not* the undistorted option
+      (NES -12.5%, SNES -14.3%, PC Engine -12.2%, because their pixels were
+      never square). Default unchanged.
 - [ ] **[OPEN]** Aspect-ratio and overscan policy. Crop, or show everything?
       Measured input to it: **FCEUmm reports an 8:7 pixel aspect (1.2190), not
       4:3**, so on a 4:3 panel fit, fill and stretch are three different

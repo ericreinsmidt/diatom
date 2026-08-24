@@ -80,6 +80,7 @@ void diatom_env_suppress(uint32_t mask);
 typedef enum {
 	DIATOM_SCALE_NATIVE,         /* 1x, centred                               */
 	DIATOM_SCALE_INTEGER,        /* largest whole factor that fits, boxed     */
+	DIATOM_SCALE_INTEGER_VERT,   /* whole factor down, shape-correct across   */
 	DIATOM_SCALE_INTEGER_OVER,   /* smallest whole factor that covers, cropped*/
 	DIATOM_SCALE_ASPECT_FIT,     /* fractional, shape kept, boxed             */
 	DIATOM_SCALE_ASPECT_FILL,    /* fractional, shape kept, cropped           */

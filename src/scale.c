@@ -5,22 +5,20 @@
  * hardware, so it belongs to the port. Put both in the port and the maths gets
  * duplicated per device and drifts.
  *
- * Six modes, because "how big should the picture be" has six defensible
- * answers and no universally right one. Which is default is an OPEN question
- * (register §5), deliberately not decided here: the modes exist so the choice
- * can be made by looking at a panel instead of by arguing.
+ * Seven modes, because "how big should the picture be" has that many
+ * defensible answers and no universally right one. The default is `stretch`
+ * (ADR-0014), chosen by cycling them on a real panel rather than by argument.
  *
- * Integer scaling was the original sole policy and remains the default. The
- * measured counter-example that motivated per-device arithmetic still holds:
- * PC Engine's 256x243 at 3x is 768x729, which exceeds the Miniloong's 720
- * lines but fits the Brick's 768.
+ * The counter-example that motivated per-device arithmetic still holds: PC
+ * Engine's 256x243 at 3x is 768x729, which exceeds the Miniloong's 720 lines
+ * but fits the Brick's 768. Same system, different factor per device.
  */
 #include "diatom.h"
 
 /* The comparison set, in cycle order on device. Ordered by how much of the
  * panel gets used, so stepping through is a single monotonic story rather than
- * a shuffle: boxed, shape-correct, shape-correct-cropped, stretched, uniform-
- * cropped, then 1:1 as a reference.
+ * a shuffle: boxed, boxed-but-shape-correct, shape-correct, that cropped to
+ * cover, stretched, uniform-cropped, then 1:1 as a reference.
  *
  * Geometry and filter are cycled separately (mode on the shoulders, filter on
  * A) because the question worth answering is what a given geometry looks like
@@ -29,6 +27,8 @@
 const diatom_display_mode_info diatom_modes[] = {
 	{ "integer",   DIATOM_SCALE_INTEGER,
 	  "largest whole factor, letterboxed" },
+	{ "integer-vertical", DIATOM_SCALE_INTEGER_VERT,
+	  "whole factor down, shape correct across" },
 	{ "aspect",    DIATOM_SCALE_ASPECT_FIT,
 	  "shape the core asks for, fits inside the panel" },
 	{ "fill",      DIATOM_SCALE_ASPECT_FILL,
@@ -89,6 +89,31 @@ diatom_rect diatom_scale_rect(diatom_scale_mode mode, int src_w, int src_h,
 		 * Reachable today: SNES hires is 512x448, and 2x would need 1024x896. */
 		if (f < 1) f = 1;
 		return centred(src_w * f, src_h * f, surf_w, surf_h);
+
+	case DIATOM_SCALE_INTEGER_VERT:
+		/* Whole factor vertically, shape-correct horizontally.
+		 *
+		 * Exists because "integer scaling" does not mean "undistorted" - it
+		 * means "source pixels preserved", and half the test matrix never had
+		 * square pixels. Measured 2026-08-24 on a 1024x768 panel: plain
+		 * integer shows NES 12.5% too narrow, SNES 14.3%, PC Engine 12.2%,
+		 * because each reports a pixel aspect its resolution does not imply.
+		 *
+		 * This keeps the axis where uniformity is most visible exactly whole
+		 * and lets the other axis carry the correction. For content that IS
+		 * square-pixel - Game Boy, GBA, Genesis - it collapses to exactly what
+		 * plain integer produces, so it is never the worse of the two.
+		 *
+		 * Step the factor down rather than clamp the width: a wide aspect on a
+		 * narrow panel must lose a whole factor, not gain a squashed one. */
+		a = target_aspect(src_w, src_h, aspect);
+		for (f = surf_h / src_h; f > 1; f--) {
+			int w = (int)((double)(src_h * f) * a + 0.5);
+			if (w <= surf_w) break;
+		}
+		if (f < 1) f = 1;
+		return centred((int)((double)(src_h * f) * a + 0.5), src_h * f,
+		               surf_w, surf_h);
 
 	case DIATOM_SCALE_INTEGER_OVER:
 		/* Smallest integer factor that covers the surface on both axes, so the
