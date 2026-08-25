@@ -425,6 +425,14 @@ Two levers the spike discovered:
       hardest case is **PAL at 50.0070 Hz on a 60 Hz panel** (FCEUmm, Snes9x),
       and the most awkward *rate* is mGBA's **65536 Hz**. Use both as
       conformance targets, not GBA alone.
+- [x] **[LB]** **PAL conformance run, on device, 2026-08-24.** Probotector at
+      50.0070 fps on the Brick's 60.9 Hz panel: **1500 frames in 30.00s =
+      50.01 fps, 0 resyncs, drift -0.284%**, against an NTSC control on the
+      same panel at 60.10 fps, 0 resyncs, drift +0.199%. The case the flip
+      thread was designed for holds exactly, and pacing to the core's clock
+      rather than the panel's is now measured rather than argued.
+      mGBA's 65536 Hz no longer arises: it negotiates 48000 natively through
+      `GET_TARGET_SAMPLE_RATE`, so that conformance target has moved.
 
 ---
 

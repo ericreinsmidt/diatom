@@ -239,6 +239,31 @@ Still standing, deliberately, with a trigger rather than by inertia:
   logs is reproducible because of them, and `--shot` is backed by a seam
   function ADR-0007 justified on its own terms.
 
+## PAL, the case the whole design was built for
+
+Probotector (Europe), FCEUmm, 50.0070 fps on a 60.9 Hz panel - two rates with
+no common factor, which is the situation the flip thread and the absolute
+clock exist to survive. Run against an NTSC control on the same panel, same
+core, same session:
+
+| | target | measured | resyncs | drift |
+|---|---|---|---|---|
+| PAL Probotector | 50.0070 | **50.01** | **0** | -0.284% |
+| NTSC Final Fantasy | 60.0998 | **60.10** | **0** | +0.199% |
+
+1500 frames each. Nothing degrades at 50 Hz, which had been the least-tested
+part of the pacing design since the environment spike first turned up five
+distinct core frame rates.
+
+Also confirmed in passing: Probotector logs `save: no battery in this game`
+and creates no `.srm`. The per-game SRAM handling from ADR-0016 does the right
+thing on a cartridge that has none.
+
+The audio queue overshoot showed up again - 4927 frames against a stated
+capacity of 4096 - which is the known slop in `audio_write` admitting a batch
+whenever any space remains. Still harmless, still worth fixing when audio is
+next opened.
+
 ## Open at end of session
 
 - [x] **Default display mode decided** by looking at the panel across two
