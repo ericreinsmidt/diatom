@@ -457,6 +457,26 @@ Two amendments ADR-0007 makes to the table above:
 
 ---
 
+## 4b. Launch cost, measured
+
+- [x] **[LB]** **What a warm launch costs** →
+      [spike](spikes/2026-08-25-warm-launch.md). **~35 ms for NES, ~200 ms for a
+      32 MB GBA title**, against 625-750 ms cold. A 20x improvement for NES and
+      about 4x for the heaviest GBA game; the win shrinks with ROM size because
+      file read and `retro_load_game` are the two costs residency cannot remove.
+      **ADR-0006 and ADR-0008 are now justified by measurement rather than
+      assumption**, and ADR-0009's protocol is what delivers it - which settles
+      the order of work.
+- [ ] **[LB] [OPEN]** **The blit is the frame's dominant cost, not the core.**
+      Measured: core CPU per frame is 1.65 ms (NES) to 4.2 ms (Boktai), against
+      8.4 ms for `present`. **Diatom's pixel loop costs 2-5x more than emulating
+      the machine.** ADR-0013 recorded the disp2 hardware scaler as an escape
+      hatch for when CPU blitting stops fitting; it is really the single largest
+      saving available anywhere in the frame, and should be promoted from
+      contingency to the leading performance item.
+
+---
+
 ## 5b. Saves
 
 - [x] **[LB]** Saves, save states, slots and ownership →

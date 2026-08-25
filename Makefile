@@ -93,7 +93,7 @@ endif
 # both, and their results only mean anything on the hardware they measure.
 #
 #   tools/brick-make.sh probes
-PROBE_SRC := savprobe wprobe sigprobe pantest holdfb
+PROBE_SRC := savprobe wprobe sigprobe pantest holdfb warmprobe
 PROBES    := $(addprefix $(TOOLS_DIR)/,$(PROBE_SRC)) $(TOOLS_DIR)/eglpresent
 
 probes: $(PROBES)
