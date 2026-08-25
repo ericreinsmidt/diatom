@@ -23,6 +23,18 @@ trap 'restore 130' INT TERM HUP
 killall -9 playos.elf minarch.elf 2>/dev/null
 sleep 1
 
+# --exec runs an arbitrary command inside the same freeze, instead of diatom.
+# It exists because the alternative is hand-writing an unguarded `adb shell`
+# for any multi-step experiment - which is exactly how the display got wedged
+# on 2026-08-24, costing a reboot. Anything that presents must come through
+# here.
+if [ "${1:-}" = "--exec-file" ]; then
+    shift
+    cd "$HERE" || restore 1
+    sh "$1"
+    restore $?
+fi
+
 case "$*" in
     *--core*) set -- "$@" ;;
     *)        set -- --core "$CORE" --rom "$ROM" "$@" ;;

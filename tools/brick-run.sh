@@ -5,6 +5,11 @@
 #   tools/brick-run.sh                          stub core, integer mode
 #   tools/brick-run.sh --display aspect         a specific starting mode
 #   tools/brick-run.sh --core X.so --rom game   anything already staged
+#   tools/brick-run.sh --exec '<shell>'         any command, same guard
+#
+# Use --exec for anything that runs Diatom more than once, or runs it in a
+# loop. Hand-writing an `adb shell` that skips the freeze is how the display
+# engine gets wedged, and recovering from that needs a reboot.
 #
 # Everything after the script name is passed through to diatom, so --core,
 # --rom, --display, --frames and --shot all work. With no --core, the staged
@@ -35,6 +40,18 @@ adb shell "mkdir -p $STAGE" >/dev/null
 adb push "$BIN" "$STAGE/diatom" >/dev/null
 adb push "$ROOT/tools/brick-device-run.sh" "$STAGE/run.sh" >/dev/null
 adb shell "chmod +x $STAGE/diatom $STAGE/run.sh" >/dev/null
+
+# --exec ships the command as a FILE rather than a string: it would otherwise
+# have to survive this shell, adb's argument handling, and the device shell,
+# and the quoting does not make it.
+if [ "${1:-}" = "--exec" ]; then
+    shift
+    tmp=$(mktemp)
+    printf '%s\n' "$*" > "$tmp"
+    adb push "$tmp" "$STAGE/exec.sh" >/dev/null
+    rm -f "$tmp"
+    exec adb shell "$STAGE/run.sh --exec-file $STAGE/exec.sh"
+fi
 
 # The on-device half does the freeze, run and restore, so an interrupted adb
 # connection cannot leave the supervisor stopped.
