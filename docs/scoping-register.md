@@ -525,8 +525,14 @@ Two levers the spike discovered:
       same panel at 60.10 fps, 0 resyncs, drift +0.199%. The case the flip
       thread was designed for holds exactly, and pacing to the core's clock
       rather than the panel's is now measured rather than argued.
-      mGBA's 65536 Hz no longer arises: it negotiates 48000 natively through
-      `GET_TARGET_SAMPLE_RATE`, so that conformance target has moved.
+      **Correction, 2026-08-25:** an earlier note here claimed mGBA's awkward
+      rate no longer arises because it negotiates 48000 through
+      `GET_TARGET_SAMPLE_RATE`. That holds for **GBA** content only. Given a
+      **Game Boy** ROM the same core reports **131072 Hz** - twice the 65536 the
+      spike recorded, and a 2.73:1 downsample, the most extreme ratio in the
+      matrix. The placeholder linear resampler handles it: 59.73 fps against
+      59.7275, 0 resyncs, drift +0.209%. So the conformance target did not move,
+      it got harder, and it is per-content rather than per-core.
 
 ---
 
