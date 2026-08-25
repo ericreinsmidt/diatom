@@ -119,7 +119,7 @@ recorded as right.
 | System | Status | Reason |
 |---|---|---|
 | 32X | **Out** (2026-08-25) | Only PicoDrive supports it, and PicoDrive lost the Sega comparison - so it would mean a sixth core existing solely for a ~40 title library that is mostly Genesis ports |
-| PC Engine CD | **In** | Needs a System Card BIOS. Does **not** need the Disk Control Interface: the Redump catalogue has 502 PCE CD entries and **zero** multi-disc titles |
+| PC Engine CD | **In** | Needs a System Card BIOS, named by the launcher via `firmware=` ([ADR-0017](../decisions/0017-firmware-is-declared-not-known.md)) and verified on device. CHD reads natively; CUE/BIN untested. Does **not** need the Disk Control Interface: the Redump catalogue has 502 PCE CD entries and **zero** multi-disc titles |
 | Sega CD | Unasked | `genesis_plus_gx` already covers it, but it is not free - 21 of its titles are multi-disc, so it brings the Disk Control Interface with it |
 | Neo Geo, PS1, Saturn, N64 | Out | ADR-0005 rules 1, 2 and 3 |
 

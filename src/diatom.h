@@ -117,6 +117,7 @@ typedef struct {
 	diatom_msg_kind kind;
 	char core[1024];
 	char rom[1024];
+	char firmware[128];    /* RUN: what this content needs in the system dir */
 	char tag[64];
 	char slot[64];
 	char path[1024];       /* SAVE / LOAD */

@@ -15,7 +15,7 @@
  * the crash paths are watched - the point there is exactly that Diatom reports
  * something nobody asked it to.
  *
- *   protodrive <socket> <secs> [--exercise <optkey> <optval>] <core>|<rom> ...
+ *   protodrive <socket> <secs> [--exercise <optkey> <optval>] <core>|<rom>[|<firmware>] ...
  */
 #define _GNU_SOURCE
 #include <errno.h>
@@ -114,7 +114,7 @@ int main(int argc, char **argv)
 	printf("<- %s\n", rline());
 
 	for (i = argi; i < argc; i++) {
-		char spec[2048], *bar, *rom;
+		char spec[2048], *bar, *rom, *fw;
 		uint64_t t0, t_running = 0, t_last;
 		const char *base;
 
@@ -123,12 +123,19 @@ int main(int argc, char **argv)
 		if (!bar) { fprintf(stderr, "bad spec: %s\n", argv[i]); continue; }
 		*bar = '\0';
 		rom = bar + 1;
+		/* An optional third field: core|rom|firmware, so the ADR-0017 check can
+		 * be driven from here rather than only from the command line. */
+		fw = strchr(rom, '|');
+		if (fw) { *fw = '\0'; fw++; }
 		base = strrchr(rom, '/');
 		base = base ? base + 1 : rom;
 
 		t0 = us();
 		t_last = t0;
-		wline("RUN\tcore=%s\trom=%s", spec, rom);
+		if (fw && *fw)
+			wline("RUN\tcore=%s\trom=%s\tfirmware=%s", spec, rom, fw);
+		else
+			wline("RUN\tcore=%s\trom=%s", spec, rom);
 
 		for (;;) {
 			char *l = rline();

@@ -16,6 +16,7 @@
 #include <time.h>
 #include <math.h>
 #include <signal.h>
+#include <unistd.h>
 
 #include "diatom.h"
 
@@ -223,10 +224,14 @@ static void usage(void)
 		"usage: diatom --core <core.so> --rom <file> [--system <dir>] [--save <dir>]\n"
 		"              [--display <mode>] [--filter nearest|sharp]\n"
 		"              [--load-state <file>] [--state-on-exit <file>]\n"
+		"              [--firmware <name>]  required in --system, checked first\n"
 		"              [--frames <n>] [--shot <file.bmp>]\n"
 		"              [--socket <path>]   launcher protocol, ADR-0009\n"
 		"              [--core-option key=value] ...   repeatable\n"
 		"              [--list-options]    what this core offers, then exit\n"
+		"\n--firmware names a file the content needs, e.g. syscard3.pce for a PC\n"
+		"Engine CD. Diatom does not know which content needs what and will not\n"
+		"learn - it has no core list - so whoever launches it says (ADR-0017).\n"
 		"\nSRAM is automatic: read at load, written when it changes, flushed on\n"
 		"exit and on SIGTERM. Save states take paths, never slot numbers - slots\n"
 		"belong to the launcher (ADR-0016).\n"
@@ -375,6 +380,7 @@ static int display_chord(uint32_t buttons, uint32_t prev)
  * status or an ERROR message depending on how Diatom was started. */
 typedef struct {
 	const char   *core, *rom, *shot, *state_load, *state_exit;
+	const char   *firmware;   /* what the launcher says this content needs */
 	long          limit;
 	int           mode;
 	diatom_filter filter;
@@ -425,8 +431,37 @@ static int run_session_inner(const diatom_session *sn)
 		diatom_proto_send("ERROR\tcode=rom_unreadable\tmsg=core needs content");
 		return 4;
 	}
+	/* Firmware, checked BEFORE the core is asked to load - ADR-0017.
+	 *
+	 * Diatom does not know that a PC Engine CD needs `syscard3.pce`, and will
+	 * not learn: it has no core list, and a firmware table is a core list by
+	 * another name. The launcher already maps system to core, so it is the
+	 * thing that knows, and it says so with `firmware=`.
+	 *
+	 * Checked here rather than after a failed load because the distinction
+	 * ADR-0009 draws is about the DISPLAY. A missing System Card means the game
+	 * never started, so the launcher must keep drawing and hear ERROR. The core
+	 * only ever tells us `retro_load_game` returned false, which is the same
+	 * answer it gives for a corrupt ROM. */
+	if (sn->firmware && *sn->firmware) {
+		char path[1024];
+		snprintf(path, sizeof path, "%s/%s", g_policy.system_dir, sn->firmware);
+		if (access(path, R_OK) != 0) {
+			fprintf(stderr, "diatom: missing firmware %s\n", path);
+			diatom_proto_send("ERROR\tcode=bios_missing\tmsg=%s", sn->firmware);
+			return 4;
+		}
+	}
+
 	if (!diatom_core_start(g_core, sn->rom)) {
-		diatom_proto_send("ERROR\tcode=rom_unreadable\tmsg=core refused the rom");
+		/* Say the firmware was found, so a launcher that reports this does not
+		 * send someone hunting for a BIOS they already have. */
+		if (sn->firmware && *sn->firmware)
+			diatom_proto_send("ERROR\tcode=rom_unreadable"
+			                  "\tmsg=core refused the rom (%s was present)",
+			                  sn->firmware);
+		else
+			diatom_proto_send("ERROR\tcode=rom_unreadable\tmsg=core refused the rom");
 		return 4;
 	}
 
@@ -731,7 +766,7 @@ int main(int argc, char **argv)
 	 * the crop. nearest because sharp earned nothing visible at these factors
 	 * and is the only thing that has made this loop miss a frame. */
 	const char *display = "stretch", *filter = "nearest";
-	const char *state_load = NULL, *state_exit = NULL;
+	const char *state_load = NULL, *state_exit = NULL, *firmware = NULL;
 	const char *sock = getenv("DIATOM_SOCKET");
 	bool list_options = false;
 	diatom_filter start_filter;
@@ -749,6 +784,7 @@ int main(int argc, char **argv)
 		else if (!strcmp(argv[i], "--filter") && i + 1 < argc) filter = argv[++i];
 		else if (!strcmp(argv[i], "--load-state") && i + 1 < argc) state_load = argv[++i];
 		else if (!strcmp(argv[i], "--state-on-exit") && i + 1 < argc) state_exit = argv[++i];
+		else if (!strcmp(argv[i], "--firmware") && i + 1 < argc) firmware = argv[++i];
 		else if (!strcmp(argv[i], "--socket") && i + 1 < argc) sock = argv[++i];
 		else if (!strcmp(argv[i], "--list-options")) list_options = true;
 		else if (!strcmp(argv[i], "--core-option") && i + 1 < argc) {
@@ -838,8 +874,9 @@ int main(int argc, char **argv)
 			}
 
 			memset(&sn, 0, sizeof sn);
-			sn.core   = m.core;
-			sn.rom    = m.rom[0] ? m.rom : NULL;
+			sn.core     = m.core;
+			sn.rom      = m.rom[0] ? m.rom : NULL;
+			sn.firmware = m.firmware[0] ? m.firmware : NULL;
 			sn.mode   = start_mode;
 			sn.filter = start_filter;
 			run_session(&sn);   /* its own ERROR/EXIT is the report */
@@ -847,7 +884,7 @@ int main(int argc, char **argv)
 		diatom_proto_close();
 	} else {
 		diatom_session sn = { core_path, rom_path, shot_path,
-		                      state_load, state_exit,
+		                      state_load, state_exit, firmware,
 		                      limit, start_mode, start_filter,
 		                      list_options };
 		int rc = run_session(&sn);

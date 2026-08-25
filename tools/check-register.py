@@ -202,6 +202,16 @@ def check_working_tree():
     for a in sorted(accepted - ticked_adrs):
         fails.append("ADR-%s is Accepted but no ticked register item points at it" % a)
 
+    # 5b. The ADR index is a second place the same drift showed up: it stopped
+    #     at 0012 while 0013-0016 were written, because adding the file is the
+    #     work and adding the row is the bookkeeping. Same fix.
+    with open(os.path.join(ADR_DIR, "README.md"), encoding="utf-8") as f:
+        index = f.read()
+    for fn in sorted(os.listdir(ADR_DIR)):
+        m = re.match(r"(\d{4})-", fn)
+        if m and fn not in index:
+            fails.append("%s exists but is not in the decisions/README.md index" % fn)
+
     # 6. Suspected fossils: an open item whose subject is already covered by a
     #    ticked one somewhere else. WARN, not FAIL - "is this the same
     #    question?" is a judgement, and a check that guesses wrong loudly is a

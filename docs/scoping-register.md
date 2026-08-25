@@ -811,9 +811,14 @@ pad attached, which is why the real pad has a Mode switch.
 - [ ] **[OPEN]** Preview screenshots for the launcher - frontend's job or host's?
       `PREVIEW` is in ADR-0009's message table and is not emitted.
 - [ ] **[LB]** Rewind: support or drop? Real RAM cost on a 1GB device.
-- [ ] **[OPEN]** CHD/CD support. **No longer conditional** - PC Engine CD is in
-      scope ([core selection](reference/core-selection.md)), so this is real
-      work rather than a contingency.
+- [x] **[OPEN]** CD support → done for PC Engine. **CHD needs nothing** - Beetle
+      PCE Fast reads it natively, measured on device at 59.81 fps against a
+      59.8200 target with 0 resyncs. The System Card is named by the launcher
+      rather than known by Diatom →
+      **[ADR-0017](decisions/0017-firmware-is-declared-not-known.md)**
+      *(Accepted)*. CUE/BIN is **untested** - no such content to hand.
+      Sega CD would additionally need the Disk Control Interface (260 of 544
+      Redump entries are disc-numbered), so it is not free if it ever arrives.
 
 ---
 
@@ -972,10 +977,13 @@ operation never occurs.
       the split is about display ownership rather than error reporting.
       `core_missing`, `rom_unreadable`, `save_failed`, `state_rejected`,
       `bad_option` and `crash` are all emitted.
-- [ ] **[OPEN]** **`bios_missing` is specified and never emitted.** ADR-0009
-      lists it; nothing in `src/` produces it, so a missing PC Engine System
-      Card currently fails as `rom_unreadable` and tells the launcher the wrong
-      thing. Closes with the System Card work in §9's CD support.
+- [x] **[OPEN]** **`bios_missing`** - specified by ADR-0009 and emitted nowhere
+      until 2026-08-25. Now real: the launcher names what the content needs and
+      Diatom checks it before loading anything
+      ([ADR-0017](decisions/0017-firmware-is-declared-not-known.md)), so a
+      missing System Card fails in 0.01 s with the filename instead of looking
+      like a bad ROM. **Presence, not validity** - 2 KB of random bytes named
+      `syscard3.pce` was accepted and the game reported RUNNING.
 - [x] **[OPEN]** PlayOS's power-off failsafe - answered in §3: the launcher
       stays alive as supervisor and `SIGUSR1` is retained as the escape hatch
       for a core wedged inside `retro_run`.

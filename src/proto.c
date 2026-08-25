@@ -175,6 +175,11 @@ static void parse_line(char *line, diatom_msg *out)
 		v = eq + 1;
 		if      (!strcmp(field, "core")) snprintf(out->core, sizeof out->core, "%s", v);
 		else if (!strcmp(field, "rom"))  snprintf(out->rom,  sizeof out->rom,  "%s", v);
+		/* ADR-0017. A key ADR-0009 did not define, which costs nothing to add
+		 * because unknown keys are ignored: an older Diatom drops it and fails
+		 * the way it always did, a newer one checks before loading. */
+		else if (!strcmp(field, "firmware"))
+			snprintf(out->firmware, sizeof out->firmware, "%s", v);
 		else if (!strcmp(field, "tag"))  snprintf(out->tag,  sizeof out->tag,  "%s", v);
 		else if (!strcmp(field, "slot")) snprintf(out->slot,  sizeof out->slot,  "%s", v);
 		else if (!strcmp(field, "path")) snprintf(out->path,  sizeof out->path,  "%s", v);
