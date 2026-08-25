@@ -658,10 +658,19 @@ environment spike already found `mednafen_pce_fast` asking for the interface,
 being declined, and carrying on. Multi-disc is a fifth-generation problem -
 Super CD-ROM discs held ~540 MB and PCE CD content ran 200-400 MB.
 
+**Confirmed against Redump** (libretro-database, 2026-08-25): the PC Engine CD
+catalogue is **502 entries with zero disc-numbered titles**. No multi-disc PCE CD
+game was ever released. The convention is demonstrably in use in the same
+dataset - PlayStation has 7,186 disc-numbered entries of 13,592 - so this is a
+real null rather than missing metadata.
+
 That leaves **System Card BIOS handling as the only real PCE CD work**: load it,
-and fail clearly rather than mysteriously when it is missing. *Unverified:*
-whether Sega CD has multi-disc titles, which would matter if it comes off the
-unasked list, since `genesis_plus_gx` already covers it.
+and fail clearly rather than mysteriously when it is missing.
+
+**Sega CD is the opposite** and would need the Disk Control Interface: 260 of its
+544 Redump entries are disc-numbered. So if Sega CD ever comes off the unasked
+list, that work arrives with it - which is an argument for deciding the two
+together rather than assuming `genesis_plus_gx` covering Sega CD makes it free.
 
 **The coprocessor risk ADR-0005 flagged did not materialise** (measured
 2026-08-25): Star Fox and Stunt Race FX (SuperFX), Yoshi's Island (SA-1), Super
