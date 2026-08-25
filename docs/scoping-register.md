@@ -396,14 +396,21 @@ Two amendments ADR-0007 makes to the table above:
 - [ ] **[LATER]** **Drop SDL2 from the Brick port?** Video already left in
       ADR-0013; SDL2 now only does audio, joystick, clock and BMP capture there.
       **Measured 2026-08-24: SDL2 costs 223 ms at startup** - `SDL_Init` 86.7 ms
-      (udev enumeration) plus `SDL_OpenAudioDevice` 135.9 ms - against a cold
-      core `dlopen` of 232 ms. That lands squarely on the project's headline
-      value, instant launches.
+      (udev enumeration) plus `SDL_OpenAudioDevice` 135.9 ms - about a third of
+      a 625-750 ms cold launch.
 
-      **Not decidable yet**: the gain is only the *difference*, and raw ALSA
-      also has to pay for opening the device. Needs a spike timing a direct
-      ALSA open and an OSS `/dev/dsp` open before it is arithmetic rather than
-      a guess.
+      **But it is paid per PROCESS, not per ROM**, and both ADR-0008
+      (long-lived process) and ADR-0006 (cores stay resident) delete it from the
+      per-launch path entirely. In the designed steady state a launch is
+      `retro_load_game` plus a 27 ms warmup, and neither the 223 ms nor the
+      ~400 ms of `dlopen` is in it. An earlier note here claimed this cost lands
+      on the headline value; it does not, except in the spawn-per-game harness
+      we currently test with.
+
+      **The launch-time case is therefore weak** and the remaining reasons are
+      secondary. If it is ever revisited, the gain is only the *difference* -
+      raw ALSA also pays to open the device - so it still needs a spike timing a
+      direct ALSA open and an OSS `/dev/dsp` open.
 
       Secondary benefit if done: DRC currently targets `SDL_GetQueuedAudioSize`,
       which is SDL's own queue rather than the hardware buffer. Reading
