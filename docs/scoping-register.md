@@ -123,11 +123,11 @@ verified rather than assumed.
       proposal was made when the project was itself a stone and stopped being
       automatic when it became a diatom; a port named after the hardware also
       needs no key.
-- [ ] **[LB]** License. 0BSD to match PlayOS is the presumption, and **there is
-      no LICENSE file in the repository at all** - checked 2026-08-25. For a
-      project whose stated point is that other firmwares could adopt it, that is
-      the one thing making adoption impossible. Cheap to fix, easy to keep
-      forgetting.
+- [x] **[LB]** License → **MIT**, 2026-08-25. 0BSD was the presumption for two
+      days and was never acted on; the repository had no LICENSE at all. The
+      deciding difference is **attribution**, which is 0BSD's only practical
+      cost: the code is ~2,400 lines but the artifact is the ADRs, the spikes
+      and this register, and a copyright line is the thread back to them.
 - [ ] **[OPEN]** Confirm the licensing position on `dlopen`-ing GPL cores from a
       permissively licensed frontend. The enabling fact is that `libretro.h` is
       itself permissively licensed, explicitly so any-license frontends can host
