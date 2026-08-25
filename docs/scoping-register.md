@@ -625,6 +625,23 @@ reports true geometry, giving an exact 5x for Game Gear and a 1024x768 whole-
 panel fill for Master System. Costs a 12.6 MB core and ~1 MB save states.
 PicoDrive remains the choice only if 32X is in scope.
 
+**gpSP is not needed** (measured 2026-08-25). It is on the buildbot for
+aarch64 and it is C, so it would run where the C++ cores do not - but it covers
+GBA only, so it cannot replace mGBA, only add a sixth core. And mGBA does not
+need help: 900 frames each of Golden Sun, Pokemon Emerald, Boktai and Super
+Mario Advance 2, all **59.73 fps against 59.7275 with 0 resyncs**. gpSP becomes
+relevant only if a GBA title is found that mGBA cannot hold.
+
+**Gambatte is redundant, not missing.** mGBA covers GB and GBC identically -
+160x144, aspect 1.1111, 59.7275 fps, exact 5x integer - and opens a `.gb` ROM in
+625 ms, the same as the lightest core in the matrix, from a binary 47% smaller
+than Gambatte's. Only `snes9x` is a real gap.
+
+**Per-launch cost is dominated by ROM size, not core choice** (measured): 625 ms
+for a 32 KB ROM against 750 ms for a 16 MB one, on the same core. Core binary
+size only shows up on the first launch after boot, because ADR-0006 keeps cores
+resident and never calls `dlclose`.
+
 **`snes9x` and `gambatte` cannot be used as fetched** - they are C++ and want
 `GLIBCXX_3.4.29`, while the Brick ships 3.4.28. See CORES.md; the ADR-0012
 container is the fix.
