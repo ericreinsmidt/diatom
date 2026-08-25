@@ -235,3 +235,41 @@ but the correct PAL frame rate. Removed: a check that cannot tell a legitimate
 reference from a stale copy is one people learn to ignore. Citing the file by
 link is therefore a **convention**, and the tooling says so rather than
 pretending to enforce it.
+
+## `micprobe.sh` - did sound actually come out?
+
+*Answered as a number, by the device's own microphone.*
+
+The Brick's capture device sits on the same card as playback, and **its mic
+hears its own speaker**. So "is there audio" stops being a question only a
+person in the room can answer:
+
+    silence           rms   ~25-36
+    Probotector       rms  ~700-780
+    full-scale sine   rms ~1565
+
+    tools/micprobe.sh <core.so> <rom> [secs]
+    tools/micprobe.sh --tone                  known-good reference
+    DIATOM_GAIN=15 tools/micprobe.sh ...      volume; INVERTED, lower is louder
+
+It records a baseline first, then records again while the thing under test
+plays, and reports the ratio. Four consecutive Diatom runs measured 686-702
+against a 25 baseline - which is what finally established that Diatom's audio
+worked, after hours of assuming it did not.
+
+**Why it exists.** On 2026-08-25 an evening went into "no sound" that was never
+a fault. Every report from the person listening was accurate and consistent -
+*"very quiet"*, *"barely audible"*, *"still quiet at max"* - and every one of
+them described a **level**. Without a baseline to compare against, none could be
+acted on, so they were treated as symptoms of a defect instead: the resampler
+was suspected, then the cores, then SDL, and a rewrite of the audio path was
+nearly proposed. The audio path was fine throughout. `digital volume` is
+inverted, so what was set as "maximum" was silence.
+
+*"Still quiet at max"* is a contradiction and should have ended it in one step,
+because it can only mean max is not max. It did not, because there was no
+instrument - only opinions about opinions.
+
+The lesson is not to listen more carefully. It is that **"does this sound right"
+has a number behind it**, and that number was ten minutes of work away using
+`arecord`, which was on the device the whole time.
