@@ -467,7 +467,22 @@ Two amendments ADR-0007 makes to the table above:
       **ADR-0006 and ADR-0008 are now justified by measurement rather than
       assumption**, and ADR-0009's protocol is what delivers it - which settles
       the order of work.
-- [ ] **[LB] [OPEN]** **The blit is the frame's dominant cost, not the core.**
+- [x] **[LB]** **The blit was the frame's dominant cost; it is not any more.**
+      → [spike](spikes/2026-08-25-blit-cost.md). A row cache made it **2.1-2.3x
+      faster** (8.4-8.7 ms to 3.6-4.1 ms), verified byte-identical across eight
+      combinations. **The disp2 hardware scaler is not needed**: the blit was
+      never write-bound - framebuffer memory measured exactly as fast as heap,
+      418 MB/s both - it was converting every source pixel once per destination
+      pixel that sampled it. NES now spends 5.3 ms of 16.6, leaving 11.3 ms.
+      TrimUI publishes no kernel source, so driving `/dev/disp` would have meant
+      guessed structs on an undocumented ioctl; not worth it for headroom
+      nothing was short of.
+- [x] **[OPEN]** **`diatom_port_capture` was non-deterministic** and had been
+      since the flip thread was written: it read the front page without waiting
+      for the pending flip, so the captured frame depended on how fast the blit
+      was. Fixed. Found while verifying the blit change, which is the argument
+      for verifying by comparison rather than by inspection.
+- [ ] **[LATER]** ~~The blit is the frame's dominant cost, not the core.~~
       Measured: core CPU per frame is 1.65 ms (NES) to 4.2 ms (Boktai), against
       8.4 ms for `present`. **Diatom's pixel loop costs 2-5x more than emulating
       the machine.** ADR-0013 recorded the disp2 hardware scaler as an escape

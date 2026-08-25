@@ -73,6 +73,7 @@ static bool                      g_pan_broken; /* pan failed; draw to front */
 static pthread_t        g_flip_thread;
 static pthread_mutex_t  g_flip_mx = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t   g_flip_cv = PTHREAD_COND_INITIALIZER;
+static pthread_cond_t   g_flip_idle = PTHREAD_COND_INITIALIZER;
 static int              g_front;
 static int              g_inflight = -1;
 static int              g_pending  = -1;
@@ -144,6 +145,7 @@ static void *flip_worker(void *arg)
 		pthread_mutex_lock(&g_flip_mx);
 		g_front    = page;
 		g_inflight = -1;
+		pthread_cond_broadcast(&g_flip_idle);
 	}
 	pthread_mutex_unlock(&g_flip_mx);
 	return arg;
@@ -361,6 +363,74 @@ static inline diatom_rgb un8888(uint32_t c)
 	return v;
 }
 
+/* Converted source rows, so a source pixel is converted ONCE rather than once
+ * per destination pixel that samples it.
+ *
+ * Measured 2026-08-25: at 256x224 into 1024x768 the naive loop costs 7.52 ms
+ * and this costs 3.37 ms, a 2.23x saving, because 4x horizontal and 3.4x
+ * vertical scaling meant roughly thirteen redundant conversions of every source
+ * pixel. The same measurement showed framebuffer memory is exactly as fast as
+ * ordinary heap - 418 MB/s either way - so the cost was never the write, and
+ * the disp2 hardware scaler would have been solving the wrong problem.
+ *
+ * Two slots because a blended row needs the source row above and below. Rows
+ * are looked up by index, so consecutive destination rows sampling the same
+ * source row convert nothing at all. */
+#define ROWCACHE_MAX 2048     /* widest source in the matrix is 512 (SNES hires) */
+static uint32_t g_rc[2][ROWCACHE_MAX];
+static int      g_rc_row[2] = { -1, -1 };
+
+static const uint32_t *cache_row(const void *src, size_t pitch, diatom_pixfmt fmt,
+                                 int row, int src_w)
+{
+	const unsigned ro = g_vinfo.red.offset;
+	const unsigned go = g_vinfo.green.offset;
+	const unsigned bo = g_vinfo.blue.offset;
+	const uint32_t opaque = g_opaque;
+	uint32_t *dst;
+	int slot, x;
+
+	if (g_rc_row[0] == row) return g_rc[0];
+	if (g_rc_row[1] == row) return g_rc[1];
+
+	/* Evict the older row. Destination rows advance monotonically, so the
+	 * lower index is the one that will not be wanted again. */
+	slot = (g_rc_row[0] <= g_rc_row[1]) ? 0 : 1;
+	dst  = g_rc[slot];
+
+	if (fmt == DIATOM_PIX_RGB565) {
+		const uint16_t *in = (const uint16_t *)((const uint8_t *)src + (size_t)row * pitch);
+		for (x = 0; x < src_w; x++) {
+			const uint16_t c = in[x];
+			const uint32_t r = (c >> 11) & 0x1f, g = (c >> 5) & 0x3f, b = c & 0x1f;
+			dst[x] = opaque
+			       | (((r << 3) | (r >> 2)) << ro)
+			       | (((g << 2) | (g >> 4)) << go)
+			       | (((b << 3) | (b >> 2)) << bo);
+		}
+	} else {
+		const uint32_t *in = (const uint32_t *)((const uint8_t *)src + (size_t)row * pitch);
+		for (x = 0; x < src_w; x++) {
+			const uint32_t c = in[x];
+			dst[x] = opaque
+			       | (((c >> 16) & 0xff) << ro)
+			       | (((c >>  8) & 0xff) << go)
+			       | (( c        & 0xff) << bo);
+		}
+	}
+	g_rc_row[slot] = row;
+	return dst;
+}
+
+static inline diatom_rgb unpack(uint32_t p)
+{
+	diatom_rgb v;
+	v.r = (int)((p >> g_vinfo.red.offset)   & 0xff);
+	v.g = (int)((p >> g_vinfo.green.offset) & 0xff);
+	v.b = (int)((p >> g_vinfo.blue.offset)  & 0xff);
+	return v;
+}
+
 static inline diatom_rgb mix(diatom_rgb a, diatom_rgb b, int w)
 {
 	diatom_rgb v;
@@ -390,33 +460,36 @@ static void blit(uint8_t *page, const void *src, int w, int h, size_t pitch,
                         | ((uint32_t)(c).b << bo))
 
 /* Two loops, not one with a branch: the vertical weight is constant across a
- * row, so testing it per pixel would be 1024 redundant branches per row. */
-#define BLIT_ROW(FETCH, TYPE) do {                                           \
-	const TYPE *i0 = (const TYPE *)r0;                                       \
-	const TYPE *i1 = (const TYPE *)r1;                                       \
+ * row, so testing it per pixel would be 1024 redundant branches per row.
+ *
+ * Both source from the converted row cache, so the nearest path - the default,
+ * and every pixel at a whole factor - is a pure indexed copy with no arithmetic
+ * at all. */
+#define BLIT_ROW_NEAREST() do {                                              \
 	int x;                                                                   \
-	if (!ty.w) {                                                             \
-		for (x = x0; x < x1; x++) {                                          \
-			diatom_tap tx = g_colmap[x - dst.x];                             \
-			diatom_rgb c = FETCH(i0[tx.idx]);                                \
-			if (tx.w) c = mix(c, FETCH(i0[tx.idx + 1]), tx.w);               \
-			out[x] = PACK(c);                                                \
-		}                                                                    \
-	} else {                                                                 \
-		for (x = x0; x < x1; x++) {                                          \
-			diatom_tap tx = g_colmap[x - dst.x];                             \
-			diatom_rgb a = FETCH(i0[tx.idx]);                                \
-			diatom_rgb b = FETCH(i1[tx.idx]);                                \
-			if (tx.w) {                                                      \
-				a = mix(a, FETCH(i0[tx.idx + 1]), tx.w);                     \
-				b = mix(b, FETCH(i1[tx.idx + 1]), tx.w);                     \
-			}                                                                \
-			out[x] = PACK(mix(a, b, ty.w));                                  \
-		}                                                                    \
+	for (x = x0; x < x1; x++) {                                              \
+		diatom_tap tx = g_colmap[x - dst.x];                                 \
+		if (!tx.w) out[x] = c0[tx.idx];                                      \
+		else       out[x] = PACK(mix(unpack(c0[tx.idx]),                     \
+		                             unpack(c0[tx.idx + 1]), tx.w));         \
 	}                                                                        \
 } while (0)
 
-	if (!g_map_valid) return;
+#define BLIT_ROW_BLEND() do {                                                \
+	int x;                                                                   \
+	for (x = x0; x < x1; x++) {                                              \
+		diatom_tap tx = g_colmap[x - dst.x];                                 \
+		diatom_rgb a = unpack(c0[tx.idx]);                                   \
+		diatom_rgb b = unpack(c1[tx.idx]);                                   \
+		if (tx.w) {                                                          \
+			a = mix(a, unpack(c0[tx.idx + 1]), tx.w);                        \
+			b = mix(b, unpack(c1[tx.idx + 1]), tx.w);                        \
+		}                                                                    \
+		out[x] = PACK(mix(a, b, ty.w));                                      \
+	}                                                                        \
+} while (0)
+
+	if (!g_map_valid || w > ROWCACHE_MAX) return;
 
 	y0 = dst.y > 0 ? dst.y : 0;
 	x0 = dst.x > 0 ? dst.x : 0;
@@ -424,19 +497,23 @@ static void blit(uint8_t *page, const void *src, int w, int h, size_t pitch,
 	x1 = dst.x + dst.w < (int)g_vinfo.xres ? dst.x + dst.w : (int)g_vinfo.xres;
 	if (x1 <= x0 || y1 <= y0) return;
 
+	/* The cache is per-frame: the source buffer is rewritten every time. */
+	g_rc_row[0] = g_rc_row[1] = -1;
+
 	for (y = y0; y < y1; y++) {
 		diatom_tap ty = g_rowmap[y - dst.y];
 		uint32_t *out = (uint32_t *)(page + (size_t)y * g_finfo.line_length);
-		const uint8_t *r0 = (const uint8_t *)src + (size_t)ty.idx * pitch;
-		const uint8_t *r1 = r0 + (ty.w ? pitch : 0);
+		const uint32_t *c0 = cache_row(src, pitch, fmt, ty.idx, w);
+		const uint32_t *c1 = ty.w ? cache_row(src, pitch, fmt, ty.idx + 1, w) : NULL;
 
-		if (fmt == DIATOM_PIX_RGB565) BLIT_ROW(un565,  uint16_t);
-		else                          BLIT_ROW(un8888, uint32_t);
+		if (ty.w) BLIT_ROW_BLEND();
+		else      BLIT_ROW_NEAREST();
 	}
 
 	/* Letterbox bars are not repainted per frame: pages start opaque black and
 	 * the rect only shrinks when the user changes mode, which clears them. */
-#undef BLIT_ROW
+#undef BLIT_ROW_NEAREST
+#undef BLIT_ROW_BLEND
 #undef PACK
 }
 
@@ -639,7 +716,18 @@ bool diatom_port_capture(const char *path)
 
 	if (!g_fb || !path) return false;
 
+	/* Wait for the mailbox to drain before reading the front page.
+	 *
+	 * Without this, a capture reads whichever page the flip thread last got to,
+	 * which depends on how long the blit took - so the same run captured at the
+	 * same frame count could yield the frame before. Found 2026-08-25 while
+	 * checking a blit optimisation for correctness: old and new binaries
+	 * produced captures differing in one 24-row band, and only at some frame
+	 * counts, which is a blinking sprite one frame apart rather than a blit
+	 * defect. An instrument that is not deterministic cannot verify anything. */
 	pthread_mutex_lock(&g_flip_mx);
+	while (g_flip_running && (g_pending >= 0 || g_inflight >= 0))
+		pthread_cond_wait(&g_flip_idle, &g_flip_mx);
 	front = g_front;
 	pthread_mutex_unlock(&g_flip_mx);
 
