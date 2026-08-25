@@ -230,9 +230,11 @@ evaporates - but two others remain:
 - [x] **[OPEN]** The power-off failsafe is respected: the launcher stays alive
       as supervisor, and `SIGUSR1` is retained as the escape hatch for a core
       wedged inside `retro_run` that cannot read the socket.
-- [ ] **[OPEN]** Remaining risk carried by ADR-0008: **display handoff between
-      two processes** on fbdev/DRM. Proven on tg5040 by PlayOS today; will need
-      re-solving per port and is the likeliest source of platform-specific pain.
+- [x] **[OPEN]** Remaining risk carried by ADR-0008: **display handoff between
+      two processes**. Measured 2026-08-24 on the Brick for the case that
+      actually matters, fbdev holding while EGL presents:
+      [it works](spikes/2026-08-24-display-handoff.md). Still needs re-checking
+      per port, and the instruments to do that are tracked.
       **Measured instance 2026-08-24** ([ADR-0013](decisions/0013-brick-fbdev-flip-thread.md)):
       Diatom panning fb0 while another process presented through EGL deadlocked
       the pan in-kernel behind a stalled PowerVR fence. On the Brick the rule is
@@ -372,12 +374,14 @@ Two amendments ADR-0007 makes to the table above:
       arrives ~810 ms before death on power-off.
 - [ ] **[OPEN]** Manual slots and the in-game menu. Blocked on the display
       handoff, below.
-- [ ] **[LB] [OPEN]** **Display handoff, fbdev to EGL.** ADR-0013 chose raw
-      fbdev; PlayOS presents through EGL; that pairing wedged the PowerVR
-      firmware in-kernel on 2026-08-24. PlayOS and minarch hand off today but
-      are both EGL. **Spike before designing the menu** - if it cannot be made
-      reliable, manual saving falls back to blind hotkeys or an overlay Diatom
-      draws itself.
+- [x] **[LB]** **Display handoff, fbdev to EGL** - answered
+      ([spike](spikes/2026-08-24-display-handoff.md)). **It works.** The
+      invariant is *one presenter at a time*, not one process per display:
+      holding `/dev/fb0` open and mapped while another process presents through
+      EGL is fine, and only concurrent presentation is fatal. So a paused
+      Diatom stops its flip thread and keeps everything else; no release, no
+      re-acquire, no gap where nobody owns the screen. ADR-0016's menu design
+      stands as written.
 
 ---
 

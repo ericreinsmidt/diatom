@@ -44,6 +44,27 @@ are worse than no measurement, because they look authoritative.
 Generates `env_names.h` from `src/libretro.h`. Generated rather than committed so
 the table cannot drift from the header it describes.
 
+## Device probes
+
+Small single-question instruments that only run on the target. Built with
+`tools/brick-make.sh probes`, not by `make`. **Every number they produce is
+cited by an ADR** - which is the whole reason they are versioned rather than
+left in a temp directory. A measurement whose instrument has been deleted
+cannot be re-checked, and that is the drift this project exists to avoid.
+
+| Probe | Question | Cited by |
+|---|---|---|
+| `savprobe.c` | What does each core expose for saving - SRAM, RTC, state size - and what does `retro_serialize` cost? | [ADR-0016](../docs/decisions/0016-saves-and-save-states.md) |
+| `wprobe.c` | What does an atomic save write (write, fsync, rename) cost on the device's card? | [ADR-0016](../docs/decisions/0016-saves-and-save-states.md) |
+| `sigprobe.c` | On power-off, does a running process get a signal, and how long before it dies? | [ADR-0016](../docs/decisions/0016-saves-and-save-states.md) |
+| `pantest.c` | What does `FBIOPAN_DISPLAY` cost, and does anything change it? | [ADR-0013](../docs/decisions/0013-brick-fbdev-flip-thread.md) |
+| `eglpresent.c` | Stand-in for the launcher: presents through the device's mali/EGL driver. | [handoff spike](../docs/spikes/2026-08-24-display-handoff.md) |
+| `holdfb.c` | Can EGL present while another process holds `/dev/fb0` open and mapped? | [handoff spike](../docs/spikes/2026-08-24-display-handoff.md) |
+
+`savprobe` needs a core and a ROM; the rest need neither. `holdfb` and
+`eglpresent` are two halves of one test and are meant to overlap in time - see
+the spike for the sequence.
+
 ## Running them
 
 Cores and ROMs are supplied locally and are deliberately not in this repository:

@@ -56,7 +56,7 @@ ifeq ($(PORT),brick)
   LDFLAGS += -lSDL2 -lm -ldl -lpthread
 endif
 
-.PHONY: all clean check-seam stub run-stub tools
+.PHONY: all clean check-seam stub run-stub tools probes
 
 all: $(BIN)
 
@@ -84,6 +84,31 @@ $(TOOLS_DIR)/rssprobe: tools/rssprobe.c
 ifeq ($(shell uname -s),Linux)
   TOOL_LDFLAGS += -ldl
 endif
+
+# Device probes. Every number they produce is cited by an ADR, which is exactly
+# why they are versioned rather than left in a temp directory: an unverifiable
+# measurement is the drift this project exists to avoid (practice 7).
+#
+# They only build for PORT=brick - they use linux/fb.h, the device's SDL2, or
+# both, and their results only mean anything on the hardware they measure.
+#
+#   tools/brick-make.sh probes
+PROBE_SRC := savprobe wprobe sigprobe pantest holdfb
+PROBES    := $(addprefix $(TOOLS_DIR)/,$(PROBE_SRC)) $(TOOLS_DIR)/eglpresent
+
+probes: $(PROBES)
+
+$(TOOLS_DIR)/savprobe: tools/savprobe.c
+	@mkdir -p $(TOOLS_DIR)
+	$(CC) $(TOOL_CFLAGS) -o $@ $< $(TOOL_LDFLAGS)
+
+$(TOOLS_DIR)/%: tools/%.c
+	@mkdir -p $(TOOLS_DIR)
+	$(CC) $(TOOL_CFLAGS) -o $@ $<
+
+$(TOOLS_DIR)/eglpresent: tools/eglpresent.c
+	@mkdir -p $(TOOLS_DIR)
+	$(CC) $(TOOL_CFLAGS) $(CFLAGS) -o $@ $< $(LDFLAGS)
 
 # A libretro core that is not an emulator, so Diatom can be exercised end to end
 # with no third-party binary present. See test/stubcore.c.
