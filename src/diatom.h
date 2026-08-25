@@ -64,6 +64,11 @@ bool diatom_core_open(diatom_core *c, const char *path);
 bool diatom_core_start(diatom_core *c, const char *rom_path);
 void diatom_core_stop(diatom_core *c);
 
+/* Open once and keep - ADR-0006. Returns the same core for the same path, so a
+ * repeat launch skips dlopen and retro_init. Never unloaded. */
+diatom_core *diatom_core_resident(const char *path);
+int          diatom_core_resident_count(void);
+
 /* env.c */
 void diatom_env_bind(diatom_core *c, diatom_policy *p, diatom_port_caps *caps);
 bool diatom_env_geometry_changed(void);   /* consumes the flag */
@@ -73,6 +78,38 @@ bool diatom_env_geometry_changed(void);   /* consumes the flag */
  * for keys that are normally the core's but are currently part of a host
  * chord. */
 void diatom_env_suppress(uint32_t mask);
+
+/* proto.c - the launcher protocol (ADR-0009). One Unix socket, line-based,
+ * tab-separated key=value. Diatom is a component the launcher drives; this is
+ * the only place it talks back.
+ *
+ * The governing rule is about the DISPLAY: ERROR means the game never started,
+ * EXIT means it ran and stopped. A launcher that hears RUNNING stops drawing. */
+typedef enum {
+	DIATOM_MSG_NONE = 0,
+	DIATOM_MSG_RUN,
+	DIATOM_MSG_STOP,
+	DIATOM_MSG_QUIT,
+	DIATOM_MSG_HANGUP      /* launcher went away; the game keeps running */
+} diatom_msg_kind;
+
+typedef struct {
+	diatom_msg_kind kind;
+	char core[1024];
+	char rom[1024];
+	char tag[64];
+	char slot[64];
+} diatom_msg;
+
+bool diatom_proto_listen(const char *path);
+void diatom_proto_close(void);
+bool diatom_proto_active(void);
+bool diatom_proto_connected(void);
+void diatom_proto_send(const char *fmt, ...);
+
+/* timeout_ms < 0 blocks. `running` is reported to a launcher that connects
+ * mid-game, so a restarted launcher does not draw over live output. */
+diatom_msg_kind diatom_proto_poll(diatom_msg *out, int timeout_ms, bool running);
 
 /* save.c - persistence. Host-side entirely: the port deals in pixels, samples,
  * buttons and time, and a file is none of those.

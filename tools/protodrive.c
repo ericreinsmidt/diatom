@@ -1,0 +1,132 @@
+/* A stand-in launcher, driving Diatom over the ADR-0009 socket.
+ *
+ * Exists to measure the number the whole resident architecture rests on: how
+ * long from sending RUN to receiving RUNNING, when the process is already up
+ * and the core is already resident. That is what a player experiences as
+ * "launch time" once PlayOS drives Diatom rather than spawning it.
+ *
+ * Also exercises the protocol itself - READY on connect, the RUNNING/EXIT
+ * display handover, STOP mid-game - so a protocol regression fails here rather
+ * than on a device with a launcher attached.
+ *
+ * An instrument, not Diatom code. See tools/README.md.
+ *
+ *   protodrive <socket> <seconds-per-game> <core>|<rom> [<core>|<rom> ...]
+ */
+#define _GNU_SOURCE
+#include <errno.h>
+#include <stdint.h>
+#include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <time.h>
+#include <unistd.h>
+
+static uint64_t us(void)
+{
+	struct timespec t;
+	clock_gettime(CLOCK_MONOTONIC, &t);
+	return (uint64_t)t.tv_sec * 1000000ull + t.tv_nsec / 1000;
+}
+
+static int fd = -1;
+static char rbuf[4096];
+static size_t rused;
+
+/* Blocking read of one newline-terminated line. */
+static char *rline(void)
+{
+	static char out[4096];
+	for (;;) {
+		char *nl = memchr(rbuf, '\n', rused);
+		ssize_t n;
+		if (nl) {
+			size_t len = (size_t)(nl - rbuf);
+			memcpy(out, rbuf, len);
+			out[len] = '\0';
+			memmove(rbuf, nl + 1, rused - len - 1);
+			rused -= len + 1;
+			return out;
+		}
+		n = read(fd, rbuf + rused, sizeof rbuf - rused - 1);
+		if (n <= 0) return NULL;
+		rused += (size_t)n;
+	}
+}
+
+static void wline(const char *fmt, ...)
+{
+	char b[2048];
+	va_list ap;
+	int n;
+	va_start(ap, fmt); n = vsnprintf(b, sizeof b - 2, fmt, ap); va_end(ap);
+	b[n++] = '\n';
+	if (write(fd, b, (size_t)n) < 0) perror("write");
+}
+
+int main(int argc, char **argv)
+{
+	struct sockaddr_un a;
+	int secs, i, attempt;
+
+	if (argc < 4) {
+		fprintf(stderr, "usage: protodrive <socket> <secs> <core>|<rom> ...\n");
+		return 1;
+	}
+	secs = atoi(argv[2]);
+
+	memset(&a, 0, sizeof a);
+	a.sun_family = AF_UNIX;
+	snprintf(a.sun_path, sizeof a.sun_path, "%s", argv[1]);
+
+	for (attempt = 0; attempt < 60; attempt++) {
+		fd = socket(AF_UNIX, SOCK_STREAM, 0);
+		if (connect(fd, (struct sockaddr *)&a, sizeof a) == 0) break;
+		close(fd); fd = -1;
+		usleep(200000);
+	}
+	if (fd < 0) { fprintf(stderr, "protodrive: cannot connect to %s\n", argv[1]); return 2; }
+	printf("<- %s\n", rline());
+
+	for (i = 3; i < argc; i++) {
+		char spec[2048], *bar, *rom;
+		uint64_t t0, t_running = 0;
+		const char *base;
+
+		snprintf(spec, sizeof spec, "%s", argv[i]);
+		bar = strchr(spec, '|');
+		if (!bar) { fprintf(stderr, "bad spec: %s\n", argv[i]); continue; }
+		*bar = '\0';
+		rom = bar + 1;
+		base = strrchr(rom, '/');
+		base = base ? base + 1 : rom;
+
+		t0 = us();
+		wline("RUN\tcore=%s\trom=%s", spec, rom);
+
+		for (;;) {
+			char *l = rline();
+			if (!l) { fprintf(stderr, "connection closed\n"); return 3; }
+			if (!strncmp(l, "RUNNING", 7)) {
+				t_running = us() - t0;
+				printf("  RUN -> RUNNING %8.1f ms   %.40s\n",
+				       t_running / 1000.0, base);
+				sleep(secs);
+				wline("STOP");
+			} else if (!strncmp(l, "EXIT", 4)) {
+				printf("                              %s\n", l);
+				break;
+			} else if (!strncmp(l, "ERROR", 5)) {
+				printf("  %s\n", l);
+				break;
+			}
+		}
+	}
+	wline("QUIT");
+	printf("sent QUIT\n");
+	close(fd);
+	return 0;
+}

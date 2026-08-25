@@ -18,7 +18,7 @@ LDFLAGS +=
 # Objects live under build/$(PORT)/ so host and cross builds cannot collide:
 # a leftover x86 main.o in a device link fails late and confusingly.
 BUILD := build/$(PORT)
-SRC   := src/main.c src/core.c src/env.c src/scale.c src/audio.c src/save.c port/$(PORT).c
+SRC   := src/main.c src/core.c src/env.c src/scale.c src/audio.c src/save.c src/proto.c port/$(PORT).c
 OBJ   := $(SRC:%.c=$(BUILD)/%.o)
 BIN   := $(BUILD)/diatom
 
@@ -93,7 +93,7 @@ endif
 # both, and their results only mean anything on the hardware they measure.
 #
 #   tools/brick-make.sh probes
-PROBE_SRC := savprobe wprobe sigprobe pantest holdfb warmprobe
+PROBE_SRC := savprobe wprobe sigprobe pantest holdfb warmprobe protodrive
 PROBES    := $(addprefix $(TOOLS_DIR)/,$(PROBE_SRC)) $(TOOLS_DIR)/eglpresent
 
 probes: $(PROBES)

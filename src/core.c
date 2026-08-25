@@ -62,6 +62,46 @@ bool diatom_core_open(diatom_core *c, const char *path)
 	return true;
 }
 
+/* Resident cores - ADR-0006.
+ *
+ * Diatom never calls dlclose, so a core opened once is opened forever. This
+ * registry is what makes that true across games: the second RUN naming the same
+ * core skips dlopen and retro_init entirely, which measured 6 ms and 43 ms
+ * respectively for FCEUmm and is most of what a warm launch saves.
+ *
+ * Bounded rather than dynamic because the bound is the point: six cores mapped
+ * plus one running measured 15.0 MB against 975 MB of RAM, and a registry that
+ * grows without limit would quietly turn a measured decision into an unmeasured
+ * one.
+ */
+#define MAX_RESIDENT 8
+static diatom_core g_resident[MAX_RESIDENT];
+static char        g_resident_path[MAX_RESIDENT][1024];
+static int         g_nresident;
+
+diatom_core *diatom_core_resident(const char *path)
+{
+	int i;
+
+	if (!path || !*path) return NULL;
+	for (i = 0; i < g_nresident; i++)
+		if (!strcmp(g_resident_path[i], path))
+			return &g_resident[i];
+
+	if (g_nresident >= MAX_RESIDENT) {
+		fprintf(stderr, "diatom: core registry full (%d)\n", MAX_RESIDENT);
+		return NULL;
+	}
+	if (!diatom_core_open(&g_resident[g_nresident], path)) return NULL;
+
+	/* The caller's path buffer is reused between messages, so own a copy. */
+	snprintf(g_resident_path[g_nresident], sizeof g_resident_path[0], "%s", path);
+	g_resident[g_nresident].path = g_resident_path[g_nresident];
+	return &g_resident[g_nresident++];
+}
+
+int diatom_core_resident_count(void) { return g_nresident; }
+
 /* Cores that set need_fullpath want a path and read the file themselves;
  * the rest want the bytes. Getting this backwards is a silent load failure. */
 static bool read_file(const char *path, void **out, size_t *len)

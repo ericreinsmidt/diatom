@@ -26,7 +26,7 @@ static int         g_frame_w, g_frame_h;
 static size_t      g_frame_pitch;
 static bool        g_frame_fresh;
 
-static diatom_core      g_core;
+static diatom_core     *g_core;   /* resident, never unloaded - ADR-0006 */
 static diatom_policy    g_policy;
 static diatom_port_caps g_caps;
 static diatom_rect      g_dst;   /* locked at load - ADR-0011 */
@@ -37,6 +37,7 @@ static diatom_rect      g_dst;   /* locked at load - ADR-0011 */
  * the process dies on power-off, and one frame of retro_run is ~10 ms of that
  * budget - a 1% price for not calling malloc or open from a handler. */
 static volatile sig_atomic_t g_terminate;
+static bool g_quit_requested;   /* launcher said QUIT */
 
 static void on_terminate(int sig) { (void)sig; g_terminate = 1; }
 
@@ -91,6 +92,7 @@ static void usage(void)
 		"              [--display <mode>] [--filter nearest|sharp]\n"
 		"              [--load-state <file>] [--state-on-exit <file>]\n"
 		"              [--frames <n>] [--shot <file.bmp>]\n"
+		"              [--socket <path>]   launcher protocol, ADR-0009\n"
 		"\nSRAM is automatic: read at load, written when it changes, flushed on\n"
 		"exit and on SIGTERM. Save states take paths, never slot numbers - slots\n"
 		"belong to the launcher (ADR-0016).\n"
@@ -172,94 +174,73 @@ static int display_chord(uint32_t buttons, uint32_t prev)
 	return 0;
 }
 
-int main(int argc, char **argv)
+/* One game, start to finish. Extracted so the protocol loop (ADR-0009) can run
+ * it repeatedly in a process that never exits - which is what makes a warm
+ * launch ~35 ms instead of ~700 ms, measured. Standalone mode calls it once.
+ *
+ * Returns 0 on a clean run, or a non-zero code that main turns into an exit
+ * status or an ERROR message depending on how Diatom was started. */
+typedef struct {
+	const char   *core, *rom, *shot, *state_load, *state_exit;
+	long          limit;
+	int           mode;
+	diatom_filter filter;
+} diatom_session;
+
+static int run_session(const diatom_session *sn)
 {
-	const char *core_path = NULL, *rom_path = NULL, *shot_path = NULL;
-	/* ADR-0014: stretch by default, judged on the panel. A handheld's screen
-	 * is its whole interface, and full use of it beat both the letterbox and
-	 * the crop. nearest because sharp earned nothing visible at these factors
-	 * and is the only thing that has made this loop miss a frame. */
-	const char *display = "stretch", *filter = "nearest";
-	const char *state_load = NULL, *state_exit = NULL;
 	struct retro_system_av_info av;
 	struct retro_system_info si;
 	double   frame_us, next_us;
 	uint64_t t_start;
 	uint32_t buttons = 0, prev_buttons = 0;
-	long limit = 0, frames = 0, geom_changes = 0, resyncs = 0;
+	long frames = 0, geom_changes = 0, resyncs = 0;
 	size_t q_min = (size_t)-1, q_max = 0;
-	diatom_filter start_filter;
-	int i, start_mode = -1;
+	bool stop = false;
+	int i;
 
-	for (i = 1; i < argc; i++) {
-		if (!strcmp(argv[i], "--core") && i + 1 < argc) core_path = argv[++i];
-		else if (!strcmp(argv[i], "--rom") && i + 1 < argc) rom_path = argv[++i];
-		else if (!strcmp(argv[i], "--system") && i + 1 < argc) g_policy.system_dir = argv[++i];
-		else if (!strcmp(argv[i], "--save") && i + 1 < argc) g_policy.save_dir = argv[++i];
-		else if (!strcmp(argv[i], "--frames") && i + 1 < argc) limit = strtol(argv[++i], NULL, 10);
-		else if (!strcmp(argv[i], "--shot") && i + 1 < argc) shot_path = argv[++i];
-		else if (!strcmp(argv[i], "--display") && i + 1 < argc) display = argv[++i];
-		else if (!strcmp(argv[i], "--filter") && i + 1 < argc) filter = argv[++i];
-		else if (!strcmp(argv[i], "--load-state") && i + 1 < argc) state_load = argv[++i];
-		else if (!strcmp(argv[i], "--state-on-exit") && i + 1 < argc) state_exit = argv[++i];
-		else { usage(); return 1; }
+	/* Per-game state that must not carry over from the previous session. */
+	memset(g_stat, 0, sizeof g_stat);
+	g_frame_w = g_frame_h = 0;
+	g_frame_pitch = 0;
+	g_frame_fresh = false;
+
+	g_core = diatom_core_resident(sn->core);
+	if (!g_core) {
+		diatom_proto_send("ERROR\tcode=core_missing\tmsg=%s", sn->core);
+		return 3;
 	}
-	if (!core_path) { usage(); return 1; }
+	diatom_env_bind(g_core, &g_policy, &g_caps);
 
-	for (i = 0; i < diatom_mode_count; i++)
-		if (!strcmp(display, diatom_modes[i].name)) start_mode = i;
-	if (start_mode < 0) {
-		fprintf(stderr, "diatom: unknown display mode '%s'\n", display);
-		usage();
-		return 1;
-	}
-	if (!strcmp(filter, "sharp"))        start_filter = DIATOM_FILTER_SHARP;
-	else if (!strcmp(filter, "nearest")) start_filter = DIATOM_FILTER_NEAREST;
-	else {
-		fprintf(stderr, "diatom: unknown filter '%s'\n", filter);
-		usage();
-		return 1;
-	}
-
-	if (!g_policy.system_dir) g_policy.system_dir = ".";
-	if (!g_policy.save_dir)   g_policy.save_dir   = ".";
-	g_policy.pixfmt = DIATOM_PIX_RGB565;   /* libretro's default is 0RGB1555,
-	                                          which Diatom refuses; every core
-	                                          measured picked RGB565 anyway */
-
-	if (!diatom_port_init(&g_caps)) {
-		fprintf(stderr, "diatom: port init failed\n");
-		return 2;
-	}
-
-	if (!diatom_core_open(&g_core, core_path)) return 3;
-	diatom_env_bind(&g_core, &g_policy, &g_caps);
-
-	g_core.get_system_info(&si);
+	g_core->get_system_info(&si);
 	printf("diatom: %s %s\n",
 	       si.library_name ? si.library_name : "?",
 	       si.library_version ? si.library_version : "?");
 
-	if (!rom_path && !g_policy.supports_no_game) {
+	if (!sn->rom && !g_policy.supports_no_game) {
 		fprintf(stderr, "diatom: this core needs content; pass --rom\n");
+		diatom_proto_send("ERROR\tcode=rom_unreadable\tmsg=core needs content");
 		return 4;
 	}
-	if (!diatom_core_start(&g_core, rom_path)) return 4;
+	if (!diatom_core_start(g_core, sn->rom)) {
+		diatom_proto_send("ERROR\tcode=rom_unreadable\tmsg=core refused the rom");
+		return 4;
+	}
 
 	/* Genesis 3-button vs 6-button is a correctness issue, not a preference -
 	 * some early games misbehave with a 6-button pad attached, which is why the
 	 * real pad has a Mode switch. Digital-only (ADR-0003) removes axes, not
 	 * device types. */
-	g_core.set_controller_port_device(0, RETRO_DEVICE_JOYPAD);
+	g_core->set_controller_port_device(0, RETRO_DEVICE_JOYPAD);
 
 	/* SRAM first: it is the game's own data and is not optional. A state, if
 	 * the launcher asked for one, is layered on top - and a state that fails
 	 * to load is not an error, it just means the game starts normally. That
 	 * fallback is what makes resume-by-default safe across a core update. */
-	diatom_save_init(&g_core, g_policy.save_dir, rom_path);
-	if (state_load && !diatom_state_load(&g_core, state_load))
+	diatom_save_init(g_core, g_policy.save_dir, sn->rom);
+	if (sn->state_load && !diatom_state_load(g_core, sn->state_load))
 		printf("diatom: no usable state at %s; starting the game normally\n",
-		       state_load);
+		       sn->state_load);
 
 	{
 		struct sigaction sa;
@@ -270,7 +251,7 @@ int main(int argc, char **argv)
 		sigaction(SIGHUP,  &sa, NULL);
 	}
 
-	g_core.get_system_av_info(&av);
+	g_core->get_system_av_info(&av);
 	printf("diatom: %ux%u (max %ux%u) aspect %.4f, %.4f fps, %.0f Hz -> %d Hz\n",
 	       av.geometry.base_width, av.geometry.base_height,
 	       av.geometry.max_width, av.geometry.max_height,
@@ -296,7 +277,7 @@ int main(int argc, char **argv)
 	g_base_w      = (int)av.geometry.base_width;
 	g_base_h      = (int)av.geometry.base_height;
 	g_base_aspect = (double)av.geometry.aspect_ratio;
-	apply_display(start_mode, start_filter);
+	apply_display(sn->mode, sn->filter);
 
 	/* Pace against a monotonic clock at the core's own rate, on an ABSOLUTE
 	 * schedule kept in floating point.
@@ -312,6 +293,11 @@ int main(int argc, char **argv)
 	 * because no panel and no core will ever agree on a rate. */
 	frame_us = 1000000.0 / (av.timing.fps > 0 ? av.timing.fps : 60.0);
 
+	/* The display handover, and the reason ADR-0009 separates ERROR from EXIT:
+	 * from here the launcher must stop drawing. Announced before the warmup,
+	 * because the warmup already puts frames on the panel. */
+	diatom_proto_send("RUNNING");
+
 	/* Warm up before starting the clock. The first frames create the texture,
 	 * fault in code paths and prime the audio device; measured, they overrun the
 	 * frame budget badly enough to trip a resync every single run. Timing them
@@ -321,7 +307,7 @@ int main(int argc, char **argv)
 		uint64_t w0 = diatom_port_now_us();
 		int w;
 		for (w = 0; w < 3; w++) {
-			g_core.run();
+			g_core->run();
 			diatom_port_present(g_frame, g_frame_w, g_frame_h, g_frame_pitch,
 			                    g_policy.pixfmt, g_dst,
 			                    g_filter);
@@ -333,12 +319,12 @@ int main(int argc, char **argv)
 	t_start = diatom_port_now_us();
 	next_us = (double)t_start;
 
-	while (!diatom_port_should_quit() && !g_terminate &&
-	       (limit <= 0 || frames < limit)) {
+	while (!diatom_port_should_quit() && !g_terminate && !stop &&
+	       (sn->limit <= 0 || frames < sn->limit)) {
 		uint64_t now;
 
 		g_frame_fresh = false;
-		g_core.run();
+		g_core->run();
 		frames++;
 
 		/* Noted, not acted on: the rect is locked (ADR-0011). The port scales
@@ -359,6 +345,17 @@ int main(int argc, char **argv)
 		/* Display switching lives after present, so the timing above covers
 		 * exactly one combination's work. */
 		diatom_save_tick();
+
+		if (diatom_proto_active()) {
+			diatom_msg m;
+			switch (diatom_proto_poll(&m, 0, true)) {
+			case DIATOM_MSG_STOP: stop = true; break;
+			case DIATOM_MSG_QUIT: stop = true; g_quit_requested = true; break;
+			/* HANGUP is deliberately not a stop. ADR-0008 exists so a
+			 * launcher that died cannot take a running game with it. */
+			default: break;
+			}
+		}
 
 		buttons = diatom_port_input_state();
 		display_chord(buttons, prev_buttons);
@@ -404,14 +401,14 @@ int main(int argc, char **argv)
 	/* Both paths, and in this order: the game's own save first, because losing
 	 * it is a defect, then the state, which is a convenience. */
 	diatom_save_shutdown();
-	if (state_exit) diatom_state_save(&g_core, state_exit);
+	if (sn->state_exit) diatom_state_save(g_core, sn->state_exit);
 
 	{
 		uint64_t t_end = diatom_port_now_us();
 
-		if (shot_path)
-			printf("diatom: capture %s: %s\n", shot_path,
-			       diatom_port_capture(shot_path) ? "ok" : "FAILED");
+		if (sn->shot)
+			printf("diatom: capture %s: %s\n", sn->shot,
+			       diatom_port_capture(sn->shot) ? "ok" : "FAILED");
 
 		double secs = (t_end - t_start) / 1000000.0;
 		printf("diatom: %ld frames in %.2fs = %.2f fps (target %.4f)\n",
@@ -432,8 +429,109 @@ int main(int argc, char **argv)
 		       diatom_audio_ratio_drift() * 100.0, 0.5);
 	}
 
-	diatom_core_stop(&g_core);
+	diatom_core_stop(g_core);
 	/* No dlclose. Ever. ADR-0006. */
+
+	/* The game ran and stopped, which is EXIT rather than ERROR whatever the
+	 * reason. The launcher may take the display back now. */
+	diatom_proto_send("EXIT\treason=%s", g_terminate ? "user" : "user");
+	return 0;
+}
+
+int main(int argc, char **argv)
+{
+	const char *core_path = NULL, *rom_path = NULL, *shot_path = NULL;
+	/* ADR-0014: stretch by default, judged on the panel. A handheld's screen
+	 * is its whole interface, and full use of it beat both the letterbox and
+	 * the crop. nearest because sharp earned nothing visible at these factors
+	 * and is the only thing that has made this loop miss a frame. */
+	const char *display = "stretch", *filter = "nearest";
+	const char *state_load = NULL, *state_exit = NULL;
+	const char *sock = getenv("DIATOM_SOCKET");
+	diatom_filter start_filter;
+	long limit = 0;
+	int i, start_mode = -1;
+
+	for (i = 1; i < argc; i++) {
+		if (!strcmp(argv[i], "--core") && i + 1 < argc) core_path = argv[++i];
+		else if (!strcmp(argv[i], "--rom") && i + 1 < argc) rom_path = argv[++i];
+		else if (!strcmp(argv[i], "--system") && i + 1 < argc) g_policy.system_dir = argv[++i];
+		else if (!strcmp(argv[i], "--save") && i + 1 < argc) g_policy.save_dir = argv[++i];
+		else if (!strcmp(argv[i], "--frames") && i + 1 < argc) limit = strtol(argv[++i], NULL, 10);
+		else if (!strcmp(argv[i], "--shot") && i + 1 < argc) shot_path = argv[++i];
+		else if (!strcmp(argv[i], "--display") && i + 1 < argc) display = argv[++i];
+		else if (!strcmp(argv[i], "--filter") && i + 1 < argc) filter = argv[++i];
+		else if (!strcmp(argv[i], "--load-state") && i + 1 < argc) state_load = argv[++i];
+		else if (!strcmp(argv[i], "--state-on-exit") && i + 1 < argc) state_exit = argv[++i];
+		else if (!strcmp(argv[i], "--socket") && i + 1 < argc) sock = argv[++i];
+		else { usage(); return 1; }
+	}
+	/* A core is required standalone, but under the protocol it arrives with
+	 * each RUN, so its absence is not an error at startup. */
+	if (!core_path && !sock) { usage(); return 1; }
+
+	for (i = 0; i < diatom_mode_count; i++)
+		if (!strcmp(display, diatom_modes[i].name)) start_mode = i;
+	if (start_mode < 0) {
+		fprintf(stderr, "diatom: unknown display mode '%s'\n", display);
+		usage();
+		return 1;
+	}
+	if (!strcmp(filter, "sharp"))        start_filter = DIATOM_FILTER_SHARP;
+	else if (!strcmp(filter, "nearest")) start_filter = DIATOM_FILTER_NEAREST;
+	else {
+		fprintf(stderr, "diatom: unknown filter '%s'\n", filter);
+		usage();
+		return 1;
+	}
+
+	if (!g_policy.system_dir) g_policy.system_dir = ".";
+	if (!g_policy.save_dir)   g_policy.save_dir   = ".";
+	g_policy.pixfmt = DIATOM_PIX_RGB565;   /* libretro's default is 0RGB1555,
+	                                          which Diatom refuses; every core
+	                                          measured picked RGB565 anyway */
+
+	if (!diatom_port_init(&g_caps)) {
+		fprintf(stderr, "diatom: port init failed\n");
+		return 2;
+	}
+
+	/* Two modes, and standalone is the primary one - designing for a program
+	 * that stands alone is a stricter test than designing for one embedder.
+	 *
+	 * The socket mode is what makes launches fast: the process outlives the
+	 * game, so SDL init and every core dlopen are paid once at boot rather
+	 * than per launch. Measured: ~35 ms warm against 625-750 ms cold. */
+	if (sock) {
+		if (!diatom_proto_listen(sock)) return 5;
+
+		while (!g_quit_requested && !g_terminate) {
+			diatom_msg m;
+			diatom_session sn;
+
+			/* Idle: block. Nothing is on screen, so there is nothing to
+			 * pace and no reason to spin. */
+			if (diatom_proto_poll(&m, -1, false) != DIATOM_MSG_RUN) continue;
+			if (!m.core[0]) {
+				diatom_proto_send("ERROR\tcode=core_missing\tmsg=no core given");
+				continue;
+			}
+
+			memset(&sn, 0, sizeof sn);
+			sn.core   = m.core;
+			sn.rom    = m.rom[0] ? m.rom : NULL;
+			sn.mode   = start_mode;
+			sn.filter = start_filter;
+			run_session(&sn);   /* its own ERROR/EXIT is the report */
+		}
+		diatom_proto_close();
+	} else {
+		diatom_session sn = { core_path, rom_path, shot_path,
+		                      state_load, state_exit,
+		                      limit, start_mode, start_filter };
+		int rc = run_session(&sn);
+		if (rc) return rc;
+	}
 	diatom_port_shutdown();
 	free(g_frame);
 	return 0;

@@ -57,6 +57,7 @@ cannot be re-checked, and that is the drift this project exists to avoid.
 | `savprobe.c` | What does each core expose for saving - SRAM, RTC, state size - and what does `retro_serialize` cost? | [ADR-0016](../docs/decisions/0016-saves-and-save-states.md) |
 | `wprobe.c` | What does an atomic save write (write, fsync, rename) cost on the device's card? | [ADR-0016](../docs/decisions/0016-saves-and-save-states.md) |
 | `sigprobe.c` | On power-off, does a running process get a signal, and how long before it dies? | [ADR-0016](../docs/decisions/0016-saves-and-save-states.md) |
+| `protodrive.c` | A stand-in launcher: drives Diatom over the ADR-0009 socket and times RUN to RUNNING. Also exercises READY, STOP and QUIT, so a protocol regression fails here rather than on a device with a real launcher attached. | [protocol log](../docs/discussion/2026-08-25-protocol.md) |
 | `warmprobe.c` | What does a launch cost with the process up and the core already resident? | [warm-launch spike](../docs/spikes/2026-08-25-warm-launch.md) |
 | `pantest.c` | What does `FBIOPAN_DISPLAY` cost, and does anything change it? | [ADR-0013](../docs/decisions/0013-brick-fbdev-flip-thread.md) |
 | `eglpresent.c` | Stand-in for the launcher: presents through the device's mali/EGL driver. | [handoff spike](../docs/spikes/2026-08-24-display-handoff.md) |
