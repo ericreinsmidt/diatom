@@ -229,6 +229,7 @@ static bool g_audio_warmup;
 
 void diatom_on_audio_batch_store(const int16_t *data, size_t frames)
 {
+	diatom_audio_note_input(data, frames);
 	if (g_audio_warmup) return;
 	diatom_audio_push(data, frames);
 }
@@ -740,6 +741,15 @@ static int run_session_inner(const diatom_session *sn)
 		}
 		printf("diatom: audio dropped %llu frame(s)\n",
 		       (unsigned long long)diatom_audio_dropped());
+		printf("diatom: audio IN  peak %d rms %.0f, %llu of %llu non-zero\n",
+		       diatom_audio_in_peak(), diatom_audio_in_rms(),
+		       (unsigned long long)diatom_audio_in_nonzero(),
+		       (unsigned long long)diatom_audio_in_samples());
+		printf("diatom: audio OUT peak %d rms %.0f (%.1f%% fs), "
+		       "%llu of %llu samples non-zero\n",
+		       diatom_audio_peak(), diatom_audio_rms(), diatom_audio_peak() * 100.0 / 32767.0,
+		       (unsigned long long)diatom_audio_nonzero(),
+		       (unsigned long long)diatom_audio_samples());
 		printf("diatom: audio queued min %zu max %zu final %zu, target %d, capacity %d\n",
 		       q_min == (size_t)-1 ? 0 : q_min, q_max,
 		       diatom_port_audio_queued(),

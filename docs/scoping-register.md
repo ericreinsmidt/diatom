@@ -627,6 +627,12 @@ Two levers the spike discovered:
       (~26 ms once per launch, down from 86 ms). Priming fills to half of 4096,
       leaving ~2 frames of headroom; a quarter would leave 3 and trade against
       underrun. A tuning question that wants someone listening, not a number.
+- [x] **[OPEN]** **Output gain on the Brick, two traps.** `digital volume`
+      (0-63) is the speaker level and is **INVERTED** - lower is louder - while
+      the driver advertises `step=+1.16dB`, the opposite. `Headphone Volume` is
+      not a speaker level: raising it routes to the jack and mutes the speakers,
+      which is why PlayOS zeroes it. Volume is firmware's job (§8), so Diatom
+      sets neither; `DIATOM_GAIN` in `brick-run.sh` is for testing only.
 - [ ] **[OPEN]** `SET_AUDIO_BUFFER_STATUS_CALLBACK` (cmd 62, offered by 3 of 6
       cores) is **not implemented** - the core-side half of DRC, letting a core
       throttle itself on buffer occupancy. Host-side DRC works without it, so

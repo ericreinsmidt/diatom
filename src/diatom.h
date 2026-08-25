@@ -197,4 +197,16 @@ double diatom_audio_ratio_drift(void);     /* current DRC correction, for report
  * keeping up - the buffer is hitting a wall rather than being steered. */
 uint64_t diatom_audio_dropped(void);
 
+/* Peak absolute sample, and how many of the samples written were non-zero.
+ * The first thing to check when nothing is audible. */
+void     diatom_audio_note_input(const int16_t *f, size_t n);
+int      diatom_audio_in_peak(void);
+uint64_t diatom_audio_in_nonzero(void);
+uint64_t diatom_audio_in_samples(void);
+int      diatom_audio_peak(void);
+double   diatom_audio_rms(void);
+double   diatom_audio_in_rms(void);
+uint64_t diatom_audio_nonzero(void);
+uint64_t diatom_audio_samples(void);
+
 #endif /* DIATOM_H */

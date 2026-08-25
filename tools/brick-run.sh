@@ -6,7 +6,7 @@
 #   tools/brick-run.sh --display aspect         a specific starting mode
 #   tools/brick-run.sh --core X.so --rom game   anything already staged
 #   tools/brick-run.sh --exec '<shell>'         any command, same guard
-#   DIATOM_GAIN=6 tools/brick-run.sh ...        set output gain (0-7, 6dB/step)
+#   DIATOM_GAIN=15 tools/brick-run.sh ...       volume; INVERTED, lower is LOUDER (0-63)
 #
 # It REFUSES to start if anything is already presenting. Two presenters wedge
 # the framebuffer in-kernel and cost a power cycle - measured twice now.
@@ -54,9 +54,18 @@ if [ "${1:-}" = "--exec" ]; then
     printf '%s\n' "$*" > "$tmp"
     adb push "$tmp" "$STAGE/exec.sh" >/dev/null
     rm -f "$tmp"
-    exec adb shell "$STAGE/run.sh --exec-file $STAGE/exec.sh"
+    exec adb shell "DIATOM_GAIN='${DIATOM_GAIN:-}' $STAGE/run.sh --exec-file $STAGE/exec.sh"
 fi
 
 # The on-device half does the freeze, run and restore, so an interrupted adb
 # connection cannot leave the supervisor stopped.
-exec adb shell "$STAGE/run.sh $*"
+# Quote every argument. `$*` flattened them into a raw shell string that the
+# device shell then re-parsed, so any ROM whose name contains parentheses -
+# which is nearly every No-Intro and Redump dump - died with
+# `syntax error: unexpected "("` before anything ran. Latent until 2026-08-25
+# because every prior test happened to go through --exec, which ships a file.
+q=""
+for a in "$@"; do
+    q="$q '$(printf '%s' "$a" | sed "s/'/'\\\\''/g")'"
+done
+exec adb shell "DIATOM_GAIN='${DIATOM_GAIN:-}' $STAGE/run.sh$q"

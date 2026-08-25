@@ -40,9 +40,22 @@ fi
 # actually attenuating. `digital volume` sat at 37 of 63, which is -31.3 dB,
 # while `DAC volume` and `Headphone` both read as set. Reading one control at a
 # time hides that; the whole chain has to be set together or not at all.
+# DIATOM_GAIN drives `digital volume`, and that control is **INVERTED**:
+# it is an ATTENUATION register, so a LOWER number is LOUDER.
+#
+#   0  = loudest      15 = a normal listening level      63 = silent
+#
+# Proven by diffing tinymix across a volume-up press in PlayOS on 2026-08-25:
+# the value went 37 -> 15 when the user turned it UP. The driver's own metadata
+# claims `dBscale-min=-74.24dB, step=+1.16dB`, i.e. that higher is louder. That
+# metadata is wrong, and trusting it cost two hours: every "louder" setting made
+# it quieter, and 63 - set as "maximum" - is silence.
+#
+# `Headphone Volume` stays 0 and is not a speaker level: raising it routes to
+# the headphone JACK and mutes the speakers. PlayOS zeroes it deliberately.
 if [ -n "${DIATOM_GAIN:-}" ]; then
-    amixer sset 'digital volume' 63      >/dev/null 2>&1   # 0-63,  0 dB at max
-    amixer sset 'Headphone' "${DIATOM_GAIN}" >/dev/null 2>&1  # 0-7, 6 dB a step
+    amixer sset 'Headphone' 0            >/dev/null 2>&1
+    amixer sset 'digital volume' "${DIATOM_GAIN}" >/dev/null 2>&1
     amixer sset 'DAC volume' 200         >/dev/null 2>&1
     amixer sset 'Soft Volume Master' 255 >/dev/null 2>&1
 fi

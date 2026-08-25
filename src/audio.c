@@ -15,6 +15,7 @@
  */
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 #include "diatom.h"
 
@@ -38,11 +39,60 @@ static uint64_t g_dropped;      /* frames the port would not take */
 /* Every write goes through here so a refusal is counted exactly once. Silent
  * drops are how the overshoot went unnoticed: the queue depth was the only
  * evidence, and the queue was permitted to exceed its own stated capacity. */
+/* Peak absolute sample seen this session, and how many were non-zero. Added
+ * 2026-08-25 after two hours spent on why Diatom was inaudible while minarch
+ * was fine on the same codec with byte-identical PCM parameters. Everything
+ * downstream of this function is shared with the working case, so the only
+ * thing that can differ is the data - and nothing measured the data. */
+static int      g_peak;
+static uint64_t g_nonzero, g_total;
+static double   g_sq;
+
 static void push(const int16_t *f, size_t n)
 {
-	size_t took = diatom_port_audio_write(f, n);
+	size_t i, took;
+
+	for (i = 0; i < n * 2; i++) {
+		int v = f[i] < 0 ? -f[i] : f[i];
+		if (v > g_peak) g_peak = v;
+		if (v) g_nonzero++;
+		g_sq += (double)v * v;
+	}
+	g_total += (uint64_t)n * 2;
+
+	took = diatom_port_audio_write(f, n);
 	if (took < n) g_dropped += (uint64_t)(n - took);
 }
+
+/* The same measurement on the INPUT side, before any resampling, so a silent
+ * output can be attributed to the core or to us without guessing. */
+static int      g_in_peak;
+static uint64_t g_in_nonzero, g_in_total;
+static double   g_in_sq;
+
+void diatom_audio_note_input(const int16_t *f, size_t n)
+{
+	size_t i;
+	for (i = 0; i < n * 2; i++) {
+		int v = f[i] < 0 ? -f[i] : f[i];
+		if (v > g_in_peak) g_in_peak = v;
+		if (v) g_in_nonzero++;
+		g_in_sq += (double)v * v;
+	}
+	g_in_total += (uint64_t)n * 2;
+}
+
+double   diatom_audio_in_rms(void)
+{ return g_in_total ? sqrt(g_in_sq / (double)g_in_total) : 0.0; }
+int      diatom_audio_in_peak(void)    { return g_in_peak; }
+uint64_t diatom_audio_in_nonzero(void) { return g_in_nonzero; }
+uint64_t diatom_audio_in_samples(void) { return g_in_total; }
+
+double   diatom_audio_rms(void)
+{ return g_total ? sqrt(g_sq / (double)g_total) : 0.0; }
+int      diatom_audio_peak(void)    { return g_peak; }
+uint64_t diatom_audio_nonzero(void) { return g_nonzero; }
+uint64_t diatom_audio_samples(void) { return g_total; }
 
 uint64_t diatom_audio_dropped(void) { return g_dropped; }
 
@@ -56,6 +106,13 @@ void diatom_audio_configure(double src_rate, int dst_rate, int capacity_frames)
 	g_capacity   = capacity_frames;
 	g_integral   = 0.0;
 	g_dropped    = 0;
+	g_peak       = 0;
+	g_nonzero    = 0;
+	g_total      = 0;
+	g_in_peak    = 0;
+	g_in_nonzero = 0;
+	g_in_total   = 0;
+	g_sq = g_in_sq = 0.0;
 }
 
 /* Fill the buffer to target before the first frame runs.
