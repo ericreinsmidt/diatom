@@ -55,6 +55,8 @@ typedef struct {
 	size_t (*serialize_size)(void);
 	bool   (*serialize)(void *, size_t);
 	bool   (*unserialize)(const void *, size_t);
+	void  *(*get_memory_data)(unsigned);
+	size_t (*get_memory_size)(unsigned);
 } diatom_core;
 
 /* core.c */
@@ -71,6 +73,19 @@ bool diatom_env_geometry_changed(void);   /* consumes the flag */
  * for keys that are normally the core's but are currently part of a host
  * chord. */
 void diatom_env_suppress(uint32_t mask);
+
+/* save.c - persistence. Host-side entirely: the port deals in pixels, samples,
+ * buttons and time, and a file is none of those.
+ *
+ * SRAM is automatic because it is the game's own data. Save states are opt-in
+ * and take explicit PATHS, never slot numbers - Diatom has no concept of a
+ * slot, a game or a system, and the launcher owns all three (ADR-0016). */
+bool diatom_save_init(diatom_core *c, const char *save_dir, const char *rom_path);
+void diatom_save_tick(void);       /* once per frame; may schedule a write */
+void diatom_save_flush(void);      /* synchronous; exit and signal paths */
+void diatom_save_shutdown(void);
+bool diatom_state_save(diatom_core *c, const char *path);
+bool diatom_state_load(diatom_core *c, const char *path);
 
 /* scale.c - geometry is arithmetic and lives here, once, so every port agrees.
  * Performing the blit is hardware and belongs to the port.

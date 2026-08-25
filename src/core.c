@@ -56,6 +56,8 @@ bool diatom_core_open(diatom_core *c, const char *path)
 	BIND(serialize_size,             "retro_serialize_size");
 	BIND(serialize,                  "retro_serialize");
 	BIND(unserialize,                "retro_unserialize");
+	BIND(get_memory_data,            "retro_get_memory_data");
+	BIND(get_memory_size,            "retro_get_memory_size");
 
 	return true;
 }

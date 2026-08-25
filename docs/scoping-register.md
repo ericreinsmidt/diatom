@@ -361,6 +361,26 @@ Two amendments ADR-0007 makes to the table above:
 
 ---
 
+## 5b. Saves
+
+- [x] **[LB]** Saves, save states, slots and ownership →
+      **[ADR-0016](decisions/0016-saves-and-save-states.md)** *(Accepted)*.
+      SRAM automatic; five manual slots plus a separate resume slot; resume is
+      the default at launch; Diatom takes paths and never slot numbers.
+      Measured: SRAM is per-game (0 to 128 KB), states 13 KB to 804 KB,
+      `serialize` 10 us to 2.5 ms, an atomic write 8 ms to 68 ms, SIGTERM
+      arrives ~810 ms before death on power-off.
+- [ ] **[OPEN]** Manual slots and the in-game menu. Blocked on the display
+      handoff, below.
+- [ ] **[LB] [OPEN]** **Display handoff, fbdev to EGL.** ADR-0013 chose raw
+      fbdev; PlayOS presents through EGL; that pairing wedged the PowerVR
+      firmware in-kernel on 2026-08-24. PlayOS and minarch hand off today but
+      are both EGL. **Spike before designing the menu** - if it cannot be made
+      reliable, manual saving falls back to blind hotkeys or an overlay Diatom
+      draws itself.
+
+---
+
 ## 6. Audio - expect this to be the hard part
 
 ### Measured 2026-08-23 ([spike](spikes/2026-08-23-env-inventory.md))

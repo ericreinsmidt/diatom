@@ -15,6 +15,7 @@
 #include <string.h>
 #include <time.h>
 #include <math.h>
+#include <signal.h>
 
 #include "diatom.h"
 
@@ -29,6 +30,15 @@ static diatom_core      g_core;
 static diatom_policy    g_policy;
 static diatom_port_caps g_caps;
 static diatom_rect      g_dst;   /* locked at load - ADR-0011 */
+
+/* Set from a signal handler and read by the frame loop. The handler does NO
+ * file I/O: it flips this, the loop notices after retro_run returns and does
+ * the flush itself. Measured on the Brick, SIGTERM arrives about 810 ms before
+ * the process dies on power-off, and one frame of retro_run is ~10 ms of that
+ * budget - a 1% price for not calling malloc or open from a handler. */
+static volatile sig_atomic_t g_terminate;
+
+static void on_terminate(int sig) { (void)sig; g_terminate = 1; }
 
 /* Display mode state. The BASE geometry is kept because that, not the current
  * geometry, is what a rect is ever computed from: ADR-0011's invariant is
@@ -79,7 +89,11 @@ static void usage(void)
 	fprintf(stderr,
 		"usage: diatom --core <core.so> --rom <file> [--system <dir>] [--save <dir>]\n"
 		"              [--display <mode>] [--filter nearest|sharp]\n"
+		"              [--load-state <file>] [--state-on-exit <file>]\n"
 		"              [--frames <n>] [--shot <file.bmp>]\n"
+		"\nSRAM is automatic: read at load, written when it changes, flushed on\n"
+		"exit and on SIGTERM. Save states take paths, never slot numbers - slots\n"
+		"belong to the launcher (ADR-0016).\n"
 		"\non device: SELECT+R1 / SELECT+L1 changes mode, SELECT+A toggles filter\n\n");
 	for (i = 0; i < diatom_mode_count; i++)
 		fprintf(stderr, "  %-10s %s\n",
@@ -166,6 +180,7 @@ int main(int argc, char **argv)
 	 * the crop. nearest because sharp earned nothing visible at these factors
 	 * and is the only thing that has made this loop miss a frame. */
 	const char *display = "stretch", *filter = "nearest";
+	const char *state_load = NULL, *state_exit = NULL;
 	struct retro_system_av_info av;
 	struct retro_system_info si;
 	double   frame_us, next_us;
@@ -185,6 +200,8 @@ int main(int argc, char **argv)
 		else if (!strcmp(argv[i], "--shot") && i + 1 < argc) shot_path = argv[++i];
 		else if (!strcmp(argv[i], "--display") && i + 1 < argc) display = argv[++i];
 		else if (!strcmp(argv[i], "--filter") && i + 1 < argc) filter = argv[++i];
+		else if (!strcmp(argv[i], "--load-state") && i + 1 < argc) state_load = argv[++i];
+		else if (!strcmp(argv[i], "--state-on-exit") && i + 1 < argc) state_exit = argv[++i];
 		else { usage(); return 1; }
 	}
 	if (!core_path) { usage(); return 1; }
@@ -234,6 +251,24 @@ int main(int argc, char **argv)
 	 * real pad has a Mode switch. Digital-only (ADR-0003) removes axes, not
 	 * device types. */
 	g_core.set_controller_port_device(0, RETRO_DEVICE_JOYPAD);
+
+	/* SRAM first: it is the game's own data and is not optional. A state, if
+	 * the launcher asked for one, is layered on top - and a state that fails
+	 * to load is not an error, it just means the game starts normally. That
+	 * fallback is what makes resume-by-default safe across a core update. */
+	diatom_save_init(&g_core, g_policy.save_dir, rom_path);
+	if (state_load && !diatom_state_load(&g_core, state_load))
+		printf("diatom: no usable state at %s; starting the game normally\n",
+		       state_load);
+
+	{
+		struct sigaction sa;
+		memset(&sa, 0, sizeof sa);
+		sa.sa_handler = on_terminate;
+		sigaction(SIGTERM, &sa, NULL);
+		sigaction(SIGINT,  &sa, NULL);
+		sigaction(SIGHUP,  &sa, NULL);
+	}
 
 	g_core.get_system_av_info(&av);
 	printf("diatom: %ux%u (max %ux%u) aspect %.4f, %.4f fps, %.0f Hz -> %d Hz\n",
@@ -298,7 +333,8 @@ int main(int argc, char **argv)
 	t_start = diatom_port_now_us();
 	next_us = (double)t_start;
 
-	while (!diatom_port_should_quit() && (limit <= 0 || frames < limit)) {
+	while (!diatom_port_should_quit() && !g_terminate &&
+	       (limit <= 0 || frames < limit)) {
 		uint64_t now;
 
 		g_frame_fresh = false;
@@ -322,6 +358,8 @@ int main(int argc, char **argv)
 
 		/* Display switching lives after present, so the timing above covers
 		 * exactly one combination's work. */
+		diatom_save_tick();
+
 		buttons = diatom_port_input_state();
 		display_chord(buttons, prev_buttons);
 		prev_buttons = buttons;
@@ -360,6 +398,14 @@ int main(int argc, char **argv)
 	 * Measured on the Brick: leaving it inside the timed span understated a
 	 * perfectly paced 59.73fps loop as 58.1 - a measurement bug wearing the
 	 * costume of a pacing bug. */
+	if (g_terminate)
+		printf("diatom: terminated by signal; saving\n");
+
+	/* Both paths, and in this order: the game's own save first, because losing
+	 * it is a defect, then the state, which is a convenience. */
+	diatom_save_shutdown();
+	if (state_exit) diatom_state_save(&g_core, state_exit);
+
 	{
 		uint64_t t_end = diatom_port_now_us();
 
