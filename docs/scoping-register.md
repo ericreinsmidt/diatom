@@ -651,6 +651,18 @@ and 2005 say 50.3197, which paces PAL content 0.62% fast. `bsnes_mercury_balance
 loads and reports the most faithful numbers of any candidate, and manages
 **36.56 fps with 78 resyncs** - out on measurement.
 
+**PC Engine CD needs no Disk Control Interface** (measured 2026-08-25). ADR-0005
+listed multi-disc support as an open requirement; a 25-title PCE CD collection
+contains **zero** disc-numbered files and **zero** `.m3u` playlists. The
+environment spike already found `mednafen_pce_fast` asking for the interface,
+being declined, and carrying on. Multi-disc is a fifth-generation problem -
+Super CD-ROM discs held ~540 MB and PCE CD content ran 200-400 MB.
+
+That leaves **System Card BIOS handling as the only real PCE CD work**: load it,
+and fail clearly rather than mysteriously when it is missing. *Unverified:*
+whether Sega CD has multi-disc titles, which would matter if it comes off the
+unasked list, since `genesis_plus_gx` already covers it.
+
 **The coprocessor risk ADR-0005 flagged did not materialise** (measured
 2026-08-25): Star Fox and Stunt Race FX (SuperFX), Yoshi's Island (SA-1), Super
 Mario Kart (DSP-1) and Mega Man X2 (CX4) all hold full speed with 0 resyncs on
