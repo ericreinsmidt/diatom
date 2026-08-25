@@ -93,6 +93,8 @@ static void usage(void)
 		"              [--load-state <file>] [--state-on-exit <file>]\n"
 		"              [--frames <n>] [--shot <file.bmp>]\n"
 		"              [--socket <path>]   launcher protocol, ADR-0009\n"
+		"              [--core-option key=value] ...   repeatable\n"
+		"              [--list-options]    what this core offers, then exit\n"
 		"\nSRAM is automatic: read at load, written when it changes, flushed on\n"
 		"exit and on SIGTERM. Save states take paths, never slot numbers - slots\n"
 		"belong to the launcher (ADR-0016).\n"
@@ -185,6 +187,7 @@ typedef struct {
 	long          limit;
 	int           mode;
 	diatom_filter filter;
+	bool          list_only;
 } diatom_session;
 
 static int run_session(const diatom_session *sn)
@@ -217,6 +220,15 @@ static int run_session(const diatom_session *sn)
 	       si.library_name ? si.library_name : "?",
 	       si.library_version ? si.library_version : "?");
 
+	/* Most cores declare their options during core open, but not all: some
+	 * wait until content is loaded, because what they offer depends on the
+	 * ROM. So list after loading when a ROM was given, and before when it was
+	 * not - listing what a core offers should not *require* owning a game. */
+	if (sn->list_only && !sn->rom) {
+		diatom_options_list();
+		return 0;
+	}
+
 	if (!sn->rom && !g_policy.supports_no_game) {
 		fprintf(stderr, "diatom: this core needs content; pass --rom\n");
 		diatom_proto_send("ERROR\tcode=rom_unreadable\tmsg=core needs content");
@@ -225,6 +237,12 @@ static int run_session(const diatom_session *sn)
 	if (!diatom_core_start(g_core, sn->rom)) {
 		diatom_proto_send("ERROR\tcode=rom_unreadable\tmsg=core refused the rom");
 		return 4;
+	}
+
+	if (sn->list_only) {
+		diatom_options_list();
+		diatom_core_stop(g_core);
+		return 0;
 	}
 
 	/* Genesis 3-button vs 6-button is a correctness issue, not a preference -
@@ -454,6 +472,7 @@ int main(int argc, char **argv)
 	const char *display = "stretch", *filter = "nearest";
 	const char *state_load = NULL, *state_exit = NULL;
 	const char *sock = getenv("DIATOM_SOCKET");
+	bool list_options = false;
 	diatom_filter start_filter;
 	long limit = 0;
 	int i, start_mode = -1;
@@ -470,6 +489,16 @@ int main(int argc, char **argv)
 		else if (!strcmp(argv[i], "--load-state") && i + 1 < argc) state_load = argv[++i];
 		else if (!strcmp(argv[i], "--state-on-exit") && i + 1 < argc) state_exit = argv[++i];
 		else if (!strcmp(argv[i], "--socket") && i + 1 < argc) sock = argv[++i];
+		else if (!strcmp(argv[i], "--list-options")) list_options = true;
+		else if (!strcmp(argv[i], "--core-option") && i + 1 < argc) {
+			/* Recorded now, applied when the core declares its options - the
+			 * command line is parsed long before retro_set_environment runs. */
+			char *kv = argv[++i], *eq = strchr(kv, '=');
+			if (!eq) { fprintf(stderr, "diatom: --core-option wants key=value\n"); return 1; }
+			*eq = '\0';
+			diatom_options_set(kv, eq + 1);
+			*eq = '=';
+		}
 		else { usage(); return 1; }
 	}
 	/* A core is required standalone, but under the protocol it arrives with
@@ -534,7 +563,8 @@ int main(int argc, char **argv)
 	} else {
 		diatom_session sn = { core_path, rom_path, shot_path,
 		                      state_load, state_exit,
-		                      limit, start_mode, start_filter };
+		                      limit, start_mode, start_filter,
+		                      list_options };
 		int rc = run_session(&sn);
 		if (rc) return rc;
 	}

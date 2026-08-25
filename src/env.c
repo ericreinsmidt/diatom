@@ -103,20 +103,39 @@ static bool env_cb(unsigned cmd, void *data)
 	case MASK(RETRO_ENVIRONMENT_GET_CORE_OPTIONS_VERSION):
 		*(unsigned *)data = 2;
 		return true;
-	case MASK(RETRO_ENVIRONMENT_SET_VARIABLES):
+	case MASK(RETRO_ENVIRONMENT_SET_CORE_OPTIONS_V2_INTL):
+		/* The path all six measured cores actually use. `us` is the English
+		 * set; `local` is a translation of the same keys, so the values we
+		 * serve are identical either way. */
+		if (data) {
+			const struct retro_core_options_v2_intl *in = data;
+			diatom_options_define_v2(in->us ? in->us : in->local);
+		}
+		return true;
+	case MASK(RETRO_ENVIRONMENT_SET_CORE_OPTIONS_V2):
+		diatom_options_define_v2(data);
+		return true;
 	case MASK(RETRO_ENVIRONMENT_SET_CORE_OPTIONS):
 	case MASK(RETRO_ENVIRONMENT_SET_CORE_OPTIONS_INTL):
-	case MASK(RETRO_ENVIRONMENT_SET_CORE_OPTIONS_V2):
-	case MASK(RETRO_ENVIRONMENT_SET_CORE_OPTIONS_V2_INTL):
-		/* V2_INTL is the path all six measured cores actually use. Accepted
-		 * and ignored: options are not surfaced yet, so cores use defaults. */
+		/* v1 carries retro_core_option_definition, which differs from v2 only
+		 * by the category fields we do not use. Not built: no core in the
+		 * matrix uses it, and untested code that silently mis-parses options
+		 * is worse than a core falling back to its own defaults. */
 		return true;
-	case MASK(RETRO_ENVIRONMENT_GET_VARIABLE):
-		((struct retro_variable *)data)->value = NULL;
-		return false;                  /* no value set → core keeps its default */
+	case MASK(RETRO_ENVIRONMENT_SET_VARIABLES):
+		diatom_options_define_vars(data);
+		return true;
+	case MASK(RETRO_ENVIRONMENT_GET_VARIABLE): {
+		struct retro_variable *v = data;
+		if (!v) return false;
+		v->value = diatom_options_get(v->key);
+		/* Returning false means "no value set", which tells the core to keep
+		 * its own default. That is the right answer for an unknown key. */
+		return v->value != NULL;
+	}
 	case MASK(RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE):
 		/* Every frame, all six cores. Must stay this cheap. */
-		*(bool *)data = false;
+		*(bool *)data = diatom_options_take_update();
 		return true;
 
 	/* ---- accepted and ignored ------------------------------------------- */
@@ -214,6 +233,10 @@ void diatom_env_bind(diatom_core *c, diatom_policy *p, diatom_port_caps *caps)
 {
 	g_policy = p;
 	g_caps   = caps;
+
+	/* Bind the option table BEFORE set_environment: a core declares its
+	 * options from inside that call, and they must land in its own table. */
+	diatom_options_bind(c);
 
 	c->set_environment(env_cb);
 	c->set_video_refresh(cb_video);

@@ -79,6 +79,20 @@ bool diatom_env_geometry_changed(void);   /* consumes the flag */
  * chord. */
 void diatom_env_suppress(uint32_t mask);
 
+/* options.c - what a core can be configured with, and what it currently is.
+ *
+ * Diatom holds the definitions and the values; the LAUNCHER decides what the
+ * values should be. Diatom has no opinion about whether a Genesis should be PAL
+ * and no way to ask, having no UI (ADR-0009). */
+void        diatom_options_bind(const void *owner);
+void        diatom_options_define_v2(const struct retro_core_options_v2 *v2);
+void        diatom_options_define_vars(const struct retro_variable *vars);
+const char *diatom_options_get(const char *key);
+bool        diatom_options_set(const char *key, const char *value);
+bool        diatom_options_take_update(void);   /* consumes the flag */
+int         diatom_options_count(void);
+void        diatom_options_list(void);
+
 /* proto.c - the launcher protocol (ADR-0009). One Unix socket, line-based,
  * tab-separated key=value. Diatom is a component the launcher drives; this is
  * the only place it talks back.

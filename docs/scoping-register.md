@@ -477,6 +477,33 @@ Two amendments ADR-0007 makes to the table above:
 
 ---
 
+## 4c. Core options
+
+- [x] **[LB]** **Core options implemented** →
+      [log](discussion/2026-08-25-core-options.md). `src/options.c` plus real
+      answers for `SET_CORE_OPTIONS_V2*`, `SET_VARIABLES`, `GET_VARIABLE` and
+      `GET_VARIABLE_UPDATE`. **171 settings across five cores, previously all
+      unreachable.** Diatom holds definitions and values; the launcher decides
+      them. Verified by observable effect: forcing PAL changes the reported rate
+      and Diatom repaces; overscan cropping changes geometry and aspect; an
+      offered-value check refuses anything the core did not list.
+- [ ] **[OPEN]** Surface options over the protocol so the launcher can build a
+      menu. Constrained by the finding below.
+- [x] **[OPEN]** **Option availability can depend on loaded content.** FCEUmm
+      declares **0 options at core open and 44 once a ROM is loaded**; the other
+      four declare everything at open. So a launcher cannot always show a core's
+      options from the shelf - for FCEUmm the list is only complete in-game,
+      which fits ADR-0016's in-game menu and rules out a browse-cores options
+      screen.
+- [ ] **[OPEN]** **A core swap changed NES geometry.** The buildbot FCEUmm crops
+      8 overscan lines by default (256x224, aspect 1.3061); the convenience-
+      sample build reported 256x240, aspect 1.2190. The NES rows in ADR-0015 and
+      the display spikes describe a binary no longer in use. Decisions stand -
+      `stretch` fills the panel regardless - but the integer and aspect rects
+      would differ. Overscan is now a choice rather than a property.
+
+---
+
 ## 5b. Saves
 
 - [x] **[LB]** Saves, save states, slots and ownership →
