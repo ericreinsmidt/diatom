@@ -601,9 +601,27 @@ Largest ROM is GBA's 32 MB, so the
 of which cores a host chooses. **Cores, not systems, are the cost unit** - one
 core routinely covers several systems, so adding a system is often free.
 
-**Cores verified against so far** (2026-08-23, see the
-[env-inventory spike](spikes/2026-08-23-env-inventory.md)): `fceumm`,
-`gambatte`, `snes9x` 1.63, `picodrive`, `mednafen_pce_fast`, `mgba`.
+**Cores verified against so far**: `fceumm`, `gambatte`, `snes9x`,
+`picodrive`, `genesis_plus_gx`, `mednafen_pce_fast`, `mgba` - provenance and
+hashes in [CORES.md](../CORES.md), fetched from libretro's buildbot by
+`tools/fetch-cores.sh`.
+
+**Coverage as measured** (2026-08-25): one Sega core covers Genesis, Master
+System and Game Gear, and mGBA covers Game Boy, GBC and GBA. That is **five
+cores for all nine systems**, against six covering six before. Master System
+and Game Gear had no assigned core at all until now.
+
+**For the Sega block, use `genesis_plus_gx`** - see the
+[core comparison](spikes/2026-08-25-sega-core-comparison.md). Not a performance
+call: both hold frame rate with 0 resyncs. PicoDrive reports a fixed 320x240 for
+every system, so Game Gear arrives double-scaled and distorted; Genesis Plus GX
+reports true geometry, giving an exact 5x for Game Gear and a 1024x768 whole-
+panel fill for Master System. Costs a 12.6 MB core and ~1 MB save states.
+PicoDrive remains the choice only if 32X is in scope.
+
+**`snes9x` and `gambatte` cannot be used as fetched** - they are C++ and want
+`GLIBCXX_3.4.29`, while the Brick ships 3.4.28. See CORES.md; the ADR-0012
+container is the fix.
 
 These six were a **convenience sample** - binaries already on disk from a NextUI
 release - not a recommendation and not the available set. libretro cores are
