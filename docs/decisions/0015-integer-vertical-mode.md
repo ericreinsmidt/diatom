@@ -1,9 +1,14 @@
 # 0015. Add integer-vertical; keep stretch as the default
 
-- **Status:** Accepted
+- **Status:** Superseded by [0018](0018-integer-vertical-remeasured.md)
 - **Date:** 2026-08-24
 - **Supersedes:** -
-- **Superseded by:** -
+- **Superseded by:** [0018](0018-integer-vertical-remeasured.md)
+
+> Its decisions survive; its evidence did not. Three of the six rows below were
+> measured against cores the project rejected the following day, and its
+> "never worse" guarantee for `integer-vertical` is disproven. Left unedited,
+> because what was believed and why is the record.
 
 Extends [ADR-0014](0014-display-modes-and-default.md), which stands unchanged.
 Its default is untouched; this adds a seventh mode and records why the obvious

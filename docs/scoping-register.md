@@ -424,10 +424,10 @@ Two amendments ADR-0007 makes to the table above:
       interface, and full use of it beat both the letterbox and the crop. Seven
       modes ship; integer stays for anyone who wants uniform pixels.
 - [x] **[OPEN]** A seventh mode, `integer-vertical` →
-      **[ADR-0015](decisions/0015-integer-vertical-mode.md)** *(Accepted)*.
-      Integer on the axis the eye reads scanlines along, fitted freely on the
-      other. **Its NES rows describe a binary no longer in use** - see the
-      geometry item below.
+      **[ADR-0018](decisions/0018-integer-vertical-remeasured.md)** *(Accepted)*,
+      superseding ADR-0015. Shape-exact to 0.03% everywhere, but **not "never
+      worse"** as 0015 claimed: it loses a whole vertical factor on SNES PAL and
+      Genesis. Live numbers: [core-facts.md](reference/core-facts.md).
 - [x] **[OPEN]** Aspect-ratio and overscan policy → **the user chooses**, from
       seven modes defaulting to `stretch`
       ([ADR-0014](decisions/0014-display-modes-and-default.md),
@@ -535,12 +535,12 @@ Two amendments ADR-0007 makes to the table above:
       for the pending flip, so the captured frame depended on how fast the blit
       was. Fixed. Found while verifying the blit change, which is the argument
       for verifying by comparison rather than by inspection.
-- [ ] **[OPEN]** **A core swap changed NES geometry.** The buildbot FCEUmm crops
-      8 overscan lines by default (256x224, aspect 1.3061); the convenience-
-      sample build reported 256x240, aspect 1.2190. The NES rows in ADR-0015 and
-      the display spikes describe a binary no longer in use. Decisions stand -
-      `stretch` fills the panel regardless - but the integer and aspect rects
-      would differ. Overscan is now a choice rather than a property.
+- [x] **[OPEN]** **A core swap changed NES geometry** - and three other rows
+      with it. 256x240/1.2190 became 256x224/1.3061 on the buildbot FCEUmm;
+      Genesis and SNES moved further. Resolved by generating the table instead
+      of transcribing it ([core-facts.md](reference/core-facts.md)) and
+      re-deciding on the real numbers
+      ([ADR-0018](decisions/0018-integer-vertical-remeasured.md)).
 - [x] **[OPEN]** GL/GLES or software blit on device? **Software, into raw
       fbdev** ([ADR-0013](decisions/0013-brick-fbdev-flip-thread.md)), and the
       row cache made it 2.1-2.3x faster. The hardware scaler was measured

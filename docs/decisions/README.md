@@ -63,6 +63,7 @@ never started.
 | [0012](0012-independent-toolchain.md) | Build our own toolchain; depend on nothing from NextUI or MinUI | Accepted |
 | [0013](0013-brick-fbdev-flip-thread.md) | The Brick presents via fbdev, with a flip thread | Accepted |
 | [0014](0014-display-modes-and-default.md) | Offer six display modes; default to stretch | Accepted |
-| [0015](0015-integer-vertical-mode.md) | Add integer-vertical; keep stretch as the default | Accepted |
+| [0015](0015-integer-vertical-mode.md) | Add integer-vertical; keep stretch as the default | Superseded by 0018 |
 | [0016](0016-saves-and-save-states.md) | Saves, save states, and who owns the slot | Accepted |
 | [0017](0017-firmware-is-declared-not-known.md) | Firmware requirements are declared by the launcher, not known by Diatom | Accepted |
+| [0018](0018-integer-vertical-remeasured.md) | Integer-vertical, re-measured: it is not "never worse" | Accepted |
