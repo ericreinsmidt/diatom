@@ -696,11 +696,18 @@ deliberate target**, not an edge case - Probotector is PAL-only Contra. Pacing
 - [x] **[OPEN]** Per-core remapping, or one map? **One map.** No core in the
       matrix has asked for anything else, and a remapping layer is an
       abstraction with no consumer until one does.
-- [x] **[OPEN]** Hotkeys → **MENU is Diatom's own key and never reaches a
-      core.** The port reports it and does not act on it: standalone it ends the
-      session, under the launcher it hands over the display (ADR-0016).
-      Brightness and volume stay with the firmware. The L3/R3 worry is handled
-      in the port - the Brick's front keys report as `BTN_THUMBL`/`THUMBR`.
+- [x] **[OPEN]** MENU is Diatom's own key and never reaches a core. The port
+      reports it and does not act on it: standalone it ends the session, under
+      the launcher it hands over the display (ADR-0016). The L3/R3 worry is
+      handled in the port - the Brick's front keys report as
+      `BTN_THUMBL`/`THUMBR` and stay unmapped.
+- [ ] **[LB]** **Volume and brightness keys do nothing while a game runs**, and
+      "they stay with the firmware" was an assumption, not a finding - PlayOS is
+      killed during a Diatom session, so nothing reads them. Whoever owns the
+      input loop must handle them; that is why minarch does it despite volume
+      being firmware's. Three placements, and the OSD is two rectangles rather
+      than the blocker it was claimed to be:
+      [analysis](discussion/2026-08-25-volume-ownership.md).
 - [x] **[LB]** Analog sticks: **no analog support at all** →
       **[ADR-0003](decisions/0003-digital-only-input.md)** *(Accepted)*
 - [x] **[OPEN]** Button count is **not** a constraint. Both devices give 4 face
