@@ -642,9 +642,18 @@ for a 32 KB ROM against 750 ms for a 16 MB one, on the same core. Core binary
 size only shows up on the first launch after boot, because ADR-0006 keeps cores
 resident and never calls `dlclose`.
 
-**`snes9x` and `gambatte` cannot be used as fetched** - they are C++ and want
-`GLIBCXX_3.4.29`, while the Brick ships 3.4.28. See CORES.md; the ADR-0012
-container is the fix.
+**SNES uses `snes9x2010`**, not mainline - see the
+[SNES core selection](spikes/2026-08-25-snes-core-selection.md). Mainline,
+`mesen-s` and `mednafen_supafaust` are all C++ against `GLIBCXX_3.4.29` or
+newer and cannot load on the Brick's 3.4.28. Of the four pure-C snes9x forks
+that do run, only `snes9x2010` reports the correct **50.0070** PAL rate; 2002
+and 2005 say 50.3197, which paces PAL content 0.62% fast. `bsnes_mercury_balanced`
+loads and reports the most faithful numbers of any candidate, and manages
+**36.56 fps with 78 resyncs** - out on measurement.
+
+**Nothing needs building.** The matrix is five fetched cores covering nine
+systems. The ADR-0012 container's C++ path is verified (`GLIBCXX_3.4.28`) and
+currently unused - it is the answer if a future system needs a modern C++ core.
 
 These six were a **convenience sample** - binaries already on disk from a NextUI
 release - not a recommendation and not the available set. libretro cores are

@@ -27,7 +27,15 @@ BASE="https://buildbot.libretro.com/nightly/$ARCH/latest"
 OUT=${OUT:-cores}
 MANIFEST=CORES.md
 
-DEFAULT="fceumm snes9x gambatte mgba picodrive genesis_plus_gx mednafen_pce_fast"
+# The five cores that cover all nine in-scope systems and actually run on the
+# device. snes9x2010 rather than mainline snes9x: mainline is C++ and wants
+# GLIBCXX_3.4.29 (see below), while 2010 is pure C, holds frame rate, and is the
+# only light fork that reports the correct 50.0070 PAL rate - 2002 and 2005 say
+# 50.3197, which runs PAL content 0.62% fast. genesis_plus_gx rather than
+# picodrive: see docs/spikes/2026-08-25-sega-core-comparison.md. No gambatte:
+# mGBA covers GB and GBC identically, from a smaller binary, and gambatte is C++
+# so it cannot run here anyway.
+DEFAULT="fceumm snes9x2010 mgba genesis_plus_gx mednafen_pce_fast"
 CORES=${*:-$DEFAULT}
 
 command -v curl   >/dev/null || { echo "fetch-cores: need curl" >&2; exit 1; }
@@ -78,7 +86,8 @@ done
 	echo
 	echo "## C++ cores do not run on the Brick as fetched"
 	echo
-	echo "Measured 2026-08-24: \`snes9x\` and \`gambatte\` fail to \`dlopen\` with"
+	echo "Measured 2026-08-24/25. \`snes9x\` (mainline), \`gambatte\`, \`mesen-s\` and"
+	echo "\`mednafen_supafaust\` all fail to \`dlopen\` with"
 	echo "\`GLIBCXX_3.4.29 not found\`. The buildbot builds C++ cores against GCC 11;"
 	echo "the Brick ships \`libstdc++.so.6.0.28\`, which tops out at \`GLIBCXX_3.4.28\`."
 	echo "One version short."
