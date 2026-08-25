@@ -299,10 +299,16 @@ static int run_session(const diatom_session *sn)
 	diatom_proto_send("RUNNING");
 
 	/* Warm up before starting the clock. The first frames create the texture,
-	 * fault in code paths and prime the audio device; measured, they overrun the
-	 * frame budget badly enough to trip a resync every single run. Timing them
-	 * reports a rate the loop never actually sustains - and, worse, hides
-	 * whether the steady-state loop is correct. */
+	 * fault in code paths and prime the audio device; measured on a COLD
+	 * process, they overrun the frame budget badly enough to trip a resync
+	 * every single run. Timing them reports a rate the loop never actually
+	 * sustains - and, worse, hides whether the steady-state loop is correct.
+	 *
+	 * Note for anyone tempted to skip this when resident: measured 2026-08-25
+	 * across five launches in one process, the warmup costs 23-34 ms every
+	 * time, flat. It is not cold-start overhead that residency has already
+	 * paid; it is three real frames of emulation and blitting at ~8 ms each.
+	 * Skipping it would save frames, not overhead. */
 	{
 		uint64_t w0 = diatom_port_now_us();
 		int w;
