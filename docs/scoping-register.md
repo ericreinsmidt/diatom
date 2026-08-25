@@ -1,6 +1,23 @@
 # Minimal libretro frontend - scoping register
 
-A living checklist. Nothing here is decided unless it says DECIDED.
+A living checklist. Its one job is that you can read a section and see what is
+left, so **the checkbox is authoritative** - `- [x]` means settled, and the line
+says what settled it. Prose below a checkbox explains; it never overrules.
+
+**How to keep it that way.** A resolution **replaces** the question it answers;
+it is never appended below it. The reasoning belongs in the ADR, the spike or
+the discussion log - the register only owes the fact and the pointer. New work
+goes in the section that already owns the subject rather than a new lettered one
+beside it, and section numbers never change, because ADRs are immutable and
+several of them cite these numbers.
+
+That is not advice. `make check` fails on section order, on a resolved section
+still carrying open items, on two sections covering one subject, on a tag not
+declared below, and on an Accepted ADR nothing points at. It got written
+because none of those ever failed before, and by 2026-08-25 the register had
+grown 418 to 992 lines in three days without once getting shorter - carrying,
+among other things, five questions ADR-0006 had answered two days earlier.
+
 Tags: **[LB]** load-bearing (expensive to reverse - decide early) ·
 **[OPEN]** needs a decision · **[LATER]** safe to defer ·
 **[DEFERRED]** was load-bearing, deliberately postponed with a written reason
@@ -57,7 +74,11 @@ firmware (subset) · chosen set → test matrix + memory envelope.** Devices
 constrain; they do not determine. PlayOS runs three systems by curation, not
 because the Brick is incapable of more.
 
-- [ ] **[LB]** Ratify or amend the class definition above.
+- [x] **[LB]** Class definition **ratified by use, 2026-08-25.**
+      [ADR-0003](decisions/0003-digital-only-input.md) and
+      [ADR-0005](decisions/0005-system-inclusion-criteria.md) both reason
+      from it and were Accepted; a premise two accepted decisions rest on
+      is ratified whatever the checkbox said. Amend by superseding those.
 - [x] **[LB]** **Must Diatom survive PS1/Neo-Geo-class workloads? No.**
       → [ADR-0005](decisions/0005-system-inclusion-criteria.md). Peak loaded game
       ~10-30 MB estimated, against 956 MB. This is what makes
@@ -218,13 +239,24 @@ no external contract, changeable in an afternoon. Verify cheaply by reading
 *Would be wrong if:* the policy struct needs per-frame mutation. Even then the
 answer is a live policy object, not a layer.
 
-- [ ] **[OPEN]** Confirm the above against `libretro.h` when convenient.
-- [ ] **[LB]** Which direction do dependencies point? Proposed: strictly
-      downward, port never calls up, no callbacks into the host from the port.
-- [ ] **[LB]** Does the **host** own the main loop, or the launcher? Resident
-      mode + fifo implies the host owns it.
-- [ ] **[OPEN]** Is the deliverable a **library**, a **binary**, or both?
-- [ ] **[LB]** **Standalone operation as the primary mode.** Diatom should run
+- [x] **[OPEN]** Confirmed against `libretro.h` 2026-08-23 by running six
+      cores through a full lifecycle →
+      [env inventory](spikes/2026-08-23-env-inventory.md). 34 of 77
+      commands appear, ~17 need real answers, and they do arrive from
+      inside `retro_run` needing port and session state, as argued.
+- [x] **[LB]** Dependencies point strictly downward →
+      [ADR-0007](decisions/0007-port-interface.md). The port never calls up, and
+      `make check-seam` enforces the mechanical half of it: a port that included
+      `libretro.h` could not be developed on the desktop at all.
+- [x] **[LB]** **The host owns the main loop.**
+      [ADR-0008](decisions/0008-separate-long-lived-process.md) and
+      [ADR-0009](decisions/0009-launcher-protocol.md). The launcher drives it
+      over the socket but does not run it, which is what lets a game outlive a
+      launcher that died - and `HANGUP` is deliberately not a stop.
+- [ ] **[OPEN]** Is the deliverable a **library**, a **binary**, or both? A
+      binary today. The library half is really the consumption model deferred
+      in §1 and moves when that does.
+- [x] **[LB]** **Standalone operation as the primary mode.** Built that way. Diatom runs
       with no host at all:
 
       ```
@@ -241,9 +273,11 @@ answer is a live policy object, not a layer.
       program that stands alone is a stricter test than designing for one
       embedder, and it is what keeps Diatom from being a component of somebody
       else's launcher.
-- [ ] **[OPEN]** Port selection **compile-time, not runtime** - one binary per
-      device, port linked in. Nobody swaps a device backend at runtime; a
-      plugin mechanism would be an abstraction with no consumer.
+- [x] **[OPEN]** Port selection **compile-time, not runtime** - one binary per
+      device, port linked in. Stated in
+      [ADR-0007](decisions/0007-port-interface.md) and in `diatom_port.h`:
+      nobody swaps a device backend at runtime, so a plugin mechanism would be
+      an abstraction with no consumer.
 
 ---
 
@@ -271,14 +305,12 @@ evaporates - but two others remain:
       as supervisor, and `SIGUSR1` is retained as the escape hatch for a core
       wedged inside `retro_run` that cannot read the socket.
 - [x] **[OPEN]** Remaining risk carried by ADR-0008: **display handoff between
-      two processes**. Measured 2026-08-24 on the Brick for the case that
-      actually matters, fbdev holding while EGL presents:
-      [it works](spikes/2026-08-24-display-handoff.md). Still needs re-checking
-      per port, and the instruments to do that are tracked.
-      **Measured instance 2026-08-24** ([ADR-0013](decisions/0013-brick-fbdev-flip-thread.md)):
-      Diatom panning fb0 while another process presented through EGL deadlocked
-      the pan in-kernel behind a stalled PowerVR fence. On the Brick the rule is
-      one display client, enforced by the host, full stop.
+      two processes.** Measured 2026-08-24 - the invariant is *one presenter at
+      a time*, not one process per display, so fbdev may stay open and mapped
+      while EGL presents; only concurrent presentation is fatal, and on the
+      Brick it deadlocked the pan in-kernel behind a stalled PowerVR fence
+      ([ADR-0013](decisions/0013-brick-fbdev-flip-thread.md)). Needs re-checking
+      per port. [handoff spike](spikes/2026-08-24-display-handoff.md).
 
 ---
 
@@ -293,8 +325,12 @@ Candidate surface - deliberately small:
 - **System**: monotonic clock, sleep, paths, log
 - **Optional/device**: brightness, LED, CPU governor
 
-- [ ] **[LB]** Is that the complete surface? What's missing that will otherwise
-      leak device knowledge upward?
+- [x] **[LB]** Is that the complete surface? Answered by
+      [ADR-0007](decisions/0007-port-interface.md), and worth recording that the
+      answer moved: it specified **ten** functions and implementation made it
+      **twelve within a day** - `should_quit` and `capture`. Both look justified
+      and neither carries a domain noun, but a surface that grows 20% on first
+      contact is worth noticing rather than shrugging at.
 ### Proposed division of labour *(2026-08-23, not ratified)*
 
 | Concern | Host (shared) | Port (device) |
@@ -335,9 +371,11 @@ Two amendments ADR-0007 makes to the table above:
 
 - [x] **[OPEN]** Does the port ever get to refuse a geometry? No - the host
       computes `dst` and the port blits. Scale policy never reaches the port.
-- [ ] **[OPEN]** Does the port ever get to *refuse* - e.g. "this geometry can't
-      be integer-scaled on this panel"? Who handles that?
-- [ ] **[OPEN]** Backends to build: `desktop` (SDL2, first), `brick` (TG3040).
+- [x] **[OPEN]** Does the port ever get to *refuse*? **No.** `diatom_port.h`:
+      a `dst` may extend past the surface because a fill or overscale mode
+      deliberately crops, and **ports clip; they never refuse the frame.**
+      Whether a geometry is worth showing is host policy.
+- [x] **[OPEN]** Backends to build: `desktop` (SDL2, first), `brick` (TG3040).
       **Miniloong is [NOT PLANNED]** as of 2026-08-25 - not rejected, just not
       on the path. The order of work is Diatom complete and fully integrated
       with PlayOS on the Brick first; a second device is worth looking at after
@@ -353,6 +391,12 @@ Two amendments ADR-0007 makes to the table above:
 ## 5. Video
 
 - [ ] **[OPEN]** Force a single pixel format on cores, or support all three?
+- [x] **[LB]** Does the destination rect move when a core changes geometry
+      mid-run? **No** - [ADR-0011](decisions/0011-lock-the-display-rect.md)
+      *(Accepted)*. Computed once from base geometry at load and held. Measured:
+      3 of 6 cores call `SET_GEOMETRY` mid-run, and recomputing an integer
+      factor from the new width collapses 3x to 1x. Its own limit is recorded
+      below - base geometry is not representative for the Sega cores.
 - [x] **[LB]** Integer-scale-only as a hard rule? **No** -
       [ADR-0014](decisions/0014-display-modes-and-default.md). It is one of six
       modes and no longer the default. Kept as `--display integer` for anyone who
@@ -363,14 +407,14 @@ Two amendments ADR-0007 makes to the table above:
       rule. `integer` still letterboxes at the largest factor that fits.
 - [x] **[LB]** **Which display mode is default** →
       **[ADR-0014](decisions/0014-display-modes-and-default.md)** *(Accepted)*.
-      Six modes ship, all selectable; default `stretch` with `nearest`. Decided
-      by cycling them live on the panel across ~20 minutes of play, not by
-      argument. Scope noted in the ADR: judged on a 4:3 panel showing near-4:3
-      content, where stretch distorts 9.4%. Extended by
-      **[ADR-0015](decisions/0015-integer-vertical-mode.md)**: seven modes now,
-      after measurement showed integer scaling is *not* the undistorted option
-      (NES -12.5%, SNES -14.3%, PC Engine -12.2%, because their pixels were
-      never square). Default unchanged.
+      `stretch`, judged on the panel: a handheld's screen is its whole
+      interface, and full use of it beat both the letterbox and the crop. Seven
+      modes ship; integer stays for anyone who wants uniform pixels.
+- [x] **[OPEN]** A seventh mode, `integer-vertical` →
+      **[ADR-0015](decisions/0015-integer-vertical-mode.md)** *(Accepted)*.
+      Integer on the axis the eye reads scanlines along, fitted freely on the
+      other. **Its NES rows describe a binary no longer in use** - see the
+      geometry item below.
 - [ ] **[OPEN]** Aspect-ratio and overscan policy. Crop, or show everything?
       Measured input to it: **FCEUmm reports an 8:7 pixel aspect (1.2190), not
       4:3**, so on a 4:3 panel fit, fill and stretch are three different
@@ -463,101 +507,24 @@ Two amendments ADR-0007 makes to the table above:
       `min(file, sram)` with a warning, which is the right default but means
       switching cores silently truncates or pads a save. A launcher that lets a
       user change core per system needs to know this.
-- [ ] **[OPEN]** GL/GLES or software blit on device?
-- [ ] **[LATER]** Shaders/overlays - probably "no" forever. Decide and write it down.
-
----
-
-## 4b. Launch cost, measured
-
-- [x] **[LB]** **What a warm launch costs** →
-      [spike](spikes/2026-08-25-warm-launch.md). **~35 ms for NES, ~200 ms for a
-      32 MB GBA title**, against 625-750 ms cold. A 20x improvement for NES and
-      about 4x for the heaviest GBA game; the win shrinks with ROM size because
-      file read and `retro_load_game` are the two costs residency cannot remove.
-      **ADR-0006 and ADR-0008 are now justified by measurement rather than
-      assumption**, and ADR-0009's protocol is what delivers it - which settles
-      the order of work.
 - [x] **[LB]** **The blit was the frame's dominant cost; it is not any more.**
-      → [spike](spikes/2026-08-25-blit-cost.md). A row cache made it **2.1-2.3x
-      faster** (8.4-8.7 ms to 3.6-4.1 ms), verified byte-identical across eight
-      combinations. **The disp2 hardware scaler is not needed**: the blit was
-      never write-bound - framebuffer memory measured exactly as fast as heap,
-      418 MB/s both - it was converting every source pixel once per destination
-      pixel that sampled it. NES now spends 5.3 ms of 16.6, leaving 11.3 ms.
-      TrimUI publishes no kernel source, so driving `/dev/disp` would have meant
-      guessed structs on an undocumented ioctl; not worth it for headroom
-      nothing was short of.
+      A row cache made it **2.1-2.3x faster** (8.4-8.7 ms to 3.6-4.1 ms),
+      byte-identical across eight combinations. **The disp2 hardware scaler is
+      not needed** - the blit was never write-bound.
+      [blit cost](spikes/2026-08-25-blit-cost.md).
 - [x] **[OPEN]** **`diatom_port_capture` was non-deterministic** and had been
       since the flip thread was written: it read the front page without waiting
       for the pending flip, so the captured frame depended on how fast the blit
       was. Fixed. Found while verifying the blit change, which is the argument
       for verifying by comparison rather than by inspection.
-- [ ] **[LATER]** ~~The blit is the frame's dominant cost, not the core.~~
-      Measured: core CPU per frame is 1.65 ms (NES) to 4.2 ms (Boktai), against
-      8.4 ms for `present`. **Diatom's pixel loop costs 2-5x more than emulating
-      the machine.** ADR-0013 recorded the disp2 hardware scaler as an escape
-      hatch for when CPU blitting stops fitting; it is really the single largest
-      saving available anywhere in the frame, and should be promoted from
-      contingency to the leading performance item.
-
----
-
-## 4c. Core options
-
-- [x] **[LB]** **Core options implemented** →
-      [log](discussion/2026-08-25-core-options.md). `src/options.c` plus real
-      answers for `SET_CORE_OPTIONS_V2*`, `SET_VARIABLES`, `GET_VARIABLE` and
-      `GET_VARIABLE_UPDATE`. **171 settings across five cores, previously all
-      unreachable.** Diatom holds definitions and values; the launcher decides
-      them. Verified by observable effect: forcing PAL changes the reported rate
-      and Diatom repaces; overscan cropping changes geometry and aspect; an
-      offered-value check refuses anything the core did not list.
-- [x] **[OPEN]** Surface options over the protocol → done. `OPTIONS` returns a
-      count plus one `OPTION` line per setting carrying key, current value,
-      default, permitted values and description - everything a menu needs.
-      `SETOPT key= value=` sets one, refused if the core does not offer it.
-- [x] **[OPEN]** **Option availability can depend on loaded content.** FCEUmm
-      declares **0 options at core open and 44 once a ROM is loaded**; the other
-      four declare everything at open. So a launcher cannot always show a core's
-      options from the shelf - for FCEUmm the list is only complete in-game,
-      which fits ADR-0016's in-game menu and rules out a browse-cores options
-      screen.
 - [ ] **[OPEN]** **A core swap changed NES geometry.** The buildbot FCEUmm crops
       8 overscan lines by default (256x224, aspect 1.3061); the convenience-
       sample build reported 256x240, aspect 1.2190. The NES rows in ADR-0015 and
       the display spikes describe a binary no longer in use. Decisions stand -
       `stretch` fills the panel regardless - but the integer and aspect rects
       would differ. Overscan is now a choice rather than a property.
-
----
-
-## 5b. Saves
-
-- [x] **[LB]** Saves, save states, slots and ownership →
-      **[ADR-0016](decisions/0016-saves-and-save-states.md)** *(Accepted)*.
-      SRAM automatic; five manual slots plus a separate resume slot; resume is
-      the default at launch; Diatom takes paths and never slot numbers.
-      Measured: SRAM is per-game (0 to 128 KB), states 13 KB to 804 KB,
-      `serialize` 10 us to 2.5 ms, an atomic write 8 ms to 68 ms, SIGTERM
-      arrives ~810 ms before death on power-off.
-- [x] **[OPEN]** Manual slots and the in-game menu → the Diatom half is built.
-      MENU pauses, sends `PAUSED`, and blocks; the launcher draws its menu and
-      answers with `RESUME`, `SAVE path=`, `LOAD path=` or `STOP`. Slot naming
-      stays entirely in the launcher, as ADR-0016 requires. Verified over the
-      socket **and on hardware**: two presses 12.44s and 15.13s apart, resume in
-      10 ms. The press found a real bug - clearing `prev_buttons` on resume
-      defeated edge detection, so one press opened the menu twice - and the
-      first report of the test was wrong because the log could not tell a
-      re-trigger from a second press. Instrument now prints elapsed time.
-- [x] **[LB]** **Display handoff, fbdev to EGL** - answered
-      ([spike](spikes/2026-08-24-display-handoff.md)). **It works.** The
-      invariant is *one presenter at a time*, not one process per display:
-      holding `/dev/fb0` open and mapped while another process presents through
-      EGL is fine, and only concurrent presentation is fatal. So a paused
-      Diatom stops its flip thread and keeps everything else; no release, no
-      re-acquire, no gap where nobody owns the screen. ADR-0016's menu design
-      stands as written.
+- [ ] **[OPEN]** GL/GLES or software blit on device?
+- [ ] **[LATER]** Shaders/overlays - probably "no" forever. Decide and write it down.
 
 ---
 
@@ -601,20 +568,12 @@ Two levers the spike discovered:
       hardest case is **PAL at 50.0070 Hz on a 60 Hz panel** (FCEUmm, Snes9x),
       and the most awkward *rate* is mGBA's **65536 Hz**. Use both as
       conformance targets, not GBA alone.
-- [x] **[LB]** **PAL conformance run, on device, 2026-08-24.** Probotector at
-      50.0070 fps on the Brick's 60.9 Hz panel: **1500 frames in 30.00s =
-      50.01 fps, 0 resyncs, drift -0.284%**, against an NTSC control on the
-      same panel at 60.10 fps, 0 resyncs, drift +0.199%. The case the flip
-      thread was designed for holds exactly, and pacing to the core's clock
-      rather than the panel's is now measured rather than argued.
-      **Correction, 2026-08-25:** an earlier note here claimed mGBA's awkward
-      rate no longer arises because it negotiates 48000 through
-      `GET_TARGET_SAMPLE_RATE`. That holds for **GBA** content only. Given a
-      **Game Boy** ROM the same core reports **131072 Hz** - twice the 65536 the
-      spike recorded, and a 2.73:1 downsample, the most extreme ratio in the
-      matrix. The placeholder linear resampler handles it: 59.73 fps against
-      59.7275, 0 resyncs, drift +0.209%. So the conformance target did not move,
-      it got harder, and it is per-content rather than per-core.
+- [x] **[LB]** **PAL conformance holds on device** - Probotector at 50.0070 fps
+      on a 60.9 Hz panel: **50.01 fps, 0 resyncs, drift -0.284%**. Pacing to the
+      core's clock is measured, not argued. The hardest ratio found since is
+      mGBA given **Game Boy** content, which reports **131072 Hz** - 2.73:1, and
+      still holds. Detail and the correction that found it:
+      [brick port log](discussion/2026-08-24-brick-port.md).
 
 ---
 
@@ -625,15 +584,29 @@ Two levers the spike discovered:
 deliberate target**, not an edge case - Probotector is PAL-only Contra. Pacing
 50 Hz content on a 60 Hz panel is the *normal* case for part of the library.
 
-- [ ] **[LB]** Pace to the **core's** rate (from `retro_get_system_av_info`) or
-      the **panel's**? Measured disagreement: 50.0070 · 59.7275 · 59.8200 ·
-      60.0000. Only PicoDrive matches a 60 Hz panel.
-- [ ] **[OPEN]** Frame drop/duplicate policy when they disagree.
+- [x] **[LB]** Pace to the **core's** rate, on an absolute floating-point
+      schedule against a monotonic clock. The measured spread settles it -
+      50.0070 · 59.7275 · 59.8200 · 60.0000, and only PicoDrive matches a 60 Hz
+      panel. Blocking on a 60 Hz vblank while trying to hold 59.7275 leaves
+      0.07 ms of slack, so any jitter costs a whole frame; that measured as a
+      consistent **1.4% deficit**. Audio drift is absorbed by rate control
+      instead, because no panel and no core will ever agree.
+- [x] **[OPEN]** Frame drop/duplicate policy → keep the debt and repay it with a
+      short sleep, except past **four frames behind**, where the debt is dropped
+      and a resync counted. Catching up would run fast for a while, which looks
+      worse than dropping it; counting it matters because a loop that resyncs
+      often is a loop lying about its frame rate. Dupes are the core's call -
+      `GET_CAN_DUPE` is answered true and a `NULL` frame repeats the last.
 - [ ] **[NOT PLANNED]** Miniloong's 120Hz panel is a clean 2× - does that
       change the answer per device, and does the port get a say? Parked with
       the Miniloong port itself (§4); unanswerable without the hardware in the
       build matrix.
-- [ ] **[OPEN]** vsync: available on these panels? Tearing acceptable?
+- [x] **[OPEN]** vsync → **yes on the Brick, and unavoidable**:
+      `FBIOPAN_DISPLAY` is a vsync-latched blocking flip
+      ([ADR-0013](decisions/0013-brick-fbdev-flip-thread.md)), which is why the
+      flip runs on its own thread behind a latest-wins mailbox rather than
+      blocking the frame loop. On desktop it is deliberately **off**, per the
+      1.4% deficit above. No tearing observed on the panel.
 
 ---
 
@@ -826,27 +799,30 @@ pad attached, which is why the real pad has a Mode switch.
 
 ## 9. State and storage
 
-- [ ] **[OPEN]** SRAM write policy: on exit, periodic, on menu open?
-- [ ] **[OPEN]** Save state format and slot convention (PlayOS autosaves slot 9).
+- [x] **[LB]** Saves, save states, slots and ownership →
+      **[ADR-0016](decisions/0016-saves-and-save-states.md)** *(Accepted)*.
+      SRAM automatic; five manual slots plus a separate resume slot; resume is
+      the default at launch; Diatom takes paths and never slot numbers.
+- [x] **[OPEN]** Manual slots and the in-game menu → built and verified on
+      hardware. MENU pauses and blocks; the launcher answers `RESUME`, `SAVE`,
+      `LOAD` or `STOP`, and slot naming stays entirely in the launcher as
+      ADR-0016 requires. The handoff it rests on is in §3.
+      [protocol log](discussion/2026-08-25-protocol.md).
 - [ ] **[OPEN]** Preview screenshots for the launcher - frontend's job or host's?
+      `PREVIEW` is in ADR-0009's message table and is not emitted.
 - [ ] **[LB]** Rewind: support or drop? Real RAM cost on a 1GB device.
-- [ ] **[OPEN]** Who owns paths - host passes them in, presumably.
-- [ ] **[LATER]** CHD/CD support. Only matters if disc systems are in scope.
+- [ ] **[OPEN]** CHD/CD support. **No longer conditional** - PC Engine CD is in
+      scope ([core selection](reference/core-selection.md)), so this is real
+      work rather than a contingency.
 
 ---
 
 ## 10. Residency and lifecycle - the genuinely novel part
 
-- [ ] **[LB]** Policy: keep-one, keep-N with LRU, or tiered by core weight?
-- [ ] **[LB]** Eviction trigger: core count, or measured RSS against a budget?
-- [ ] **[OPEN]** **Does `retro_deinit` + `dlclose` actually return the memory?**
-      Some cores hold static state or leak on repeated load. This needs
-      *measuring*, not assuming - and the answer may differ per core. Could
-      invalidate the whole residency design, so test early.
-- [ ] **[OPEN]** Is repeated load/unload of the same core even safe for all
-      target cores?
-- [ ] **[OPEN]** What's the observable win? PlayOS got 1100ms → 200ms with three
-      cores resident. Measure before rebuilding it.
+- [x] **[LB]** **What a warm launch costs** - **~35 ms for NES, ~200 ms for a
+      32 MB GBA title**, against 625-750 ms cold. ADR-0006 and ADR-0008 are now
+      justified by measurement rather than assumption, and ADR-0009 is what
+      delivers it. [warm launch](spikes/2026-08-25-warm-launch.md).
 
 ### RESOLVED 2026-08-23 → [ADR-0006](decisions/0006-keep-all-cores-resident.md)
 
@@ -924,24 +900,49 @@ operation never occurs.
 
 ## 11. Memory discipline (the project's thesis)
 
-- [ ] **[LB]** Set an explicit **RSS budget** and assert it in tests.
+- [x] **[OPEN]** Measurement harness → `tools/rssprobe.c`, per-core RSS deltas
+      around `dlopen` / `retro_init` / `retro_load_game`. Every residency number
+      in §10 comes from it.
+- [x] **[OPEN]** Core-side allocations → measured rather than accounted for.
+      **6 cores mapped + 1 running = 15.0 MB** against 975 MB of RAM
+      ([spike](spikes/2026-08-23-rss-and-dlopen.md)), and RSS was identical
+      after 120 and 720 frames, so nothing observable leaks in that span. The
+      instrument is the accounting; there is no way to do it from inside.
+- [ ] **[LB]** Set an explicit **RSS budget** and assert it in tests. Still
+      unasserted - ADR-0006 names a 250 MB trigger, and §10 records that it is
+      badly calibrated at 16x the measured figure. ~50 MB would mean something.
 - [ ] **[OPEN]** Arena/static allocation; no malloc in the frame loop.
-- [ ] **[OPEN]** How do you account for core-side allocations you don't control?
-- [ ] **[OPEN]** Measurement harness - what tool, what granularity?
+      **Unverified.** Believed true - the frame buffer is grown once and reused
+      - but nothing proves it, and this section is the project's stated thesis.
 
 ---
 
 ## 12. Core options and config
 
-- [ ] **[OPEN]** Expose core options at all, or hardcode a curated set per core?
-- [ ] **[OPEN]** If exposed, who renders the UI - frontend or firmware?
-- [ ] **[OPEN]** Config format and ownership (host-owned is the presumption).
+- [x] **[LB]** **Core options implemented** - `src/options.c`, **171 settings
+      across five cores, previously all unreachable.** Diatom holds definitions
+      and values; the launcher decides them.
+      [log](discussion/2026-08-25-core-options.md).
+- [x] **[OPEN]** Surface options over the protocol → done. `OPTIONS` returns a
+      count plus one `OPTION` line per setting carrying key, current value,
+      default, permitted values and description - everything a menu needs.
+      `SETOPT key= value=` sets one, refused if the core does not offer it.
+- [x] **[OPEN]** **Option availability can depend on loaded content.** FCEUmm
+      declares **0 options at core open and 44 once a ROM is loaded**; the other
+      four declare everything at open. So a launcher cannot always show a core's
+      options from the shelf - for FCEUmm the list is only complete in-game,
+      which fits ADR-0016's in-game menu and rules out a browse-cores options
+      screen.
 
 ---
 
 ## 13. Testing and dev loop
 
-- [ ] **[LB]** Desktop backend **first**, before any device work.
+- [x] **[LB]** Desktop backend **first**, before any device work. Held:
+      `port/desktop.c` was written before `port/brick.c`, which is what
+      kept the seam honest - an interface with one implementation behind
+      it grows that implementation's assumptions however carefully it is
+      written.
 - [x] **[OPEN]** Environment-call logging shim - **DONE 2026-08-23** →
       [spike result](spikes/2026-08-23-env-inventory.md). All six cores, real
       ROMs, full lifecycle, run in an aarch64 container with no device involved.
@@ -959,26 +960,35 @@ operation never occurs.
 
 ## 14. Failure handling
 
-- [x] **[OPEN]** Core crash behaviour (interacts with §3). **Settled by
-      measurement 2026-08-25**, implementing what ADR-0009 already specified.
-      A core is `dlopen`'d into this address space, so a core that dies kills
-      Diatom; a signal handler reports which side of RUNNING that happened on
-      and then re-raises, so the process still dies of its own signal. The
-      phase decides the message, straight from the display rule: crash while
-      loading is `ERROR code=crash` (launcher keeps drawing), crash mid-game is
-      `EXIT reason=crash` (launcher takes the display back). `exit()` raises no
-      signal and is caught by an `atexit` hook. Six failure modes driven on
-      hardware, and `SA_ONSTACK` shown by A/B to be the difference between
-      reporting a stack overflow and reporting nothing.
-      See [the crash-reporting note](discussion/2026-08-25-crash-reporting.md).
-- [ ] **[OPEN]** Missing BIOS, bad ROM, unsupported geometry - fail how?
-- [ ] **[OPEN]** Never trip PlayOS's power-off failsafe.
+- [x] **[OPEN]** Core crash behaviour (interacts with §3) → **settled by
+      measurement 2026-08-25.** A crash while loading is `ERROR code=crash` and
+      the launcher keeps the display; a crash mid-game is `EXIT reason=crash`
+      and it takes the display back. Six failure modes driven on hardware, and
+      `SA_ONSTACK` shown by A/B to be the difference between reporting a stack
+      overflow and reporting nothing.
+      [crash reporting](discussion/2026-08-25-crash-reporting.md).
+- [x] **[OPEN]** How to fail → [ADR-0009](decisions/0009-launcher-protocol.md)
+      settles the shape: `ERROR code=` before RUNNING, `EXIT reason=` after, and
+      the split is about display ownership rather than error reporting.
+      `core_missing`, `rom_unreadable`, `save_failed`, `state_rejected`,
+      `bad_option` and `crash` are all emitted.
+- [ ] **[OPEN]** **`bios_missing` is specified and never emitted.** ADR-0009
+      lists it; nothing in `src/` produces it, so a missing PC Engine System
+      Card currently fails as `rom_unreadable` and tells the launcher the wrong
+      thing. Closes with the System Card work in §9's CD support.
+- [x] **[OPEN]** PlayOS's power-off failsafe - answered in §3: the launcher
+      stays alive as supervisor and `SIGUSR1` is retained as the escape hatch
+      for a core wedged inside `retro_run`.
 
 ---
 
 ## 15. Build and consumption
 
-- [ ] **[OPEN]** C standard (PlayOS uses gnu11) and toolchain container reuse.
+- [x] **[OPEN]** C standard and toolchain →
+      **[ADR-0012](decisions/0012-independent-toolchain.md)** *(Accepted)*.
+      `gnu11`, and Diatom builds its own pinned cross-toolchain rather than
+      borrowing another firmware's. Reusing PlayOS's would have made Diatom
+      depend on a repository it is meant to be independent of.
 - [ ] **[OPEN]** How firmwares consume it (see §1).
 - [ ] **[OPEN]** Cross-device build matrix.
 
