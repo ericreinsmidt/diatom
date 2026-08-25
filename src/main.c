@@ -476,7 +476,17 @@ static int run_session(const diatom_session *sn)
 				 * loop believes it is thousands of frames late and spends the
 				 * next second catching up. */
 				next_us = (double)diatom_port_now_us();
-				prev_buttons = 0;
+
+				/* Re-read input and treat it as already-seen, so MENU must be
+				 * RELEASED before it can open the menu again.
+				 *
+				 * Clearing prev_buttons instead looks equivalent and is not:
+				 * the pause happens the instant the key goes down, so a finger
+				 * is still on it when the launcher resumes, and the next frame
+				 * reads that as a fresh press. Measured with a human 2026-08-25
+				 * - one press produced two menus. */
+				diatom_port_input_poll();
+				prev_buttons = diatom_port_input_state();
 				continue;
 			}
 		}

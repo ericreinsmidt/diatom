@@ -534,7 +534,11 @@ Two amendments ADR-0007 makes to the table above:
       MENU pauses, sends `PAUSED`, and blocks; the launcher draws its menu and
       answers with `RESUME`, `SAVE path=`, `LOAD path=` or `STOP`. Slot naming
       stays entirely in the launcher, as ADR-0016 requires. Verified over the
-      socket except the MENU press itself, which needs a thumb on the device.
+      socket **and on hardware**: two presses 12.44s and 15.13s apart, resume in
+      10 ms. The press found a real bug - clearing `prev_buttons` on resume
+      defeated edge detection, so one press opened the menu twice - and the
+      first report of the test was wrong because the log could not tell a
+      re-trigger from a second press. Instrument now prints elapsed time.
 - [x] **[LB]** **Display handoff, fbdev to EGL** - answered
       ([spike](spikes/2026-08-24-display-handoff.md)). **It works.** The
       invariant is *one presenter at a time*, not one process per display:

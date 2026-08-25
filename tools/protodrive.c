@@ -70,8 +70,12 @@ static void wline(const char *fmt, ...)
 int main(int argc, char **argv)
 {
 	struct sockaddr_un a;
-	int secs, i, attempt, nopt = 0, exercise = 0, argi = 3;
+	int secs, i, attempt, nopt = 0, exercise = 0, argi = 3, menu = 0, menus = 0;
 	const char *optkey = "", *optval = "";
+
+	/* protodrive <sock> <secs> --menu <spec>  waits for the player to press
+	 * MENU, which is the one path no automated client can trigger. */
+	if (argc > 3 && !strcmp(argv[3], "--menu")) { menu = 1; argi = 4; }
 
 	/* Optional: protodrive <sock> <secs> --exercise <optkey> <optval> <spec>...
 	 * Scanned in place rather than by shifting argv, which loses argv[1]. */
@@ -99,7 +103,7 @@ int main(int argc, char **argv)
 
 	for (i = argi; i < argc; i++) {
 		char spec[2048], *bar, *rom;
-		uint64_t t0, t_running = 0;
+		uint64_t t0, t_running = 0, t_last;
 		const char *base;
 
 		snprintf(spec, sizeof spec, "%s", argv[i]);
@@ -111,6 +115,7 @@ int main(int argc, char **argv)
 		base = base ? base + 1 : rom;
 
 		t0 = us();
+		t_last = t0;
 		wline("RUN\tcore=%s\trom=%s", spec, rom);
 
 		for (;;) {
@@ -121,10 +126,38 @@ int main(int argc, char **argv)
 			    !strncmp(l, "LOADED", 6)) {
 				if (nopt < 4 || strncmp(l, "OPTION\t", 7)) printf("    <- %.100s\n", l);
 				if (!strncmp(l, "OPTION\t", 7)) nopt++;
+			} else if (!strncmp(l, "PAUSED", 6)) {
+				/* Elapsed time matters: two PAUSED events milliseconds apart
+				 * are one press re-triggering, seconds apart are two presses.
+				 * Without this the log cannot tell them apart, and a real bug
+				 * on 2026-08-25 was read as correct behaviour because of it. */
+				uint64_t now = us();
+				menus++;
+				printf("  <- PAUSED   (menu %d, +%.2fs since last event)\n",
+				       menus, (now - t_last) / 1000000.0);
+				t_last = now;
+				if (menus == 1) {
+					printf("     driving: SAVE, then RESUME\n");
+					wline("SAVE\tpath=/mnt/SDCARD/diatom/menu.state");
+					wline("RESUME");
+				} else {
+					printf("     driving: STOP\n");
+					wline("STOP");
+				}
 			} else if (!strncmp(l, "RUNNING", 7)) {
+				if (menu && t_running) {
+					printf("  <- RUNNING  (+%.2fs) - Diatom has the display back\n",
+				       (us() - t_last) / 1000000.0);
+				t_last = us();
+					continue;
+				}
 				t_running = us() - t0;
 				printf("  RUN -> RUNNING %8.1f ms   %.40s\n",
 				       t_running / 1000.0, base);
+				if (menu) {
+					printf("     >>> press MENU on the device (twice: save+resume, then quit)\n");
+					continue;
+				}
 
 				/* Exercise the launcher-facing surface: enumerate options,
 				 * change one, write a state, read it back. */
