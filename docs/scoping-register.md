@@ -651,6 +651,14 @@ and 2005 say 50.3197, which paces PAL content 0.62% fast. `bsnes_mercury_balance
 loads and reports the most faithful numbers of any candidate, and manages
 **36.56 fps with 78 resyncs** - out on measurement.
 
+**The coprocessor risk ADR-0005 flagged did not materialise** (measured
+2026-08-25): Star Fox and Stunt Race FX (SuperFX), Yoshi's Island (SA-1), Super
+Mario Kart (DSP-1) and Mega Man X2 (CX4) all hold full speed with 0 resyncs on
+both `snes9x2010` and `snes9x2005_plus`. The A53 carries every coprocessor in
+the library. `snes9x2010` still wins on reported timing: 60.0985 NTSC against
+2005_plus's 59.9227, matching the PAL divergence, so the light forks are wrong
+about both standards.
+
 **Nothing needs building.** The matrix is five fetched cores covering nine
 systems. The ADR-0012 container's C++ path is verified (`GLIBCXX_3.4.28`) and
 currently unused - it is the answer if a future system needs a modern C++ core.

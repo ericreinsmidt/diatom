@@ -62,6 +62,37 @@ run: 36.56 fps against a 50.0070 target with 78 resyncs. libretro's docs warn
 that bsnes has *"minimum system requirements greater than with other
 emulators"*, and on a Cortex-A53 that is decisive.
 
+## The coprocessor question, which ADR-0005 raised a year early
+
+ADR-0005 warned that SNES in-cart coprocessors *"cost CPU rather than RAM and
+may not reach full speed on Cortex-A53 - Star Fox and Yoshi's Island are the
+usual casualties"*, and said it would affect exactly this core choice.
+
+**It does not.** 900 frames each, NTSC, both candidate cores:
+
+| Game | Chip | `snes9x2010` | `snes9x2005_plus` |
+|---|---|---|---|
+| Star Fox (Rev 2) | SuperFX 1 | 60.06 fps, 0 resyncs | 59.87 fps, 0 resyncs |
+| Stunt Race FX (Rev 1) | SuperFX 1 | 60.10, 0 | 59.92, 0 |
+| Yoshi's Island (Rev 1) | SA-1 | 60.06, 0 | 59.88, 0 |
+| Super Mario Kart | DSP-1 | 60.10, 0 | 59.92, 0 |
+| Mega Man X2 | CX4 | 60.10, 0 | 59.92, 0 |
+
+Every coprocessor family in the SNES library, at full speed, on both cores. The
+prediction was reasonable and wrong, which is worth recording as loudly as if it
+had been right.
+
+**The frame-rate divergence holds on NTSC as well**, confirming it is systematic
+rather than a PAL quirk: `snes9x2010` reports **60.0985**, the correct NTSC SNES
+rate, while `snes9x2005_plus` reports 59.9227 - the generic NTSC figure, 0.29%
+slow. Combined with the PAL result (50.0070 against 50.3197, 0.62% fast), the
+light forks are simply wrong about timing on both standards.
+
+**Caveat:** 900 frames is 15 seconds and lands mostly on title and intro
+screens. Star Fox's heaviest load is mid-level with a full polygon count. This
+is strong evidence rather than proof; a few minutes of real play would settle
+it.
+
 ## Consequence
 
 The test matrix is **five cores covering all nine in-scope systems**, all
