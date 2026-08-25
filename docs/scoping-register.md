@@ -569,8 +569,20 @@ Two amendments ADR-0007 makes to the table above:
 | mGBA | 59.7275 | **65536** |
 
 **Five distinct frame rates, five distinct sample rates.** Only PicoDrive hits
-exactly 60. mGBA emits 65536 Hz, above any device rate. **DRC is mandatory, not
-a refinement** - there is no configuration in which rates line up.
+exactly 60. **DRC is mandatory, not a refinement** - there is no configuration
+in which rates line up.
+
+> **That table is what cores report when nobody asks them.** Since
+> `GET_TARGET_SAMPLE_RATE` was implemented the mGBA row is no longer current:
+> measured 2026-08-25, mGBA reports **48000 Hz** for GBA content and hits the
+> pass-through path with no resampling at all. The 65536 was its fallback.
+>
+> The awkward rate that remains is **131072 Hz for Game Boy content** under the
+> same core (recorded 2026-08-24) - a 2.73:1 downsample, the widest in the
+> matrix, so the negotiation is per-content rather than per-core. Kept as
+> history rather than edited: it is the measurement that made DRC mandatory,
+> and the fact that answering one environment call removed the worst case is
+> the more useful lesson.
 
 Two levers the spike discovered:
 
