@@ -33,6 +33,18 @@ static int16_t  g_prev[2];
 static bool     g_have_prev;
 static int      g_capacity;
 static double   g_integral;
+static uint64_t g_dropped;      /* frames the port would not take */
+
+/* Every write goes through here so a refusal is counted exactly once. Silent
+ * drops are how the overshoot went unnoticed: the queue depth was the only
+ * evidence, and the queue was permitted to exceed its own stated capacity. */
+static void push(const int16_t *f, size_t n)
+{
+	size_t took = diatom_port_audio_write(f, n);
+	if (took < n) g_dropped += (uint64_t)(n - took);
+}
+
+uint64_t diatom_audio_dropped(void) { return g_dropped; }
 
 void diatom_audio_configure(double src_rate, int dst_rate, int capacity_frames)
 {
@@ -43,6 +55,7 @@ void diatom_audio_configure(double src_rate, int dst_rate, int capacity_frames)
 	g_have_prev  = false;
 	g_capacity   = capacity_frames;
 	g_integral   = 0.0;
+	g_dropped    = 0;
 }
 
 /* Fill the buffer to target before the first frame runs.
@@ -64,7 +77,7 @@ void diatom_audio_prime(void)
 	memset(silence, 0, sizeof silence);
 	while (remaining > 0) {
 		int n = remaining > 512 ? 512 : remaining;
-		diatom_port_audio_write(silence, (size_t)n);
+		push(silence, (size_t)n);
 		remaining -= n;
 	}
 }
@@ -146,7 +159,7 @@ size_t diatom_audio_push(const int16_t *in, size_t frames)
 	 * GET_TARGET_SAMPLE_RATE lands here, which is the point of implementing it.
 	 * Rate control is skipped too; there is nothing to nudge. */
 	if (g_ratio > 0.9999 && g_ratio < 1.0001) {
-		diatom_port_audio_write(in, frames);
+		push(in, frames);
 		return frames;
 	}
 
@@ -176,7 +189,7 @@ size_t diatom_audio_push(const int16_t *in, size_t frames)
 		g_phase += g_ratio;
 
 		if (produced == OUT_CHUNK) {
-			diatom_port_audio_write(out, produced);
+			push(out, produced);
 			total += produced;
 			produced = 0;
 		}
@@ -186,6 +199,6 @@ size_t diatom_audio_push(const int16_t *in, size_t frames)
 	g_prev[0] = in[(frames - 1) * 2];
 	g_prev[1] = in[(frames - 1) * 2 + 1];
 
-	if (produced) { diatom_port_audio_write(out, produced); total += produced; }
+	if (produced) { push(out, produced); total += produced; }
 	return total;
 }

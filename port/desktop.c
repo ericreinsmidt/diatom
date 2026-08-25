@@ -141,13 +141,33 @@ void diatom_port_present(const void *src, int w, int h, size_t pitch,
 	SDL_RenderPresent(g_renderer);
 }
 
-void diatom_port_audio_write(const int16_t *frames, size_t n)
+size_t diatom_port_audio_write(const int16_t *frames, size_t n)
 {
+	size_t queued, room;
+
 	/* Never blocks; drops on overflow. A blocking write would pace the whole
-	 * program off the audio clock, which rules out dynamic rate control. */
-	if (!g_audio || !frames || !n) return;
-	if (diatom_port_audio_queued() >= (size_t)AUDIO_BUFFER_FRAMES) return;
+	 * program off the audio clock, which rules out dynamic rate control.
+	 *
+	 * Take only what fits. The previous test was `queued >= capacity`, which
+	 * refuses only an ALREADY FULL queue and then admits a whole batch: at 4095
+	 * queued a 832-frame batch landed entire, and the queue reached a measured
+	 * **4927 against a stated 4096**. That mattered beyond the extra latency,
+	 * because rate control clamps its error term at +1.0 - reached at exactly
+	 * capacity - so everything above capacity was invisible to the controller
+	 * that was supposed to be preventing it.
+	 *
+	 * Clamping rather than refusing the batch outright loses less: the frames
+	 * that do not fit are dropped either way, and there is no reason to discard
+	 * the ones that would have. */
+	if (!g_audio || !frames || !n) return 0;
+	queued = diatom_port_audio_queued();
+	room   = queued >= (size_t)AUDIO_BUFFER_FRAMES
+	       ? 0 : (size_t)AUDIO_BUFFER_FRAMES - queued;
+	if (n > room) n = room;
+	if (!n) return 0;
+
 	SDL_QueueAudio(g_audio, frames, (Uint32)(n * AUDIO_FRAME_BYTES));
+	return n;
 }
 
 size_t diatom_port_audio_queued(void)

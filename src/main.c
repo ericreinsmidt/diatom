@@ -212,8 +212,24 @@ void diatom_on_video(const void *data, unsigned w, unsigned h, size_t pitch)
 	g_frame_fresh = true;
 }
 
+/* Raised for the warmup frames only. Their audio is pre-roll for a game that
+ * has not started, produced by three unpaced calls to retro_run, and queueing
+ * it is what filled the buffer before the paced loop ever ran:
+ *
+ *   prime to half   2048
+ *   warmup frame 1  3008
+ *   warmup frame 2  3968
+ *   warmup frame 3  4096, and 831 of 960 frames refused
+ *
+ * Measured on the Brick 2026-08-25 - 4120 frames dropped at every launch,
+ * identical at 300, 600, 1200 and 2400 frames of run, because it is entirely a
+ * startup transient. Dropping this audio deliberately is more honest than
+ * queueing it and then having the port refuse it. */
+static bool g_audio_warmup;
+
 void diatom_on_audio_batch_store(const int16_t *data, size_t frames)
 {
+	if (g_audio_warmup) return;
 	diatom_audio_push(data, frames);
 }
 
@@ -557,12 +573,14 @@ static int run_session_inner(const diatom_session *sn)
 	{
 		uint64_t w0 = diatom_port_now_us();
 		int w;
+		g_audio_warmup = true;
 		for (w = 0; w < 3; w++) {
 			g_core->run();
 			diatom_port_present(g_frame, g_frame_w, g_frame_h, g_frame_pitch,
 			                    g_policy.pixfmt, g_dst,
 			                    g_filter);
 		}
+		g_audio_warmup = false;
 		printf("diatom: warmup 3 frames in %.1f ms\n",
 		       (diatom_port_now_us() - w0) / 1000.0);
 	}
@@ -720,6 +738,8 @@ static int run_session_inner(const diatom_session *sn)
 			report_slot(i, DIATOM_FILTER_NEAREST);
 			report_slot(i, DIATOM_FILTER_SHARP);
 		}
+		printf("diatom: audio dropped %llu frame(s)\n",
+		       (unsigned long long)diatom_audio_dropped());
 		printf("diatom: audio queued min %zu max %zu final %zu, target %d, capacity %d\n",
 		       q_min == (size_t)-1 ? 0 : q_min, q_max,
 		       diatom_port_audio_queued(),

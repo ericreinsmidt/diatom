@@ -605,15 +605,21 @@ Two levers the spike discovered:
       hardest ratio found, mGBA at 131072 Hz into 48000 (2.73:1), held at 0
       resyncs and +0.209% drift - so this is a known-provisional rather than a
       known-broken.
+- [ ] **[OPEN]** **Startup audio transient, bounded but not zero.** After
+      discarding warmup audio, NES PAL still drops **1244 frames** and PC Engine
+      **575**, constant at 300/900/1800 frames so still purely a transient
+      (~26 ms once per launch, down from 86 ms). Priming fills to half of 4096,
+      leaving ~2 frames of headroom; a quarter would leave 3 and trade against
+      underrun. A tuning question that wants someone listening, not a number.
 - [ ] **[OPEN]** `SET_AUDIO_BUFFER_STATUS_CALLBACK` (cmd 62, offered by 3 of 6
       cores) is **not implemented** - the core-side half of DRC, letting a core
       throttle itself on buffer occupancy. Host-side DRC works without it, so
       this is an improvement rather than a gap.
-- [ ] **[OPEN]** **`audio_write` overshoots its own capacity.** It admits a
-      batch whenever *any* space remains, so a full batch can land against a
-      nearly-full queue: measured **4927 frames against a stated 4096**. The
-      guard tests the wrong thing - it should refuse when the batch would not
-      fit, not when the queue is not already full.
+- [x] **[OPEN]** **`audio_write` overshot its own capacity** - 4927 frames
+      against a stated 4096, hiding itself from a controller whose error term
+      clamps at capacity. Fixed by taking only what fits; the write now returns
+      what it took, so refusals are counted rather than silent. That exposed a
+      bigger startup transient. [log](discussion/2026-08-25-audio-queue.md).
 - [x] **[OPEN]** ~~GBA is the best test case.~~ Superseded by measurement: the
       hardest case is **PAL at 50.0070 Hz on a 60 Hz panel** (FCEUmm, Snes9x),
       and the most awkward *rate* is mGBA's **65536 Hz**. Use both as

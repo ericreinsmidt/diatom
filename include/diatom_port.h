@@ -101,8 +101,15 @@ void diatom_port_present(const void *src, int w, int h, size_t pitch,
 /* Interleaved stereo S16 at caps.audio_rate. NEVER blocks; drops on overflow.
  * A blocking write is a legitimate sync strategy but is incompatible with
  * dynamic rate control, which the measured spread of core rates makes
- * mandatory: 32040 / 32768 / 44100 / 48000 / 65536 Hz across six cores. */
-void   diatom_port_audio_write(const int16_t *frames, size_t n);
+ * mandatory: 32040 / 32768 / 44100 / 48000 / 65536 Hz across six cores.
+ *
+ * RETURNS the number of frames accepted, which may be fewer than `n` and may
+ * be zero. Returning void made "drops on overflow" unobservable: the host
+ * could not tell a dropped frame from a written one, so the only evidence of
+ * trouble was the queue depth - and the queue was allowed to exceed the
+ * capacity reported in caps, which hid it there too. A port must never accept
+ * more than caps.audio_buffer_frames; partial acceptance is how it says no. */
+size_t diatom_port_audio_write(const int16_t *frames, size_t n);
 size_t diatom_port_audio_queued(void);
 
 void     diatom_port_input_poll(void);
