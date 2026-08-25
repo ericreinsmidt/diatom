@@ -17,3 +17,7 @@ CLAUDE.md
 
 # Device sysroots are regenerated, never committed - see tools/fetch-brick-sysroot.sh
 /sysroot/
+
+# Third-party core binaries, fetched by tools/fetch-cores.sh. Provenance is
+# recorded in CORES.md; the bytes are not ours to commit.
+/cores/
