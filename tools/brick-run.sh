@@ -6,6 +6,10 @@
 #   tools/brick-run.sh --display aspect         a specific starting mode
 #   tools/brick-run.sh --core X.so --rom game   anything already staged
 #   tools/brick-run.sh --exec '<shell>'         any command, same guard
+#   DIATOM_GAIN=6 tools/brick-run.sh ...        set output gain (0-7, 6dB/step)
+#
+# It REFUSES to start if anything is already presenting. Two presenters wedge
+# the framebuffer in-kernel and cost a power cycle - measured twice now.
 #
 # Use --exec for anything that runs Diatom more than once, or runs it in a
 # loop. Hand-writing an `adb shell` that skips the freeze is how the display
