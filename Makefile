@@ -57,7 +57,7 @@ ifeq ($(PORT),brick)
 endif
 
 .PHONY: all clean check check-seam check-register check-register-diff \
-        stub run-stub tools probes
+        check-corefacts stub run-stub tools probes
 
 all: $(BIN)
 
@@ -140,10 +140,16 @@ $(BUILD)/%.o: %.c
 # fails when it is broken. check-seam has held since day one for exactly that
 # reason; the register drifted 418 -> 992 lines in three days because nothing
 # ever complained.
-check: check-seam check-register
+check: check-seam check-register check-corefacts
 
 check-register:
 	@python3 tools/check-register.py
+
+# The offline half: does core-facts.md still describe the cores we ship? The
+# real proof re-measures on hardware - tools/corefacts.sh --check - but that
+# needs the device and the user's ROMs, so it cannot run on every build.
+check-corefacts:
+	@python3 tools/check-corefacts.py
 
 # Use in a commit hook or by hand before committing: enforces that a resolution
 # REPLACES the question it answers rather than being appended below it, which

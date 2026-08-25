@@ -196,3 +196,42 @@ first now, and overlap is measured against the *shorter* item rather than the
 union, because a one-line question and a six-line resolution can be about
 exactly the same thing. That took it to 4, all worth reading. A check that
 cries wolf is one people learn to ignore, which is worse than no check.
+
+## `corefacts.sh` and `check-corefacts.py` - measured facts, not remembered ones
+
+*Do the numbers in `docs/` still describe the cores we actually ship?*
+
+On 2026-08-25 an audit found that **three of the six rows in ADR-0015's aspect
+table described cores the project had rejected the day before.** Genesis went
+1.3333 to 1.5238 when PicoDrive lost to Genesis Plus GX; SNES 1.3333 to 1.5842
+when snes9x 1.63 lost to snes9x2010; NES 1.2190 to 1.3061 on a rebuilt FCEUmm.
+
+Nothing could detect it, because that table was keyed on the **system**. A
+system does not report an aspect ratio - a specific core build does, and the
+number had been separated from the binary that produced it. CORES.md already
+stated the intent: *"this file exists so the measurements in docs/ name the
+exact bytes that produced them."* Stating it was not enough.
+
+    tools/corefacts.sh           re-measure and rewrite docs/reference/core-facts.md
+    tools/corefacts.sh --check   re-measure and fail if the file is out of date
+    make check-corefacts         the offline half; runs on every build
+
+`corefacts.sh` verifies every core's sha256 against CORES.md **on the host, then
+again on the device after the push**, and refuses to measure anything unpinned.
+That is not belt-and-braces. The hand audit that started this made exactly that
+mistake: it measured a device staging directory that had drifted, read mGBA's
+rate as 48000 when the pinned build reports 65536, and wrongly called the Game
+Boy row stale. A careful audit was still wrong, because carefulness cannot
+verify a hash.
+
+`check-corefacts.py` is what runs without a device. It asserts one thing - that
+the pinned set recorded in `core-facts.md` is still the pinned set in CORES.md -
+so swapping a core fails immediately instead of quietly aging every measurement
+that cited it.
+
+A first version also tried to forbid docs from restating any number the facts
+file owns. It fired on `50.0070` a dozen times, which is not a core's opinion
+but the correct PAL frame rate. Removed: a check that cannot tell a legitimate
+reference from a stale copy is one people learn to ignore. Citing the file by
+link is therefore a **convention**, and the tooling says so rather than
+pretending to enforce it.
