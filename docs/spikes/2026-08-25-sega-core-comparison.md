@@ -76,6 +76,14 @@ matters if states are ever synced between a device and a desktop.
 two that has it. Nothing about performance argues for PicoDrive here; both hold
 frame rate with room, and Diatom's own blit dominates either way.
 
+## Postscript, 2026-08-25
+
+The conditional in the decision above is resolved: **32X is out of scope**, so
+`genesis_plus_gx` is the Sega core unconditionally and PicoDrive is not carried
+at all. See the register for the reasoning - briefly, supporting 32X would mean
+a sixth core existing solely for a ~40 title library that is mostly Genesis
+ports.
+
 ## The seam held
 
 An unfamiliar core, three systems it had never been run against, five games:

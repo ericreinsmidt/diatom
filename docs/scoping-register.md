@@ -590,6 +590,30 @@ Systems in scope by the criteria in
 [ADR-0005](decisions/0005-system-inclusion-criteria.md); the list moves without
 superseding it.
 
+**32X is out** (2026-08-25). ADR-0005 never mentioned it - not In, not Out, not
+even Unasked - so this is a list movement, not an amendment to the criteria.
+Reasoning, worst argument first:
+
+1. **Rule 1 is ambiguous.** Knuckles' Chaotix and Kolibri are 2D, but the
+   titles the hardware exists for - Virtua Racing Deluxe, Virtua Fighter, Doom -
+   are pseudo-3D. The rule does not cleanly decide it.
+2. **Rule 3 was never measured.** Dual SH-2 at 23 MHz on a Cortex-A53 is a real
+   question and no 32X ROM was available to answer it. Now moot.
+3. **The decisive argument is cost against library.** Only PicoDrive supports
+   32X, and PicoDrive lost the Sega comparison on correctness. Including 32X
+   means carrying a **sixth core solely for it** - which is exactly the shape
+   OpenEmu adopted, GPGX for the Sega block plus a 32X-only PicoDrive. The
+   library is roughly 40 titles across a 14-month commercial life, most of them
+   enhanced Genesis ports.
+
+A system whose support costs an entire extra core, to serve ~40 mostly-ported
+games, fails the spirit of the criteria even where the letter is unclear.
+
+**Still unasked** from ADR-0005's original list: Lynx, Sega CD, Atari 7800.
+Master System, Game Gear and Game Boy / GBC have since moved In and are in the
+table below. Note that Sega CD brings the Disk Control Interface with it - 21
+multi-disc titles - so it is not free despite `genesis_plus_gx` covering it.
+
 | System | Max ROM | Integer scale |
 |---|---|---|
 | NES | ~1 MB | 3× → 768×720 |
@@ -623,7 +647,8 @@ call: both hold frame rate with 0 resyncs. PicoDrive reports a fixed 320x240 for
 every system, so Game Gear arrives double-scaled and distorted; Genesis Plus GX
 reports true geometry, giving an exact 5x for Game Gear and a 1024x768 whole-
 panel fill for Master System. Costs a 12.6 MB core and ~1 MB save states.
-PicoDrive remains the choice only if 32X is in scope.
+PicoDrive is not needed: **32X is out of scope** (decided 2026-08-25), so
+`genesis_plus_gx` is the Sega core unconditionally.
 
 **gpSP is not needed** (measured 2026-08-25). It is on the buildbot for
 aarch64 and it is C, so it would run where the C++ cores do not - but it covers
