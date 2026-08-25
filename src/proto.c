@@ -116,6 +116,34 @@ void diatom_proto_send(const char *fmt, ...)
 		log_(DIATOM_LOG_WARN, "proto: send: %s", strerror(errno));
 }
 
+/* The crash path. Async-signal-safe, which rules out the send above: vsnprintf
+ * is not on POSIX's list, and neither is re-entering the buffer it formats
+ * into. So `line` must arrive complete, newline included, as a constant.
+ *
+ * send() rather than write() for two reasons, both required. send() is on the
+ * async-signal-safe list. MSG_NOSIGNAL stops a launcher that died first from
+ * turning a reportable crash into an unreportable one - without it the SIGPIPE
+ * default disposition would kill us here, before we could re-raise the signal
+ * that actually caused the crash.
+ *
+ * One pass, and no retry on EAGAIN. A launcher that has stopped reading would
+ * otherwise turn a crash into a hang, and an unreported crash is much the
+ * lesser fault - the socket closing tells the launcher something died anyway.
+ */
+void diatom_proto_emit_fatal(const char *line)
+{
+	size_t n = 0, off = 0;
+
+	if (g_conn < 0 || !line) return;
+	while (line[n]) n++;          /* strlen is not on the safe list either */
+
+	while (off < n) {
+		ssize_t w = send(g_conn, line + off, n - off, MSG_NOSIGNAL);
+		if (w <= 0) return;
+		off += (size_t)w;
+	}
+}
+
 /* Fill `out` from one complete line. Unknown keys are skipped silently. */
 static void parse_line(char *line, diatom_msg *out)
 {

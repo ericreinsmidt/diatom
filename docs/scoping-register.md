@@ -4,7 +4,12 @@ A living checklist. Nothing here is decided unless it says DECIDED.
 Tags: **[LB]** load-bearing (expensive to reverse - decide early) ·
 **[OPEN]** needs a decision · **[LATER]** safe to defer ·
 **[DEFERRED]** was load-bearing, deliberately postponed with a written reason
-and a trigger for revisiting - distinct from `[LATER]`, which was never urgent.
+and a trigger for revisiting - distinct from `[LATER]`, which was never urgent ·
+**[NOT PLANNED]** off the path entirely for now, and not because it was
+rejected - the work it depends on comes first. Different from `[LATER]` in that
+nothing is waiting for a decision, and from `[DEFERRED]` in that no trigger is
+being watched. Items tagged this way still carry their reasoning, because "we
+chose not to" is worth more later than silence.
 
 **On `[LB]` discipline.** Load-bearing means *expensive to reverse* - a
 published interface, a data format, something with multiple implementations
@@ -332,8 +337,14 @@ Two amendments ADR-0007 makes to the table above:
       computes `dst` and the port blits. Scale policy never reaches the port.
 - [ ] **[OPEN]** Does the port ever get to *refuse* - e.g. "this geometry can't
       be integer-scaled on this panel"? Who handles that?
-- [ ] **[OPEN]** Backends to build: `desktop` (SDL2, first), `brick` (TG3040),
-      Miniloong later.
+- [ ] **[OPEN]** Backends to build: `desktop` (SDL2, first), `brick` (TG3040).
+      **Miniloong is [NOT PLANNED]** as of 2026-08-25 - not rejected, just not
+      on the path. The order of work is Diatom complete and fully integrated
+      with PlayOS on the Brick first; a second device is worth looking at after
+      that and not before. Two consequences worth naming rather than
+      discovering: the rotation abstraction stays **unproven** until a portrait
+      panel exists to prove it against, and every Miniloong number already in
+      this register is a claim about a device nothing currently builds for.
 - [ ] **[LB]** SDL2 as the baseline for both desktop and device, or SDL2 on
       desktop and something lower on device?
 
@@ -618,8 +629,10 @@ deliberate target**, not an edge case - Probotector is PAL-only Contra. Pacing
       the **panel's**? Measured disagreement: 50.0070 · 59.7275 · 59.8200 ·
       60.0000. Only PicoDrive matches a 60 Hz panel.
 - [ ] **[OPEN]** Frame drop/duplicate policy when they disagree.
-- [ ] **[OPEN]** Miniloong's 120Hz panel is a clean 2× - does that change the
-      answer per device, and does the port get a say?
+- [ ] **[NOT PLANNED]** Miniloong's 120Hz panel is a clean 2× - does that
+      change the answer per device, and does the port get a say? Parked with
+      the Miniloong port itself (§4); unanswerable without the hardware in the
+      build matrix.
 - [ ] **[OPEN]** vsync: available on these panels? Tearing acceptable?
 
 ---
@@ -946,7 +959,18 @@ operation never occurs.
 
 ## 14. Failure handling
 
-- [ ] **[OPEN]** Core crash behaviour (interacts with §3).
+- [x] **[OPEN]** Core crash behaviour (interacts with §3). **Settled by
+      measurement 2026-08-25**, implementing what ADR-0009 already specified.
+      A core is `dlopen`'d into this address space, so a core that dies kills
+      Diatom; a signal handler reports which side of RUNNING that happened on
+      and then re-raises, so the process still dies of its own signal. The
+      phase decides the message, straight from the display rule: crash while
+      loading is `ERROR code=crash` (launcher keeps drawing), crash mid-game is
+      `EXIT reason=crash` (launcher takes the display back). `exit()` raises no
+      signal and is caught by an `atexit` hook. Six failure modes driven on
+      hardware, and `SA_ONSTACK` shown by A/B to be the difference between
+      reporting a stack overflow and reporting nothing.
+      See [the crash-reporting note](discussion/2026-08-25-crash-reporting.md).
 - [ ] **[OPEN]** Missing BIOS, bad ROM, unsupported geometry - fail how?
 - [ ] **[OPEN]** Never trip PlayOS's power-off failsafe.
 

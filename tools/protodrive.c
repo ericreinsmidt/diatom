@@ -11,6 +11,10 @@
  *
  * An instrument, not Diatom code. See tools/README.md.
  *
+ * `secs` 0 means do not send STOP: let the session end on its own, which is how
+ * the crash paths are watched - the point there is exactly that Diatom reports
+ * something nobody asked it to.
+ *
  *   protodrive <socket> <secs> [--exercise <optkey> <optval>] <core>|<rom> ...
  */
 #define _GNU_SOURCE
@@ -72,6 +76,14 @@ int main(int argc, char **argv)
 	struct sockaddr_un a;
 	int secs, i, attempt, nopt = 0, exercise = 0, argi = 3, menu = 0, menus = 0;
 	const char *optkey = "", *optval = "";
+
+	/* Line-buffered, because this tool watches things that die. Redirected to
+	 * a file stdout is block-buffered, so a protodrive killed while waiting
+	 * loses everything it had already printed - and on 2026-08-25 that read as
+	 * "the session never reached RUNNING" when it had. An instrument whose
+	 * output disappears exactly when the interesting thing happens is worse
+	 * than no instrument. */
+	setvbuf(stdout, NULL, _IOLBF, 0);
 
 	/* protodrive <sock> <secs> --menu <spec>  waits for the player to press
 	 * MENU, which is the one path no automated client can trigger. */
@@ -170,13 +182,21 @@ int main(int argc, char **argv)
 					wline("LOAD\tpath=/mnt/SDCARD/diatom/proto.state");
 					sleep(1);
 				}
+				if (secs == 0) {
+					printf("     waiting for it to end by itself\n");
+					continue;
+				}
 				sleep(secs);
 				wline("STOP");
 			} else if (!strncmp(l, "EXIT", 4)) {
-				printf("                              %s\n", l);
+				/* Elapsed since RUNNING, because for a crash that is the
+				 * whole measurement: it says the report arrived from a
+				 * running game rather than from the launch failing. */
+				printf("  <- %s   (+%.2fs)\n", l, (us() - t_last) / 1000000.0);
 				break;
 			} else if (!strncmp(l, "ERROR", 5)) {
-				printf("  %s\n", l);
+				printf("  <- %s   (+%.2fs, launcher keeps the display)\n",
+				       l, (us() - t_last) / 1000000.0);
 				break;
 			}
 		}

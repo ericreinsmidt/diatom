@@ -14,6 +14,21 @@
  *   - SET_GEOMETRY mid-run     : 3 of 6 measured cores change geometry while running
  *   - RGB565                   : what all six chose when offered a choice
  *
+ * It can also be told to die, which is the only way to test the crash side of
+ * the protocol - `EXIT reason=crash` versus `ERROR code=crash`. That belongs
+ * here rather than in Diatom: a frontend with a --crash flag would be test code
+ * living in the shipped binary, and the whole point is that Diatom learns about
+ * the crash the same way it will in the field, from a signal it did not raise.
+ *
+ *   STUBCORE_CRASH=segv[@N]   null dereference, at frame N (default 60)
+ *   STUBCORE_CRASH=stack[@N]  unbounded recursion - needs the altstack
+ *   STUBCORE_CRASH=abort[@N]  abort(), so SIGABRT
+ *   STUBCORE_CRASH=fpe[@N]    integer divide by zero - a NO-OP on ARM, which
+ *                             does not trap it; kept because it does trap on
+ *                             x86 and the difference is worth being able to see
+ *   STUBCORE_CRASH=exit[@N]   exit(1), which raises no signal at all
+ *   STUBCORE_CRASH=load       die inside retro_load_game, before RUNNING
+ *
  * Test fixture. Not part of Diatom's runtime.
  */
 #include <stdint.h>
@@ -87,10 +102,76 @@ void retro_get_system_av_info(struct retro_system_av_info *info)
 void retro_set_controller_port_device(unsigned port, unsigned device)
 { (void)port; (void)device; }
 
+/* Deliberate faults. `volatile` throughout and no inlining, because -O2 is
+ * entitled to assume undefined behaviour never happens: an unguarded null store
+ * can be deleted outright, and a self-call with no side effect can be turned
+ * into a loop that never grows the stack. Both were observed while writing
+ * this - the segv mode compiled to nothing at all. */
+static volatile int *const null_ptr = (volatile int *)0;
+
+/* Somewhere for a frame address to go, so the frame cannot be discarded. */
+static volatile char *frame_sink;
+
+__attribute__((noinline)) static int recurse(volatile int depth)
+{
+	volatile char eat[512];
+	int r;
+
+	eat[0] = (char)depth;
+	/* The bound is for the compiler, not for correctness: without it this is
+	 * provably infinite and -Winfinite-recursion fires, and a build that warns
+	 * on purpose is a build whose warnings get ignored. 2^30 frames of 512
+	 * bytes is half a terabyte of stack, so the guard never runs. */
+	if (depth > (1 << 30)) return eat[0];
+
+	r = recurse(depth + 1);
+	/* Touching the frame AFTER the call is what makes this recursion. `volatile`
+	 * and `noinline` are not enough on their own: aarch64-linux-gnu-gcc at -O2
+	 * turned the obvious version into `add sp, sp, #0x210; b recurse` - a
+	 * sibling call that pops its frame before branching, so the stack never
+	 * grew and the fixture quietly tested nothing. It still crashed on macOS,
+	 * which is how the disagreement surfaced. Taking the frame's address here
+	 * means the frame must outlive the call, and a tail call becomes illegal. */
+	frame_sink = &eat[0];
+	return r + eat[0];
+}
+
+static void die(const char *how)
+{
+	if (!strcmp(how, "segv"))  { *null_ptr = 1; }
+	if (!strcmp(how, "stack")) { recurse(0); }
+	if (!strcmp(how, "abort")) { abort(); }
+	if (!strcmp(how, "exit"))  { exit(1); }
+	if (!strcmp(how, "fpe"))   { volatile int z = 0; volatile int r = 1 / z; (void)r; }
+}
+
+/* `mode` is the word before any '@', `at` the frame after it. */
+static char     crash_mode[16];
+static unsigned crash_at = 60;
+
+static void crash_configure(void)
+{
+	const char *e = getenv("STUBCORE_CRASH");
+	const char *at;
+	size_t n;
+
+	if (!e || !*e) return;
+	at = strchr(e, '@');
+	n  = at ? (size_t)(at - e) : strlen(e);
+	if (n >= sizeof crash_mode) n = sizeof crash_mode - 1;
+	memcpy(crash_mode, e, n);
+	crash_mode[n] = '\0';
+	if (at) crash_at = (unsigned)strtoul(at + 1, NULL, 10);
+}
+
 bool retro_load_game(const struct retro_game_info *game)
 {
 	enum retro_pixel_format fmt = RETRO_PIXEL_FORMAT_RGB565;
 	(void)game;                                  /* content is optional here */
+	crash_configure();
+	/* Before RUNNING has gone out, so the frontend owes the launcher an ERROR
+	 * and must keep its hands off the display. */
+	if (!strcmp(crash_mode, "load")) *null_ptr = 1;
 	return env && env(RETRO_ENVIRONMENT_SET_PIXEL_FORMAT, &fmt);
 }
 bool retro_load_game_special(unsigned t, const struct retro_game_info *i, size_t n)
@@ -122,6 +203,11 @@ void retro_run(void)
 	int16_t audio[AUDIO_MAX_FRAMES * 2];
 	size_t n, i;
 	int16_t held;
+
+	/* Die from inside retro_run, on a frame late enough that RUNNING has long
+	 * gone out and the frontend is in its steady loop. Doing it on frame 0
+	 * would land during the warmup and prove less. */
+	if (crash_mode[0] && frame == crash_at) die(crash_mode);
 
 	/* One frame's worth of audio, with the fraction carried.
 	 *

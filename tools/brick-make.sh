@@ -52,6 +52,11 @@ check() {   # check <output> <source>...
 
 check "$ROOT/build/brick/diatom" \
       "$ROOT"/src/*.c "$ROOT"/src/*.h "$ROOT"/include/*.h "$ROOT"/port/brick.c
+# The stub was missed the first time round and cost an hour on 2026-08-25: a
+# source change did not rebuild, so a fixture that had been fixed was still the
+# broken one on the device, and the device disagreeing with the desktop looked
+# like a platform difference.
+check "$ROOT/build/brick/stubcore.so" "$ROOT/test/stubcore.c"
 for out in "$ROOT"/build/brick/tools/*; do
     [ -f "$out" ] || continue
     check "$out" "$ROOT/tools/$(basename "$out").c"

@@ -134,6 +134,10 @@ void diatom_proto_send(const char *fmt, ...);
  * mid-game, so a restarted launcher does not draw over live output. */
 diatom_msg_kind diatom_proto_poll(diatom_msg *out, int timeout_ms, bool running);
 
+/* Async-signal-safe, for the crash handler. `line` must be a complete constant
+ * with its own newline: nothing that formats a string is callable from there. */
+void diatom_proto_emit_fatal(const char *line);
+
 /* save.c - persistence. Host-side entirely: the port deals in pixels, samples,
  * buttons and time, and a file is none of those.
  *

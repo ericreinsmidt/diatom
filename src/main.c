@@ -41,6 +41,138 @@ static bool g_quit_requested;   /* launcher said QUIT */
 
 static void on_terminate(int sig) { (void)sig; g_terminate = 1; }
 
+/* --- crash reporting - ADR-0009's `EXIT reason=crash` --------------------- */
+
+/* A core is dlopen'd into this address space (ADR-0006), so a core that dies
+ * kills Diatom. That rules out the trick on_terminate uses: there is no "after
+ * retro_run returns" to defer the work to, because the process is going away
+ * inside the handler.
+ *
+ * Which side of RUNNING the crash lands on decides the message, and that comes
+ * straight from proto.c's rule rather than from taste. A core that dies while
+ * loading means the game never started, so the launcher is still drawing and
+ * must be told ERROR. A core that dies mid-game means it ran and stopped, so
+ * the launcher is NOT drawing and must be told EXIT to take the display back.
+ * Sending the wrong one leaves a handheld showing a dead frame.
+ *
+ * What this deliberately does not do is try to survive. Continuing after a
+ * fault in a dlopen'd core - longjmp back to the protocol loop, accept the next
+ * RUN - is tempting precisely because residency makes the process valuable, and
+ * it is wrong: the address space is already suspect, the core's own state is
+ * arbitrary, and the next game would inherit both. */
+enum { PHASE_IDLE, PHASE_LOADING, PHASE_RUNNING };
+static volatile sig_atomic_t g_phase;
+
+/* Complete lines, one per signal per phase, because a handler cannot build a
+ * string: snprintf is not async-signal-safe. Repetitive on purpose - the
+ * alternative is assembling the line in pieces, and a torn write would put a
+ * malformed message on the socket at the worst possible moment.
+ *
+ * `signal=` is an extra key, which ADR-0009 makes free: unknown keys are
+ * ignored, so an older launcher sees a plain crash and a newer one can log
+ * which signal it was. That name is the only trace that survives - the process
+ * is about to die, and nothing else records it. */
+static const struct {
+	int         sig;
+	const char *running;   /* crashed after RUNNING: it ran and stopped */
+	const char *loading;   /* crashed before RUNNING: it never started */
+} crash_lines[] = {
+	{ SIGSEGV, "EXIT\treason=crash\tsignal=SIGSEGV\n", "ERROR\tcode=crash\tmsg=SIGSEGV\n" },
+	{ SIGBUS,  "EXIT\treason=crash\tsignal=SIGBUS\n",  "ERROR\tcode=crash\tmsg=SIGBUS\n"  },
+	{ SIGILL,  "EXIT\treason=crash\tsignal=SIGILL\n",  "ERROR\tcode=crash\tmsg=SIGILL\n"  },
+	{ SIGFPE,  "EXIT\treason=crash\tsignal=SIGFPE\n",  "ERROR\tcode=crash\tmsg=SIGFPE\n"  },
+	{ SIGABRT, "EXIT\treason=crash\tsignal=SIGABRT\n", "ERROR\tcode=crash\tmsg=SIGABRT\n" },
+};
+
+static void on_crash(int sig)
+{
+	size_t i;
+
+	/* PHASE_IDLE says no game was in flight, so there is nothing to report
+	 * about one. Diatom dying between sessions reaches the launcher as the
+	 * socket closing, which ADR-0009 already relies on for liveness. */
+	if (g_phase != PHASE_IDLE)
+		for (i = 0; i < sizeof crash_lines / sizeof crash_lines[0]; i++)
+			if (crash_lines[i].sig == sig) {
+				diatom_proto_emit_fatal(g_phase == PHASE_RUNNING
+				                        ? crash_lines[i].running
+				                        : crash_lines[i].loading);
+				break;
+			}
+
+	/* Then die of the original signal with its original disposition. Anything
+	 * else lies about how the process ended: the wait status is how a
+	 * supervisor tells a crash from a clean stop, and the core dump is how
+	 * anyone finds out why. Returning instead would re-run the faulting
+	 * instruction and loop here forever.
+	 *
+	 * signal() and raise() are both on the async-signal-safe list; sigaction()
+	 * with a memset struct is not, which is why the older-looking call is the
+	 * correct one here. */
+	signal(sig, SIG_DFL);
+	raise(sig);
+}
+
+/* A core that calls exit() on a fatal error - some do - raises no signal, so
+ * the handler above never runs and the launcher would wait forever on a
+ * process that has already gone. Not signal context, so the ordinary send is
+ * fine here.
+ *
+ * Fires on every exit including the clean ones, which is what PHASE_IDLE is
+ * for: after a normal EXIT there is nothing left to say. */
+static void on_exit_hook(void)
+{
+	if (g_phase == PHASE_IDLE) return;
+	if (g_phase == PHASE_RUNNING)
+		diatom_proto_send("EXIT\treason=crash\tmsg=core called exit");
+	else
+		diatom_proto_send("ERROR\tcode=crash\tmsg=core called exit");
+}
+
+/* 64 KB, a fixed size rather than SIGSTKSZ: since glibc 2.34 that expands to a
+ * sysconf() call, which cannot size an array at file scope, and the Brick
+ * builds against a newer glibc than the desktop does. */
+static char g_crash_stack[65536];
+
+static void install_crash_handlers(void)
+{
+	static stack_t ss;
+	struct sigaction sa;
+	size_t i;
+
+	/* A private stack, because the failure most likely to arrive here is a
+	 * core recursing without bound, and a SIGSEGV raised by an exhausted stack
+	 * cannot run a handler on that same stack.
+	 *
+	 * MEASURED on the Brick, 2026-08-25, A/B on one binary an hour apart -
+	 * stubcore recursing until the 8 MB stack is gone:
+	 *
+	 *   SA_ONSTACK      EXIT reason=crash signal=SIGSEGV
+	 *   without it      nothing; the launcher saw only the socket close
+	 *
+	 * So this is load-bearing rather than defensive. Both runs still died on
+	 * signal 11 - what the flag buys is the report, not the death.
+	 *
+	 * Per-thread, so this covers the main thread only. The port's flip thread
+	 * does not recurse; a fault there still reports, just not the overflow. */
+	ss.ss_sp    = g_crash_stack;
+	ss.ss_size  = sizeof g_crash_stack;
+	ss.ss_flags = 0;
+	sigaltstack(&ss, NULL);
+
+	memset(&sa, 0, sizeof sa);
+	sa.sa_handler = on_crash;
+	sa.sa_flags   = SA_ONSTACK;
+	/* Block everything for the duration: a second fault inside the handler
+	 * then cannot re-enter it, and the kernel kills us outright instead. That
+	 * is the right outcome - it is already the second failure. */
+	sigfillset(&sa.sa_mask);
+	for (i = 0; i < sizeof crash_lines / sizeof crash_lines[0]; i++)
+		sigaction(crash_lines[i].sig, &sa, NULL);
+
+	atexit(on_exit_hook);
+}
+
 /* Display mode state. The BASE geometry is kept because that, not the current
  * geometry, is what a rect is ever computed from: ADR-0011's invariant is
  * "never recompute from a mid-run SET_GEOMETRY", which a deliberate user-driven
@@ -249,7 +381,7 @@ typedef struct {
 	bool          list_only;
 } diatom_session;
 
-static int run_session(const diatom_session *sn)
+static int run_session_inner(const diatom_session *sn)
 {
 	struct retro_system_av_info av;
 	struct retro_system_info si;
@@ -374,6 +506,7 @@ static int run_session(const diatom_session *sn)
 	 * from here the launcher must stop drawing. Announced before the warmup,
 	 * because the warmup already puts frames on the panel. */
 	diatom_proto_send("RUNNING");
+	g_phase = PHASE_RUNNING;   /* a crash from here on is EXIT, not ERROR */
 
 	/* Warm up before starting the clock. The first frames create the texture,
 	 * fault in code paths and prime the audio device; measured on a COLD
@@ -564,9 +697,30 @@ static int run_session(const diatom_session *sn)
 	/* No dlclose. Ever. ADR-0006. */
 
 	/* The game ran and stopped, which is EXIT rather than ERROR whatever the
-	 * reason. The launcher may take the display back now. */
-	diatom_proto_send("EXIT\treason=%s", g_terminate ? "user" : "user");
+	 * reason. The launcher may take the display back now.
+	 *
+	 * Always `user`, and that is not a placeholder. Every way of arriving here
+	 * is someone deciding to stop: STOP or QUIT from the launcher, MENU when
+	 * standalone, a closed window, or SIGTERM - which on the Brick is the power
+	 * button, so still the player. The other two reasons ADR-0009 lists are
+	 * produced elsewhere: `crash` by the handler above, since a crash never
+	 * reaches this line, and `error` by nothing yet - there is no post-RUNNING
+	 * failure Diatom can currently detect that is not a crash. */
+	diatom_proto_send("EXIT\treason=user");
 	return 0;
+}
+
+/* The phase belongs out here, not inside, so that an early return added later
+ * cannot forget to clear it and leave the crash handler reporting on a game
+ * that is no longer in flight. There are six such returns already. */
+static int run_session(const diatom_session *sn)
+{
+	int rc;
+
+	g_phase = PHASE_LOADING;
+	rc = run_session_inner(sn);
+	g_phase = PHASE_IDLE;
+	return rc;
 }
 
 int main(int argc, char **argv)
@@ -633,10 +787,23 @@ int main(int argc, char **argv)
 	                                          which Diatom refuses; every core
 	                                          measured picked RGB565 anyway */
 
+	/* Line-buffered, so a crash cannot swallow the log that explains it.
+	 * Redirected to a file stdout is block-buffered, and the crash runs on
+	 * 2026-08-25 lost everything since the last 4 KB boundary - including the
+	 * warmup line, which made a session look like it had never got that far.
+	 * Costs one write per line, and Diatom prints tens of lines per session,
+	 * not per frame. */
+	setvbuf(stdout, NULL, _IOLBF, 0);
+
 	if (!diatom_port_init(&g_caps)) {
 		fprintf(stderr, "diatom: port init failed\n");
 		return 2;
 	}
+
+	/* Once for the life of the process, not per session: the first thing a
+	 * session does is dlopen and start a core, and a core that dies there is
+	 * exactly the case worth reporting. */
+	install_crash_handlers();
 
 	/* Two modes, and standalone is the primary one - designing for a program
 	 * that stands alone is a stricter test than designing for one embedder.
@@ -657,6 +824,12 @@ int main(int argc, char **argv)
 			case DIATOM_MSG_RUN:     break;
 			case DIATOM_MSG_OPTIONS: diatom_options_emit(); continue;
 			case DIATOM_MSG_SETOPT:  diatom_options_set(m.key, m.value); continue;
+			/* QUIT was falling through to `continue` here, so an IDLE Diatom
+			 * ignored it and only a running one could be shut down - the exact
+			 * opposite of what a launcher needs, since between games is when it
+			 * would ask. Found 2026-08-25 while testing the crash paths: every
+			 * run ended on the watchdog's SIGKILL rather than on QUIT. */
+			case DIATOM_MSG_QUIT:    g_quit_requested = true; continue;
 			default:                 continue;
 			}
 			if (!m.core[0]) {

@@ -68,6 +68,37 @@ cannot be re-checked, and that is the drift this project exists to avoid.
 `eglpresent` are two halves of one test and are meant to overlap in time - see
 the spike for the sequence.
 
+`protodrive` with `secs` of **0** does not send STOP: the session is left to end
+on its own. That is how the crash paths are watched, since the point there is
+that Diatom reports something nobody asked it to.
+
+## Making a core die on purpose
+
+`test/stubcore.c` reads `STUBCORE_CRASH` and kills itself on demand, which is
+the only way to exercise `EXIT reason=crash` against `ERROR code=crash`. It
+lives in the fixture rather than in Diatom deliberately - a frontend with a
+`--crash` flag would be test code inside the shipped binary, and the whole point
+is that Diatom learns about the crash the way it will in the field, from a
+signal it did not raise.
+
+| Value | What it does |
+|---|---|
+| `segv[@N]` | null dereference at frame N (default 60) |
+| `stack[@N]` | unbounded recursion, which needs the handler's alternate stack |
+| `abort[@N]` | `abort()`, so SIGABRT |
+| `fpe[@N]` | integer divide by zero - **a no-op on ARM**, which does not trap it |
+| `exit[@N]` | `exit(1)`, which raises no signal at all |
+| `load` | dies inside `retro_load_game`, before RUNNING |
+
+    STUBCORE_CRASH=segv@60 ./diatom --socket /tmp/dc.sock &
+    ./protodrive /tmp/dc.sock 0 "/path/to/stubcore.so|"
+
+Two warnings earned the hard way, both on 2026-08-25. The recursion needs its
+frame used *after* the call or the compiler turns it into a loop and the fixture
+tests nothing - `volatile` and `noinline` are not enough. And give any watchdog
+enough rope: a mode that does not crash must show up as a timeout, not as a
+hung script.
+
 ## Running them
 
 Cores and ROMs are supplied locally and are deliberately not in this repository:
