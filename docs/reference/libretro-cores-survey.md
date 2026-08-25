@@ -1,6 +1,8 @@
 # Libretro cores for the in-scope systems - survey
 
-**Date:** 2026-08-23. A survey, not a recommendation. Diatom has no core list
+**Date:** 2026-08-23. A survey, not a recommendation. **For what was actually
+chosen and why, see [core-selection.md](core-selection.md)** - this file is the
+field, that one is the decision. Diatom has no core list
 (see `working-agreement.md`); this exists so the **test matrix** is chosen from a known
 field rather than from whatever happened to be on disk.
 

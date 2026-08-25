@@ -631,6 +631,10 @@ Largest ROM is GBA's 32 MB, so the
 of which cores a host chooses. **Cores, not systems, are the cost unit** - one
 core routinely covers several systems, so adding a system is often free.
 
+**Why each core was chosen or rejected:
+[docs/reference/core-selection.md](reference/core-selection.md)** - the matrix,
+everything tested and dropped, and the measurement behind each call.
+
 **Cores verified against so far**: `fceumm`, `gambatte`, `snes9x`,
 `picodrive`, `genesis_plus_gx`, `mednafen_pce_fast`, `mgba` - provenance and
 hashes in [CORES.md](../CORES.md), fetched from libretro's buildbot by
