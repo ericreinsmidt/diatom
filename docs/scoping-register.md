@@ -11,9 +11,17 @@ goes in the section that already owns the subject rather than a new lettered one
 beside it, and section numbers never change, because ADRs are immutable and
 several of them cite these numbers.
 
+**A settled item gets six lines.** Enough for the question, the answer, the one
+number that matters and a link; not enough to restate an ADR. This one is not
+about tidiness: fossils were only half the growth, and 79 settled items left to
+run long is a third of the file describing work that is *finished*, with the
+open items drowning in it. If an answer needs more room, the room is an ADR, a
+spike or a log - and if none of those exists yet, writing one is the work.
+
 That is not advice. `make check` fails on section order, on a resolved section
 still carrying open items, on two sections covering one subject, on a tag not
-declared below, and on an Accepted ADR nothing points at. It got written
+declared below, on a settled item over six lines, and on an Accepted ADR that
+nothing points at or that is missing from the decisions index. It got written
 because none of those ever failed before, and by 2026-08-25 the register had
 grown 418 to 992 lines in three days without once getting shorter - carrying,
 among other things, five questions ADR-0006 had answered two days earlier.
@@ -110,10 +118,16 @@ verified rather than assumed.
 - [x] **[OPEN]** Symbol prefix: **`diatom_`** (2026-08-23). Recorded in
       `working-agreement.md` as a convention, not an ADR - pervasive but cheap to reverse.
       Explicit over terse, and `dia_` is a substring of `media_`.
-- [ ] **[OPEN]** Port naming. `flint` / `slate` / `chalk` for
-      tg5040 / miniloong / desktop was proposed when the project was itself a
-      stone. Still coherent (diatoms → chert → rock) but no longer automatic.
-- [ ] **[LB]** License. 0BSD to match PlayOS is the presumption.
+- [x] **[OPEN]** Port naming → **the device is the name.** `desktop` and
+      `brick`, chosen by use rather than by decision. The `flint`/`slate`/`chalk`
+      proposal was made when the project was itself a stone and stopped being
+      automatic when it became a diatom; a port named after the hardware also
+      needs no key.
+- [ ] **[LB]** License. 0BSD to match PlayOS is the presumption, and **there is
+      no LICENSE file in the repository at all** - checked 2026-08-25. For a
+      project whose stated point is that other firmwares could adopt it, that is
+      the one thing making adoption impossible. Cheap to fix, easy to keep
+      forgetting.
 - [ ] **[OPEN]** Confirm the licensing position on `dlopen`-ing GPL cores from a
       permissively licensed frontend. The enabling fact is that `libretro.h` is
       itself permissively licensed, explicitly so any-license frontends can host
@@ -253,9 +267,6 @@ answer is a live policy object, not a layer.
       [ADR-0009](decisions/0009-launcher-protocol.md). The launcher drives it
       over the socket but does not run it, which is what lets a game outlive a
       launcher that died - and `HANGUP` is deliberately not a stop.
-- [ ] **[OPEN]** Is the deliverable a **library**, a **binary**, or both? A
-      binary today. The library half is really the consumption model deferred
-      in §1 and moves when that does.
 - [x] **[LB]** **Standalone operation as the primary mode.** Built that way. Diatom runs
       with no host at all:
 
@@ -305,12 +316,10 @@ evaporates - but two others remain:
       as supervisor, and `SIGUSR1` is retained as the escape hatch for a core
       wedged inside `retro_run` that cannot read the socket.
 - [x] **[OPEN]** Remaining risk carried by ADR-0008: **display handoff between
-      two processes.** Measured 2026-08-24 - the invariant is *one presenter at
-      a time*, not one process per display, so fbdev may stay open and mapped
-      while EGL presents; only concurrent presentation is fatal, and on the
-      Brick it deadlocked the pan in-kernel behind a stalled PowerVR fence
-      ([ADR-0013](decisions/0013-brick-fbdev-flip-thread.md)). Needs re-checking
-      per port. [handoff spike](spikes/2026-08-24-display-handoff.md).
+      two processes.** The invariant is *one presenter at a time*, not one
+      process per display. Concurrent presentation deadlocked the pan in-kernel
+      ([ADR-0013](decisions/0013-brick-fbdev-flip-thread.md)). Re-check per port.
+      [handoff spike](spikes/2026-08-24-display-handoff.md).
 
 ---
 
@@ -375,22 +384,26 @@ Two amendments ADR-0007 makes to the table above:
       a `dst` may extend past the surface because a fill or overscale mode
       deliberately crops, and **ports clip; they never refuse the frame.**
       Whether a geometry is worth showing is host policy.
-- [x] **[OPEN]** Backends to build: `desktop` (SDL2, first), `brick` (TG3040).
-      **Miniloong is [NOT PLANNED]** as of 2026-08-25 - not rejected, just not
-      on the path. The order of work is Diatom complete and fully integrated
-      with PlayOS on the Brick first; a second device is worth looking at after
-      that and not before. Two consequences worth naming rather than
-      discovering: the rotation abstraction stays **unproven** until a portrait
-      panel exists to prove it against, and every Miniloong number already in
-      this register is a claim about a device nothing currently builds for.
-- [ ] **[LB]** SDL2 as the baseline for both desktop and device, or SDL2 on
-      desktop and something lower on device?
+- [x] **[OPEN]** Backends to build: `desktop` (SDL2, first) and `brick`
+      (TG3040). **Miniloong is [NOT PLANNED]** as of 2026-08-25 - not rejected;
+      Diatom complete on the Brick comes first. Consequence worth naming: the
+      rotation abstraction stays **unproven** until a portrait panel exists, and
+      every Miniloong number here describes a device nothing builds for.
+- [ ] **[LB]** SDL2 as the baseline for both desktop and device, or something
+      lower on device? Tracked with its measurements in §5 - video already left
+      in ADR-0013, so on the Brick SDL2 now does only audio, joystick, clock and
+      capture.
 
 ---
 
 ## 5. Video
 
-- [ ] **[OPEN]** Force a single pixel format on cores, or support all three?
+- [x] **[OPEN]** Force a single pixel format, or support all three? **Support
+      two, refuse one.** RGB565 and XRGB8888 pass through; 0RGB1555 is refused
+      ([ADR-0007](decisions/0007-port-interface.md)). Forcing would sometimes
+      *add* a conversion, since both accepted formats upload free. All six cores
+      measured chose RGB565 when offered the choice, so the XRGB8888 path is
+      accepted-but-untested and says so in `diatom_port.h`.
 - [x] **[LB]** Does the destination rect move when a core changes geometry
       mid-run? **No** - [ADR-0011](decisions/0011-lock-the-display-rect.md)
       *(Accepted)*. Computed once from base geometry at load and held. Measured:
@@ -415,11 +428,11 @@ Two amendments ADR-0007 makes to the table above:
       Integer on the axis the eye reads scanlines along, fitted freely on the
       other. **Its NES rows describe a binary no longer in use** - see the
       geometry item below.
-- [ ] **[OPEN]** Aspect-ratio and overscan policy. Crop, or show everything?
-      Measured input to it: **FCEUmm reports an 8:7 pixel aspect (1.2190), not
-      4:3**, so on a 4:3 panel fit, fill and stretch are three different
-      pictures, not one. Whether to trust the core's number, force 4:3, or
-      assume square pixels is exactly this open item.
+- [x] **[OPEN]** Aspect-ratio and overscan policy → **the user chooses**, from
+      seven modes defaulting to `stretch`
+      ([ADR-0014](decisions/0014-display-modes-and-default.md),
+      [ADR-0015](decisions/0015-integer-vertical-mode.md)). FCEUmm reports an
+      **8:7 pixel aspect (1.2190), not 4:3**, so no single mode is "correct".
 - [x] **[OPEN]** Whether sharp-bilinear is worth its cost. **Shipped, not
       default** ([ADR-0014](decisions/0014-display-modes-and-default.md)). Free
       at whole factors once trivial weights collapse; +2ms on the fullscreen
@@ -434,7 +447,11 @@ Two amendments ADR-0007 makes to the table above:
       own merits once ADR-0009's protocol exists - ADR-0014 leaves hotkey
       ownership open. Recorded so they cannot persist by inertia; the on-screen
       overlay from the same session was already removed (commit `b7f1258`).
-- [ ] **[OPEN]** Rotation support (some panels are physically rotated).
+- [x] **[OPEN]** Rotation → **the port hides it entirely.** `surface_w/h` are
+      logical and always landscape; a core asking `SET_ROTATION` is declined
+      because honouring it would rotate twice. **Designed, not proven** - the
+      only portrait panel is the Miniloong, so by §0's own test this abstraction
+      does not yet have two implementations behind it.
 - [ ] **[LATER]** Zero-copy: `GET_CURRENT_SOFTWARE_FRAMEBUFFER` - **confirmed
       2026-08-23: FCEUmm requests it every frame.** The path ADR-0007 deferred
       is actively offered. Still deferred; good to know it is real.
@@ -444,10 +461,11 @@ Two amendments ADR-0007 makes to the table above:
 - [x] **[OPEN]** Geometry changes mid-run are **common, not exotic** - 3/6 cores
       call `SET_GEOMETRY` during `run`. Snes9x `max 604×478` vs `base 256×224`;
       Beetle PCE `max 512×243`. Confirms recompute-on-change.
-- [ ] **[OPEN]** **PC Engine breaks integer scale on one device but not the
-      other.** 256×**243** at 3× is 768×**729** - exceeds the Miniloong's 720
-      lines, fits the Brick's 768. So PCE gets 2× on one and 3× on the other.
-      First real instance of ADR-0007's "doesn't fit" default.
+- [ ] **[NOT PLANNED]** **PC Engine breaks integer scale on one device but not
+      the other.** 256x**243** at 3x is 768x**729** - over the Miniloong's 720
+      lines, inside the Brick's 768, so the same content gets 2x on one and 3x
+      on the other. Parked with the Miniloong port (§4): it cannot bite a device
+      nothing builds for. Real again the moment that port is.
 - [ ] **[LATER]** **Drop SDL2 from the Brick port?** Video already left in
       ADR-0013; SDL2 now only does audio, joystick, clock and BMP capture there.
       **Measured 2026-08-24: SDL2 costs 223 ms at startup** - `SDL_Init` 86.7 ms
@@ -523,8 +541,17 @@ Two amendments ADR-0007 makes to the table above:
       the display spikes describe a binary no longer in use. Decisions stand -
       `stretch` fills the panel regardless - but the integer and aspect rects
       would differ. Overscan is now a choice rather than a property.
-- [ ] **[OPEN]** GL/GLES or software blit on device?
-- [ ] **[LATER]** Shaders/overlays - probably "no" forever. Decide and write it down.
+- [x] **[OPEN]** GL/GLES or software blit on device? **Software, into raw
+      fbdev** ([ADR-0013](decisions/0013-brick-fbdev-flip-thread.md)), and the
+      row cache made it 2.1-2.3x faster. The hardware scaler was measured
+      *unnecessary* rather than rejected on taste: the blit was never
+      write-bound, framebuffer memory and heap both at 418 MB/s.
+- [ ] **[LATER]** Shaders/overlays - **a one-word decision waiting on taste,
+      not on facts.** The facts: UI belongs to the launcher
+      ([ADR-0009](decisions/0009-launcher-protocol.md)); the on-screen overlay
+      built for the mode comparison was deleted the day it stopped earning its
+      place; and the blit work left ~11.3 ms spare per frame on NES, so the
+      headroom exists. Nothing needs it and nothing blocks on it.
 
 ---
 
@@ -553,17 +580,40 @@ Two levers the spike discovered:
 - **`SET_AUDIO_BUFFER_STATUS_CALLBACK`** (cmd 62, 3/6 cores) - cores offer to
   *receive* buffer occupancy and throttle themselves. The core-side half of DRC.
 
-- [ ] **[LB]** Sync strategy: audio-driven, video-driven, or **dynamic rate
-      control** (nudge the resample ratio to keep the buffer centered). DRC is
-      what the mature frontends do - and per the table above, unavoidable.
-- [ ] **[OPEN]** Implement `GET_TARGET_SAMPLE_RATE` and/or
-      `SET_AUDIO_BUFFER_STATUS_CALLBACK`, or resample everything centrally?
-- [ ] **[LB]** Resampler: libsamplerate (what minarch uses) or hand-rolled
-      linear/cubic? Check libsamplerate's current license before depending on it.
-- [ ] **[OPEN]** Target output rate. Fixed 48k, or follow the device?
-- [ ] **[OPEN]** Buffer size - latency vs underrun tolerance.
-- [ ] **[OPEN]** Behaviour when a frame overruns budget: drop audio, stretch,
-      or let it underrun?
+- [x] **[LB]** Sync strategy → **dynamic rate control**, built. A PI controller
+      nudges the resample ratio to hold the port's buffer near half, clamped to
+      **0.5%** so the pitch shift stays inaudible, with the integral term
+      deliberately slow (~8 s to full authority). Per the table above there was
+      never an alternative: no configuration exists in which the rates line up.
+- [x] **[OPEN]** `GET_TARGET_SAMPLE_RATE` → **implemented**, and `audio.c` has
+      the pass-through it exists for: a core that answers generates at the
+      device rate and skips resampling entirely. Central resampling is the
+      fallback, not the only path.
+- [x] **[OPEN]** Target output rate → **follow the device**. The port reports
+      `caps.audio_rate` and the host resamples to it; nothing is fixed at 48k.
+- [x] **[OPEN]** Buffer size → **4096 frames capacity, held near 2048** (~85 ms
+      at 48 kHz, targeting ~43 ms). Every run reports queue min/max/final
+      against both, so a bad choice shows up rather than being argued about.
+- [x] **[OPEN]** Frame overrun → audio never blocks and drops on overflow; the
+      frame loop drops its debt past four frames behind (§7). A blocking write
+      would pace the whole program off the audio clock, which rules out DRC.
+- [ ] **[LB]** **The resampler is linear interpolation and `audio.c` says so:**
+      *"a placeholder... good enough to hear a game, not good enough to ship."*
+      Decided by default rather than chosen. libsamplerate is what minarch uses
+      and its licence needs checking before depending on it; hand-rolled cubic
+      is the other candidate. **No audible problem has been measured** - the
+      hardest ratio found, mGBA at 131072 Hz into 48000 (2.73:1), held at 0
+      resyncs and +0.209% drift - so this is a known-provisional rather than a
+      known-broken.
+- [ ] **[OPEN]** `SET_AUDIO_BUFFER_STATUS_CALLBACK` (cmd 62, offered by 3 of 6
+      cores) is **not implemented** - the core-side half of DRC, letting a core
+      throttle itself on buffer occupancy. Host-side DRC works without it, so
+      this is an improvement rather than a gap.
+- [ ] **[OPEN]** **`audio_write` overshoots its own capacity.** It admits a
+      batch whenever *any* space remains, so a full batch can land against a
+      nearly-full queue: measured **4927 frames against a stated 4096**. The
+      guard tests the wrong thing - it should refuse when the batch would not
+      fit, not when the queue is not already full.
 - [x] **[OPEN]** ~~GBA is the best test case.~~ Superseded by measurement: the
       hardest case is **PAL at 50.0070 Hz on a 60 Hz panel** (FCEUmm, Snes9x),
       and the most awkward *rate* is mGBA's **65536 Hz**. Use both as
@@ -585,12 +635,10 @@ deliberate target**, not an edge case - Probotector is PAL-only Contra. Pacing
 50 Hz content on a 60 Hz panel is the *normal* case for part of the library.
 
 - [x] **[LB]** Pace to the **core's** rate, on an absolute floating-point
-      schedule against a monotonic clock. The measured spread settles it -
-      50.0070 · 59.7275 · 59.8200 · 60.0000, and only PicoDrive matches a 60 Hz
-      panel. Blocking on a 60 Hz vblank while trying to hold 59.7275 leaves
-      0.07 ms of slack, so any jitter costs a whole frame; that measured as a
-      consistent **1.4% deficit**. Audio drift is absorbed by rate control
-      instead, because no panel and no core will ever agree.
+      schedule against a monotonic clock. Measured spread: 50.0070 · 59.7275 ·
+      59.8200 · 60.0000, and only PicoDrive matches a 60 Hz panel. Blocking on
+      vblank while holding 59.7275 measured a consistent **1.4% deficit**; audio
+      drift goes to rate control instead.
 - [x] **[OPEN]** Frame drop/duplicate policy → keep the debt and repay it with a
       short sleep, except past **four frames behind**, where the debt is dropped
       and a resync counted. Catching up would run fast for a while, which looks
@@ -612,12 +660,19 @@ deliberate target**, not an edge case - Probotector is PAL-only Contra. Pacing
 
 ## 8. Input
 
-- [ ] **[LB]** Where does physical→retropad mapping live - port, config, or
-      session?
-- [ ] **[OPEN]** Per-core remapping, or one map?
-- [ ] **[OPEN]** Who owns hotkeys (menu, brightness, volume) - frontend or
-      firmware? PlayOS currently keeps L3/R3 away from cores because the Brick's
-      F1/F2 report as those. That's device knowledge that must not leak upward.
+- [x] **[LB]** Where physical→retropad mapping lives → **split in two.** The
+      port turns device events into canonical Diatom buttons
+      ([ADR-0007](decisions/0007-port-interface.md)); `env.c` maps those to
+      retropad, a near-identity whose purpose is keeping `libretro.h` out of the
+      port. Device quirks resolve in the port and never travel upward.
+- [x] **[OPEN]** Per-core remapping, or one map? **One map.** No core in the
+      matrix has asked for anything else, and a remapping layer is an
+      abstraction with no consumer until one does.
+- [x] **[OPEN]** Hotkeys → **MENU is Diatom's own key and never reaches a
+      core.** The port reports it and does not act on it: standalone it ends the
+      session, under the launcher it hands over the display (ADR-0016).
+      Brightness and volume stay with the firmware. The L3/R3 worry is handled
+      in the port - the Brick's front keys report as `BTN_THUMBL`/`THUMBR`.
 - [x] **[LB]** Analog sticks: **no analog support at all** →
       **[ADR-0003](decisions/0003-digital-only-input.md)** *(Accepted)*
 - [x] **[OPEN]** Button count is **not** a constraint. Both devices give 4 face
@@ -627,13 +682,17 @@ deliberate target**, not an edge case - Probotector is PAL-only Contra. Pacing
 - [x] **[OPEN]** Same curation on both devices? **Probably yes.** With no analog,
       the two devices are input-equivalent, so one test matrix rather than two.
       (Follows from ADR-0003; revisit if the class widens.)
-- [ ] **[LB]** Controller **device-type** selection is still required -
-      `retro_set_controller_port_device`. Genesis 3- vs 6-button is a
-      correctness issue, not a preference; PC Engine has the same 2- vs 6-button
-      split. Digital-only removes axes, **not** device types. Where does the
-      type live - firmware config, per-ROM, or core default?
-- [ ] **[OPEN]** Verify the Brick's physical controls (unmeasured). No longer
-      blocking after ADR-0003, but §0b's device table is incomplete without it.
+- [x] **[LB]** Controller **device-type** selection - required, and done:
+      `set_controller_port_device(0, RETRO_DEVICE_JOYPAD)` at load. Genesis 3-
+      vs 6-button is correctness, not preference - some early games misbehave
+      with a 6-button pad, which is why the real pad has a Mode switch. Digital-
+      only removed axes, not device types; a non-default type is a core option.
+- [x] **[OPEN]** Brick physical controls → **measured 2026-08-24**, firmware
+      1.1.1, every cap pressed in a known order twice under `DIATOM_INPUT_DEBUG`.
+      The map is in `brick.c`. Worth keeping the reason it was measured rather
+      than reasoned: **X and Y are the opposite way round from their positions**
+      - the top cap emits `BTN_WEST`, the left cap `BTN_NORTH` - and positional
+      reasoning got exactly those two wrong. No analog, confirming §0b.
 
 ### Test matrix - *not* a core list
 
@@ -782,13 +841,17 @@ host decision and only means re-running the spike, which is cheap.
       59.9227 fps with 0 resyncs and no code changes - while the two cores
       disagreed about geometry, aspect, frame rate, SRAM size, state size and
       serialization quirks. Exactly the diversity the check existed to find.
-- [ ] **[OPEN]** ~~superseded~~ Verify against a second core for at least one system, to prove
-      nothing in Diatom is tuned to a particular core's behaviour.
-- [ ] **[OPEN]** SNES coprocessors - SuperFX (Star Fox, Yoshi's Island), SA-1,
-      DSP-1, CX4 cost CPU, not RAM, and are the known pinch point on A53-class
-      hardware. Whether a given core keeps up **must be judged on the Brick**,
-      not the Miniloong. A host-side core-choice question, but Diatom's test
-      matrix should include whichever gets chosen.
+- [x] **[OPEN]** Verify against a second core for at least one system →
+      **done, and it paid.** Sega ran under both PicoDrive and Genesis Plus GX,
+      SNES under five snes9x forks and bsnes. That comparison is what exposed
+      PicoDrive reporting a fixed 320x240 for every system, the light forks
+      misreporting both PAL and NTSC rates, and saves not transferring between
+      cores for the same game (§5).
+- [x] **[OPEN]** SNES coprocessors → **measured 2026-08-25 on the Brick, and
+      the risk did not materialise.** Star Fox and Stunt Race FX (SuperFX),
+      Yoshi's Island (SA-1), Super Mario Kart (DSP-1) and Mega Man X2 (CX4) all
+      hold full speed with 0 resyncs on `snes9x2010`. The A53 carries every
+      coprocessor in the library, so ADR-0005's warning about them is retired.
 
 **Genesis note:** launched 3-button in 1988; the 6-button pad arrived 1993 and
 most of the library predates it. Both fit 4 face + L1/R1. Requires
@@ -811,14 +874,11 @@ pad attached, which is why the real pad has a Mode switch.
 - [ ] **[OPEN]** Preview screenshots for the launcher - frontend's job or host's?
       `PREVIEW` is in ADR-0009's message table and is not emitted.
 - [ ] **[LB]** Rewind: support or drop? Real RAM cost on a 1GB device.
-- [x] **[OPEN]** CD support → done for PC Engine. **CHD needs nothing** - Beetle
-      PCE Fast reads it natively, measured on device at 59.81 fps against a
-      59.8200 target with 0 resyncs. The System Card is named by the launcher
-      rather than known by Diatom →
-      **[ADR-0017](decisions/0017-firmware-is-declared-not-known.md)**
-      *(Accepted)*. CUE/BIN is **untested** - no such content to hand.
-      Sega CD would additionally need the Disk Control Interface (260 of 544
-      Redump entries are disc-numbered), so it is not free if it ever arrives.
+- [x] **[OPEN]** CD support → done for PC Engine. **CHD needs nothing** - read
+      natively at 59.81 fps against a 59.8200 target, 0 resyncs. The System Card
+      is named by the launcher →
+      **[ADR-0017](decisions/0017-firmware-is-declared-not-known.md)**. CUE/BIN
+      **untested**. Sega CD would also need the Disk Control Interface.
 
 ---
 
@@ -965,25 +1025,21 @@ operation never occurs.
 
 ## 14. Failure handling
 
-- [x] **[OPEN]** Core crash behaviour (interacts with §3) → **settled by
-      measurement 2026-08-25.** A crash while loading is `ERROR code=crash` and
-      the launcher keeps the display; a crash mid-game is `EXIT reason=crash`
-      and it takes the display back. Six failure modes driven on hardware, and
-      `SA_ONSTACK` shown by A/B to be the difference between reporting a stack
-      overflow and reporting nothing.
-      [crash reporting](discussion/2026-08-25-crash-reporting.md).
+- [x] **[OPEN]** Core crash behaviour (interacts with §3) → a crash while
+      loading is `ERROR code=crash` and the launcher keeps the display; a crash
+      mid-game is `EXIT reason=crash`. Six modes driven on hardware, and
+      `SA_ONSTACK` A/B'd as the difference between reporting a stack overflow
+      and reporting nothing. [log](discussion/2026-08-25-crash-reporting.md).
 - [x] **[OPEN]** How to fail → [ADR-0009](decisions/0009-launcher-protocol.md)
       settles the shape: `ERROR code=` before RUNNING, `EXIT reason=` after, and
       the split is about display ownership rather than error reporting.
       `core_missing`, `rom_unreadable`, `save_failed`, `state_rejected`,
       `bad_option` and `crash` are all emitted.
-- [x] **[OPEN]** **`bios_missing`** - specified by ADR-0009 and emitted nowhere
-      until 2026-08-25. Now real: the launcher names what the content needs and
-      Diatom checks it before loading anything
-      ([ADR-0017](decisions/0017-firmware-is-declared-not-known.md)), so a
-      missing System Card fails in 0.01 s with the filename instead of looking
-      like a bad ROM. **Presence, not validity** - 2 KB of random bytes named
-      `syscard3.pce` was accepted and the game reported RUNNING.
+- [x] **[OPEN]** **`bios_missing`** - in ADR-0009's table and emitted nowhere
+      until 2026-08-25. Now real: a missing System Card fails in **0.01 s** with
+      the filename instead of looking like a bad ROM (ADR-0017). **Presence, not
+      validity** - 2 KB of random bytes named `syscard3.pce` was accepted and
+      the game reported RUNNING.
 - [x] **[OPEN]** PlayOS's power-off failsafe - answered in §3: the launcher
       stays alive as supervisor and `SIGUSR1` is retained as the escape hatch
       for a core wedged inside `retro_run`.
@@ -997,8 +1053,12 @@ operation never occurs.
       `gnu11`, and Diatom builds its own pinned cross-toolchain rather than
       borrowing another firmware's. Reusing PlayOS's would have made Diatom
       depend on a repository it is meant to be independent of.
-- [ ] **[OPEN]** How firmwares consume it (see §1).
-- [ ] **[OPEN]** Cross-device build matrix.
+- [x] **[OPEN]** Cross-device build matrix → **two targets, both green.**
+      `make` for desktop and `tools/brick-make.sh` for the Brick, the latter in
+      a pinned container ([ADR-0012](decisions/0012-independent-toolchain.md))
+      with a staleness guard, because the container silently skipped rebuilds
+      twice. A third target arrives with the Miniloong port, which is [NOT
+      PLANNED] (§4).
 
 ---
 

@@ -129,8 +129,10 @@ def same_subject(a, b, floor=2, ratio=0.34):
 
 
 def declared_tags(lines):
-    head = "\n".join(lines[:30])
-    return set(TAG.findall(head))
+    """Everything before the first section heading is the header. Bounded that
+    way rather than by a line count, which broke the moment the header grew."""
+    end = next((i for i, l in enumerate(lines) if l.startswith("## ")), len(lines))
+    return set(TAG.findall("\n".join(lines[:end])))
 
 
 def check_working_tree():
@@ -211,6 +213,28 @@ def check_working_tree():
         m = re.match(r"(\d{4})-", fn)
         if m and fn not in index:
             fails.append("%s exists but is not in the decisions/README.md index" % fn)
+
+    # 5c. Settled items must stay short. Fossils were only half the growth:
+    #     79 settled items at a mean of 4.5 lines is a third of the file
+    #     describing things that are DONE, and open items drown in it. If an
+    #     answer needs more room than this, the room is an ADR, a spike or a
+    #     discussion log - and if none exists, that is the thing to write.
+    SETTLED_MAX = 6
+    for num, letter, title, start, end in secs:
+        i = start
+        while i < end:
+            if lines[i].startswith("- [x]"):
+                j = i + 1
+                while j < end and lines[j].startswith("      "):
+                    j += 1
+                if j - i > SETTLED_MAX:
+                    fails.append("## %d%s. %s line %d: a settled item is %d lines "
+                                 "(max %d)\n        %s"
+                                 % (num, letter, title, i + 1, j - i,
+                                    SETTLED_MAX, lines[i][:88]))
+                i = j
+            else:
+                i += 1
 
     # 6. Suspected fossils: an open item whose subject is already covered by a
     #    ticked one somewhere else. WARN, not FAIL - "is this the same
