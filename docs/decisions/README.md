@@ -67,3 +67,4 @@ never started.
 | [0016](0016-saves-and-save-states.md) | Saves, save states, and who owns the slot | Accepted |
 | [0017](0017-firmware-is-declared-not-known.md) | Firmware requirements are declared by the launcher, not known by Diatom | Accepted |
 | [0018](0018-integer-vertical-remeasured.md) | Integer-vertical, re-measured: it is not "never worse" | Accepted |
+| [0019](0019-input-mapping-and-remapping.md) | Two input translations, and only one of them is remappable | Accepted |

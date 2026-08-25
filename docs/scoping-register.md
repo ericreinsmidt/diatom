@@ -11,6 +11,14 @@ goes in the section that already owns the subject rather than a new lettered one
 beside it, and section numbers never change, because ADRs are immutable and
 several of them cite these numbers.
 
+**Say what settled it.** A ticked item should point at the ADR, spike or log
+that settled it - or say plainly that it is a **judgement call** made here and
+now. Both are legitimate; conflating them is not. On 2026-08-25 a sweep that was
+clearing fossils - items *evidence* had already settled - also closed a genuinely
+open question by argument, in the same batch and the same `- [x]`. It inherited
+the credibility of everything around it. "Decided while tidying" is a fine thing
+to record and a bad thing to disguise.
+
 **A settled item gets six lines.** Enough for the question, the answer, the one
 number that matters and a link; not enough to restate an ADR. This one is not
 about tidiness: fossils were only half the growth, and 79 settled items left to
@@ -701,9 +709,15 @@ deliberate target**, not an edge case - Probotector is PAL-only Contra. Pacing
       ([ADR-0007](decisions/0007-port-interface.md)); `env.c` maps those to
       retropad, a near-identity whose purpose is keeping `libretro.h` out of the
       port. Device quirks resolve in the port and never travel upward.
-- [x] **[OPEN]** Per-core remapping, or one map? **One map.** No core in the
-      matrix has asked for anything else, and a remapping layer is an
-      abstraction with no consumer until one does.
+- [x] **[LB]** Where button remapping belongs →
+      **[ADR-0019](decisions/0019-input-mapping-and-remapping.md)** *(Accepted)*.
+      Two translations, never collapsed: the port owns physical→canonical and is
+      never configurable, the host owns canonical→retropad as **data**, the
+      launcher owns the config. MENU is unmappable by construction.
+- [ ] **[OPEN]** `SET_INPUT_DESCRIPTORS` is accepted and discarded. It is the
+      core telling us "B = Jump" for this game - the labels a remap screen needs
+      to be usable. Free on every load. Capturing and exposing it over the
+      protocol is what ADR-0019 leaves unbuilt.
 - [x] **[OPEN]** MENU is Diatom's own key and never reaches a core. The port
       reports it and does not act on it: standalone it ends the session, under
       the launcher it hands over the display (ADR-0016). The L3/R3 worry is
