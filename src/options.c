@@ -229,6 +229,33 @@ bool diatom_options_take_update(void)
 
 int diatom_options_count(void) { return g_active ? g_active->n : 0; }
 
+/* One line per option, for a launcher building a menu. Values are pipe-joined
+ * because the protocol is tab-separated, so a tab inside a field would be
+ * indistinguishable from the end of it. */
+void diatom_options_emit(void)
+{
+	int i, j;
+
+	if (!g_active) { diatom_proto_send("OPTIONS\tcount=0"); return; }
+	diatom_proto_send("OPTIONS\tcount=%d", g_active->n);
+	for (i = 0; i < g_active->n; i++) {
+		const diatom_option *o = &g_active->opt[i];
+		char vals[512];
+		size_t used = 0;
+
+		vals[0] = '\0';
+		for (j = 0; j < o->nvalues && used < sizeof vals - 1; j++) {
+			int n = snprintf(vals + used, sizeof vals - used, "%s%s",
+			                 used ? "|" : "", o->values[j].value);
+			if (n < 0) break;
+			used += (size_t)n;
+		}
+		diatom_proto_send("OPTION\tkey=%s\tvalue=%s\tdefault=%s\tvalues=%s\tdesc=%s",
+		                  o->key, o->value, o->deflt, vals,
+		                  o->desc ? o->desc : "");
+	}
+}
+
 void diatom_options_list(void)
 {
 	int i, j;

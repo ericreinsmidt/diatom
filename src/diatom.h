@@ -92,6 +92,7 @@ bool        diatom_options_set(const char *key, const char *value);
 bool        diatom_options_take_update(void);   /* consumes the flag */
 int         diatom_options_count(void);
 void        diatom_options_list(void);
+void        diatom_options_emit(void);   /* over the protocol, for a menu */
 
 /* proto.c - the launcher protocol (ADR-0009). One Unix socket, line-based,
  * tab-separated key=value. Diatom is a component the launcher drives; this is
@@ -104,6 +105,11 @@ typedef enum {
 	DIATOM_MSG_RUN,
 	DIATOM_MSG_STOP,
 	DIATOM_MSG_QUIT,
+	DIATOM_MSG_RESUME,     /* leave the menu, Diatom takes the display back */
+	DIATOM_MSG_SAVE,       /* write a state to `path` */
+	DIATOM_MSG_LOAD,       /* read a state from `path` */
+	DIATOM_MSG_OPTIONS,    /* enumerate this core's options */
+	DIATOM_MSG_SETOPT,     /* set `key` to `value` */
 	DIATOM_MSG_HANGUP      /* launcher went away; the game keeps running */
 } diatom_msg_kind;
 
@@ -113,6 +119,9 @@ typedef struct {
 	char rom[1024];
 	char tag[64];
 	char slot[64];
+	char path[1024];       /* SAVE / LOAD */
+	char key[80];          /* SETOPT */
+	char value[128];       /* SETOPT */
 } diatom_msg;
 
 bool diatom_proto_listen(const char *path);

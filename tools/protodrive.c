@@ -11,7 +11,7 @@
  *
  * An instrument, not Diatom code. See tools/README.md.
  *
- *   protodrive <socket> <seconds-per-game> <core>|<rom> [<core>|<rom> ...]
+ *   protodrive <socket> <secs> [--exercise <optkey> <optval>] <core>|<rom> ...
  */
 #define _GNU_SOURCE
 #include <errno.h>
@@ -70,8 +70,14 @@ static void wline(const char *fmt, ...)
 int main(int argc, char **argv)
 {
 	struct sockaddr_un a;
-	int secs, i, attempt;
+	int secs, i, attempt, nopt = 0, exercise = 0, argi = 3;
+	const char *optkey = "", *optval = "";
 
+	/* Optional: protodrive <sock> <secs> --exercise <optkey> <optval> <spec>...
+	 * Scanned in place rather than by shifting argv, which loses argv[1]. */
+	if (argc > 5 && !strcmp(argv[3], "--exercise")) {
+		exercise = 1; optkey = argv[4]; optval = argv[5]; argi = 6;
+	}
 	if (argc < 4) {
 		fprintf(stderr, "usage: protodrive <socket> <secs> <core>|<rom> ...\n");
 		return 1;
@@ -91,7 +97,7 @@ int main(int argc, char **argv)
 	if (fd < 0) { fprintf(stderr, "protodrive: cannot connect to %s\n", argv[1]); return 2; }
 	printf("<- %s\n", rline());
 
-	for (i = 3; i < argc; i++) {
+	for (i = argi; i < argc; i++) {
 		char spec[2048], *bar, *rom;
 		uint64_t t0, t_running = 0;
 		const char *base;
@@ -110,10 +116,27 @@ int main(int argc, char **argv)
 		for (;;) {
 			char *l = rline();
 			if (!l) { fprintf(stderr, "connection closed\n"); return 3; }
-			if (!strncmp(l, "RUNNING", 7)) {
+			if (!strncmp(l, "OPTIONS", 7) || !strncmp(l, "OPTION\t", 7) ||
+			    !strncmp(l, "OPTSET", 6) || !strncmp(l, "SAVED", 5) ||
+			    !strncmp(l, "LOADED", 6)) {
+				if (nopt < 4 || strncmp(l, "OPTION\t", 7)) printf("    <- %.100s\n", l);
+				if (!strncmp(l, "OPTION\t", 7)) nopt++;
+			} else if (!strncmp(l, "RUNNING", 7)) {
 				t_running = us() - t0;
 				printf("  RUN -> RUNNING %8.1f ms   %.40s\n",
 				       t_running / 1000.0, base);
+
+				/* Exercise the launcher-facing surface: enumerate options,
+				 * change one, write a state, read it back. */
+				if (exercise) {
+					wline("OPTIONS");
+					sleep(1);
+					wline("SETOPT\tkey=%s\tvalue=%s", optkey, optval);
+					wline("SAVE\tpath=/mnt/SDCARD/diatom/proto.state");
+					sleep(1);
+					wline("LOAD\tpath=/mnt/SDCARD/diatom/proto.state");
+					sleep(1);
+				}
 				sleep(secs);
 				wline("STOP");
 			} else if (!strncmp(l, "EXIT", 4)) {

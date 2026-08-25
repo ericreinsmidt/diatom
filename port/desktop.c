@@ -188,9 +188,6 @@ void diatom_port_input_poll(void)
 	for (i = 0; i < sizeof keymap / sizeof keymap[0]; i++)
 		if (keys[keymap[i].key]) s |= DIATOM_BIT(keymap[i].btn);
 
-	/* Diatom's own key, never forwarded to a core. */
-	if (s & DIATOM_BIT(DIATOM_BTN_MENU)) g_quit = true;
-
 	g_buttons = s;
 }
 

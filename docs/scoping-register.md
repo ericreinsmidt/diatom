@@ -502,8 +502,10 @@ Two amendments ADR-0007 makes to the table above:
       them. Verified by observable effect: forcing PAL changes the reported rate
       and Diatom repaces; overscan cropping changes geometry and aspect; an
       offered-value check refuses anything the core did not list.
-- [ ] **[OPEN]** Surface options over the protocol so the launcher can build a
-      menu. Constrained by the finding below.
+- [x] **[OPEN]** Surface options over the protocol → done. `OPTIONS` returns a
+      count plus one `OPTION` line per setting carrying key, current value,
+      default, permitted values and description - everything a menu needs.
+      `SETOPT key= value=` sets one, refused if the core does not offer it.
 - [x] **[OPEN]** **Option availability can depend on loaded content.** FCEUmm
       declares **0 options at core open and 44 once a ROM is loaded**; the other
       four declare everything at open. So a launcher cannot always show a core's
@@ -528,8 +530,11 @@ Two amendments ADR-0007 makes to the table above:
       Measured: SRAM is per-game (0 to 128 KB), states 13 KB to 804 KB,
       `serialize` 10 us to 2.5 ms, an atomic write 8 ms to 68 ms, SIGTERM
       arrives ~810 ms before death on power-off.
-- [ ] **[OPEN]** Manual slots and the in-game menu. Blocked on the display
-      handoff, below.
+- [x] **[OPEN]** Manual slots and the in-game menu → the Diatom half is built.
+      MENU pauses, sends `PAUSED`, and blocks; the launcher draws its menu and
+      answers with `RESUME`, `SAVE path=`, `LOAD path=` or `STOP`. Slot naming
+      stays entirely in the launcher, as ADR-0016 requires. Verified over the
+      socket except the MENU press itself, which needs a thumb on the device.
 - [x] **[LB]** **Display handoff, fbdev to EGL** - answered
       ([spike](spikes/2026-08-24-display-handoff.md)). **It works.** The
       invariant is *one presenter at a time*, not one process per display:

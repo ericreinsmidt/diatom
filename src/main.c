@@ -136,6 +136,65 @@ static void report_slot(int mode, diatom_filter filter)
 	fflush(stdout);
 }
 
+/* The in-game menu handover - ADR-0016.
+ *
+ * MENU pauses the game and gives the display to the launcher, which draws its
+ * own menu and answers. Diatom draws nothing: it has no UI, and the handoff
+ * spike proved an fbdev presenter and an EGL launcher can alternate safely so
+ * long as only one presents at a time.
+ *
+ * Blocks until the launcher answers, because a paused game is paused - running
+ * the core would advance a world the player cannot see.
+ *
+ * Returns false if the session should end. */
+static bool menu_pause(void)
+{
+	/* Symmetrical with RUNNING: the launcher may draw from here. */
+	diatom_proto_send("PAUSED");
+
+	for (;;) {
+		diatom_msg m;
+
+		switch (diatom_proto_poll(&m, -1, false)) {
+		case DIATOM_MSG_RESUME:
+			diatom_proto_send("RUNNING");
+			return true;
+		case DIATOM_MSG_STOP:
+			return false;
+		case DIATOM_MSG_QUIT:
+			g_quit_requested = true;
+			return false;
+		case DIATOM_MSG_SAVE:
+			diatom_proto_send(diatom_state_save(g_core, m.path)
+			                  ? "SAVED\tpath=%s" : "ERROR\tcode=save_failed\tmsg=%s",
+			                  m.path);
+			break;
+		case DIATOM_MSG_LOAD:
+			diatom_proto_send(diatom_state_load(g_core, m.path)
+			                  ? "LOADED\tpath=%s" : "ERROR\tcode=state_rejected\tmsg=%s",
+			                  m.path);
+			break;
+		case DIATOM_MSG_OPTIONS:
+			diatom_options_emit();
+			break;
+		case DIATOM_MSG_SETOPT:
+			diatom_proto_send(diatom_options_set(m.key, m.value)
+			                  ? "OPTSET\tkey=%s" : "ERROR\tcode=bad_option\tmsg=%s",
+			                  m.key);
+			break;
+		case DIATOM_MSG_HANGUP:
+			/* The launcher died while holding the menu open. Resuming is the
+			 * kinder failure: the alternative strands the player in a paused
+			 * game with nothing left to talk to. */
+			diatom_port_log(DIATOM_LOG_WARN,
+			                "launcher vanished during menu; resuming the game");
+			return true;
+		default:
+			break;
+		}
+	}
+}
+
 /* SELECT is the modifier: SELECT+R1 and SELECT+L1 step the mode, SELECT+A
  * toggles the filter, all edge-triggered. The keys involved are hidden from
  * the core while SELECT is held; the very first frame of the press still
@@ -375,6 +434,25 @@ static int run_session(const diatom_session *sn)
 			switch (diatom_proto_poll(&m, 0, true)) {
 			case DIATOM_MSG_STOP: stop = true; break;
 			case DIATOM_MSG_QUIT: stop = true; g_quit_requested = true; break;
+			case DIATOM_MSG_OPTIONS: diatom_options_emit(); break;
+			case DIATOM_MSG_SETOPT:
+				diatom_proto_send(diatom_options_set(m.key, m.value)
+				                  ? "OPTSET\tkey=%s"
+				                  : "ERROR\tcode=bad_option\tmsg=%s", m.key);
+				break;
+			/* Also honoured while running, not only from the menu. ADR-0016
+			 * puts slot CHOICE in the launcher's menu, but nothing about that
+			 * requires the game to be paused to write a state. */
+			case DIATOM_MSG_SAVE:
+				diatom_proto_send(diatom_state_save(g_core, m.path)
+				                  ? "SAVED\tpath=%s"
+				                  : "ERROR\tcode=save_failed\tmsg=%s", m.path);
+				break;
+			case DIATOM_MSG_LOAD:
+				diatom_proto_send(diatom_state_load(g_core, m.path)
+				                  ? "LOADED\tpath=%s"
+				                  : "ERROR\tcode=state_rejected\tmsg=%s", m.path);
+				break;
 			/* HANGUP is deliberately not a stop. ADR-0008 exists so a
 			 * launcher that died cannot take a running game with it. */
 			default: break;
@@ -383,6 +461,25 @@ static int run_session(const diatom_session *sn)
 
 		buttons = diatom_port_input_state();
 		display_chord(buttons, prev_buttons);
+
+		/* MENU is Diatom's own key and the ports no longer act on it, because
+		 * what it means is host policy: standalone it ends the session, under
+		 * the launcher it opens the launcher's menu. Edge-triggered, or holding
+		 * it would re-enter the menu every frame. */
+		if ((buttons & ~prev_buttons) & DIATOM_BIT(DIATOM_BTN_MENU)) {
+			if (!diatom_proto_active()) {
+				stop = true;
+			} else if (!menu_pause()) {
+				stop = true;
+			} else {
+				/* The clock ran on while the menu was open. Without this the
+				 * loop believes it is thousands of frames late and spends the
+				 * next second catching up. */
+				next_us = (double)diatom_port_now_us();
+				prev_buttons = 0;
+				continue;
+			}
+		}
 		prev_buttons = buttons;
 
 		{
@@ -546,7 +643,12 @@ int main(int argc, char **argv)
 
 			/* Idle: block. Nothing is on screen, so there is nothing to
 			 * pace and no reason to spin. */
-			if (diatom_proto_poll(&m, -1, false) != DIATOM_MSG_RUN) continue;
+			switch (diatom_proto_poll(&m, -1, false)) {
+			case DIATOM_MSG_RUN:     break;
+			case DIATOM_MSG_OPTIONS: diatom_options_emit(); continue;
+			case DIATOM_MSG_SETOPT:  diatom_options_set(m.key, m.value); continue;
+			default:                 continue;
+			}
 			if (!m.core[0]) {
 				diatom_proto_send("ERROR\tcode=core_missing\tmsg=no core given");
 				continue;

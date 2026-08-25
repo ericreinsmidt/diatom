@@ -125,9 +125,14 @@ static void parse_line(char *line, diatom_msg *out)
 	field = strtok_r(line, "\t", &save);
 	if (!field) { out->kind = DIATOM_MSG_NONE; return; }
 
-	if      (!strcmp(field, "RUN"))  out->kind = DIATOM_MSG_RUN;
-	else if (!strcmp(field, "STOP")) out->kind = DIATOM_MSG_STOP;
-	else if (!strcmp(field, "QUIT")) out->kind = DIATOM_MSG_QUIT;
+	if      (!strcmp(field, "RUN"))     out->kind = DIATOM_MSG_RUN;
+	else if (!strcmp(field, "STOP"))    out->kind = DIATOM_MSG_STOP;
+	else if (!strcmp(field, "QUIT"))    out->kind = DIATOM_MSG_QUIT;
+	else if (!strcmp(field, "RESUME"))  out->kind = DIATOM_MSG_RESUME;
+	else if (!strcmp(field, "SAVE"))    out->kind = DIATOM_MSG_SAVE;
+	else if (!strcmp(field, "LOAD"))    out->kind = DIATOM_MSG_LOAD;
+	else if (!strcmp(field, "OPTIONS")) out->kind = DIATOM_MSG_OPTIONS;
+	else if (!strcmp(field, "SETOPT"))  out->kind = DIATOM_MSG_SETOPT;
 	else {
 		log_(DIATOM_LOG_WARN, "proto: ignoring unknown verb '%s'", field);
 		out->kind = DIATOM_MSG_NONE;
@@ -143,7 +148,10 @@ static void parse_line(char *line, diatom_msg *out)
 		if      (!strcmp(field, "core")) snprintf(out->core, sizeof out->core, "%s", v);
 		else if (!strcmp(field, "rom"))  snprintf(out->rom,  sizeof out->rom,  "%s", v);
 		else if (!strcmp(field, "tag"))  snprintf(out->tag,  sizeof out->tag,  "%s", v);
-		else if (!strcmp(field, "slot")) snprintf(out->slot, sizeof out->slot, "%s", v);
+		else if (!strcmp(field, "slot")) snprintf(out->slot,  sizeof out->slot,  "%s", v);
+		else if (!strcmp(field, "path")) snprintf(out->path,  sizeof out->path,  "%s", v);
+		else if (!strcmp(field, "key"))  snprintf(out->key,   sizeof out->key,   "%s", v);
+		else if (!strcmp(field, "value"))snprintf(out->value, sizeof out->value, "%s", v);
 		/* anything else: forward compatibility, ignore */
 	}
 }

@@ -71,7 +71,13 @@ enum {
 	DIATOM_BTN_UP = 0, DIATOM_BTN_DOWN, DIATOM_BTN_LEFT, DIATOM_BTN_RIGHT,
 	DIATOM_BTN_A, DIATOM_BTN_B, DIATOM_BTN_X, DIATOM_BTN_Y,
 	DIATOM_BTN_L1, DIATOM_BTN_R1, DIATOM_BTN_L2, DIATOM_BTN_R2,
-	DIATOM_BTN_SELECT, DIATOM_BTN_START, DIATOM_BTN_MENU,
+	DIATOM_BTN_SELECT, DIATOM_BTN_START,
+	/* Diatom's own key: never forwarded to a core. The port REPORTS it like
+	 * any other button and does not act on it - what MENU means is host
+	 * policy, and it differs by mode. Standalone it ends the session; under
+	 * the launcher protocol it hands the display over for a menu. A port that
+	 * decided this itself would make that impossible. */
+	DIATOM_BTN_MENU,
 	DIATOM_BTN_COUNT
 };
 #define DIATOM_BIT(b) (1u << (b))

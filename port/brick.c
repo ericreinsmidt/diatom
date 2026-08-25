@@ -700,8 +700,6 @@ void diatom_port_input_poll(void)
 		}
 	}
 
-	/* Diatom's own key, never forwarded to a core. */
-	if (g_buttons & DIATOM_BIT(DIATOM_BTN_MENU)) g_quit = true;
 }
 
 uint32_t diatom_port_input_state(void) { return g_buttons; }
