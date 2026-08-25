@@ -238,6 +238,23 @@ size_t diatom_audio_push(const int16_t *in, size_t frames)
 	 * Rate control is skipped too; there is nothing to nudge. */
 	if (g_ratio > 0.9999 && g_ratio < 1.0001) {
 		push(in, frames);
+		/* Carry the last frame even though nothing interpolated it.
+		 *
+		 * `tap()` blends the previous block's final sample with this block's
+		 * first, so `g_prev` must track EVERY block, not only the ones this
+		 * path skips. Returning early without it meant the first interpolated
+		 * frame after any pass-through run blended against a sample from
+		 * whenever interpolation last happened - seconds earlier, at an
+		 * unrelated amplitude. A guaranteed click on every transition.
+		 *
+		 * NES is the only system that meets it: FCEUmm reports 48000 into a
+		 * 48000 device, so the nominal ratio is 1.0 and rate control walks it
+		 * back and forth across this window continuously. Measured 2026-08-25
+		 * on Contra - 18% of 50ms windows left the resampler with MORE energy
+		 * above 10kHz than they arrived with, which a lowpass cannot do. */
+		g_prev[0] = in[(frames - 1) * 2];
+		g_prev[1] = in[(frames - 1) * 2 + 1];
+		g_have_prev = true;
 		return frames;
 	}
 
