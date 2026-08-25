@@ -107,3 +107,46 @@ hit it by calling `docker run` directly instead of going through
 cheap: compare the two hashes and refuse to interpret the run if they match.
 Second time this project has bypassed its own guard by reaching past the script
 that holds it.
+
+## Verified on hardware, 2026-08-25
+
+**Nothing audible is attributable to Diatom.** Confirmed by listening on the
+device, and the route to that answer is worth more than the answer.
+
+A chirp was reported on NES and initially read as a defect in this work. It is
+not. The `--tap-audio` comparison put it **in the core's output before Diatom
+touches a sample**, and it is present in **minarch on the same hardware playing
+the same game** - so it is inherent to Contra under FCEUmm, not to anything
+here. It only became noticeable once the output gain was finally set correctly.
+
+Three hypotheses died on the way, all of them mine, all of them from a metric
+that did not survive contact:
+
+- **Aliasing in the resampler.** Claimed from HF as a *fraction* of total
+  energy, which rises whenever the low end drops. Absolute HF energy comes out
+  at **0.756** of what goes in - a lowpass behaving correctly. No aliasing.
+- **Ongoing drops.** Contra drops 682-687 frames at 5s, 15s, 30s and 60s:
+  constant, so startup only.
+- **Sample-to-sample jump counting.** IN had *more* jumps than OUT (266/s vs
+  162/s), because NES square waves are discontinuous by construction and the
+  detector could not tell an edge from an artefact.
+
+One real bug was found and fixed on the way - `g_prev` was not carried through
+the pass-through path - but measurement showed it was not the reported symptom,
+and the commit says so.
+
+**The method that worked**, after several that did not: capture the signal at
+each boundary and play the captures back. `--tap-audio` writes both sides of the
+resampler; converting them to WAV and playing them through `aplay` answered in
+one listen what an evening of metrics could not. Attribution beats analysis when
+the question is "whose artefact is this".
+
+## What it turned up that is not a bug
+
+FCEUmm ships `fceumm_sndquality = Low`, with "Reduce Triangle Channel Popping"
+and "Reduce DMC Channel Popping" both disabled. Very High plus both cut large
+sample-to-sample jumps by **42%** on Contra, 138/s to 80/s.
+
+That is not a defect - minarch runs the same defaults - but it is a live
+question about who owns core-option defaults, recorded in §6. Diatom has no core
+list, so it cannot hold per-core opinions without breaking a stated principle.

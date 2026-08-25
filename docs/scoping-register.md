@@ -621,6 +621,14 @@ Two levers the spike discovered:
       hardest ratio found, mGBA at 131072 Hz into 48000 (2.73:1), held at 0
       resyncs and +0.209% drift - so this is a known-provisional rather than a
       known-broken.
+- [ ] **[LB]** **Who sets core-option defaults?** FCEUmm ships
+      `fceumm_sndquality = Low`, plus "Reduce Triangle Channel Popping" and
+      "Reduce DMC Channel Popping" both **disabled**. Very High plus both cut
+      large sample-to-sample jumps by **42%** (138/s to 80/s) on Contra. But
+      **Diatom has no core list** (§12) and setting per-core defaults would
+      break that. So either the launcher ships them in its config, or the
+      principle bends. Nothing is broken today - minarch has the same defaults -
+      but "sounds right out of the box" is a real product question.
 - [ ] **[OPEN]** **Startup audio transient, bounded but not zero.** After
       discarding warmup audio, NES PAL still drops **1244 frames** and PC Engine
       **575**, constant at 300/900/1800 frames so still purely a transient
@@ -637,11 +645,11 @@ Two levers the spike discovered:
       cores) is **not implemented** - the core-side half of DRC, letting a core
       throttle itself on buffer occupancy. Host-side DRC works without it, so
       this is an improvement rather than a gap.
-- [x] **[OPEN]** **`audio_write` overshot its own capacity** - 4927 frames
-      against a stated 4096, hiding itself from a controller whose error term
-      clamps at capacity. Fixed by taking only what fits; the write now returns
-      what it took, so refusals are counted rather than silent. That exposed a
-      bigger startup transient. [log](discussion/2026-08-25-audio-queue.md).
+- [x] **[OPEN]** **`audio_write` overshot its own capacity** - 4927 against a
+      stated 4096, invisible to a controller that clamps its error at capacity.
+      Fixed by taking only what fits; the write returns what it took, so
+      refusals are counted. **Verified on hardware 2026-08-25**: nothing audible
+      is attributable to Diatom. [log](discussion/2026-08-25-audio-queue.md).
 - [x] **[OPEN]** ~~GBA is the best test case.~~ Superseded by measurement: the
       hardest case is **PAL at 50.0070 Hz on a 60 Hz panel** (FCEUmm, Snes9x),
       and the most awkward *rate* is mGBA's **65536 Hz**. Use both as
