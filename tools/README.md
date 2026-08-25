@@ -11,6 +11,10 @@ created work items requiring them.
 
 Neither builds as part of `make`. Neither may be included from `src/` or `port/`.
 
+One file here is not an instrument: `check-register.py` is a **check**, and it
+runs as part of `make check` alongside `check-seam`. See the bottom of this
+file.
+
 ## `envlog.c`
 
 *Which `RETRO_ENVIRONMENT_*` calls does a core actually make, and at which
@@ -146,3 +150,49 @@ tools/brick-run.sh --core X.so --rom game --frames 600 --shot /tmp/x.bmp
 ```
 
 Set `LD_LIBRARY_PATH` if the cores need runtime libraries beside them.
+
+## `check-register.py` - a check, not an instrument
+
+*Can the register still be trusted to say what is left?*
+
+By 2026-08-25 it could not. It had grown 418 to 992 lines in three days and
+**never once shrunk**, because every resolution was appended rather than
+substituted: section 10 opened with five unticked questions and then, twelve
+lines down, a `RESOLVED -> ADR-0006` block ticking the same five. The
+core-options work created `## 4c` and left `## 12` standing. Saves did the same
+thing across `## 5b` and `## 9`.
+
+That was not neglect - the register was edited in **15 of the 16 ADR commits**.
+It was a habit. Writing the resolution is the satisfying part; deleting the
+question it answers feels like discarding information, in a project whose whole
+discipline is to keep the reasoning. But the reasoning lives in the ADR. The
+register only has to say what is left.
+
+So it exists for the same reason `check-seam` does. That rule has held since
+day one because a build fails when it is broken, not because anyone remembered
+it. Nothing ever failed when the register drifted, so it drifted.
+
+    make check              check-seam plus this
+    make check-register     this alone
+    make check-register-diff   enforce substitution over appending
+
+**FAIL** - structural facts a machine can be certain about:
+
+| | |
+|---|---|
+| Section order | `## 5` sitting above `## 4b` is how you see sections were inserted wherever was convenient |
+| Resolved but still open | a section recording a resolution that still carries unticked items above it - the exact signature of the habit |
+| Duplicate subject | two sections whose titles cover the same thing |
+| Undeclared tag | the header once said "nothing is decided unless it says DECIDED" while every resolution was written `RESOLVED`; the stated vocabulary and the real one drifted apart unnoticed |
+| Orphaned ADR | an Accepted ADR that no ticked item points at |
+| `--diff`: appended a resolution | a change that records a resolution and deletes nothing |
+
+**WARN** - suspected fossils, an open item whose vocabulary is already covered
+by a ticked one elsewhere. Never fails a build, because "is this the same
+question?" is a judgement. The first version scored these on raw shared-word
+count and produced **40 warnings, nearly all noise** - `**[OPEN]**` was leaking
+into the comparison so every open item matched every other. Tags are stripped
+first now, and overlap is measured against the *shorter* item rather than the
+union, because a one-line question and a six-line resolution can be about
+exactly the same thing. That took it to 4, all worth reading. A check that
+cries wolf is one people learn to ignore, which is worse than no check.

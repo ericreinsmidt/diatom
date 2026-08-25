@@ -56,7 +56,8 @@ ifeq ($(PORT),brick)
   LDFLAGS += -lSDL2 -lm -ldl -lpthread
 endif
 
-.PHONY: all clean check-seam stub run-stub tools probes
+.PHONY: all clean check check-seam check-register check-register-diff \
+        stub run-stub tools probes
 
 all: $(BIN)
 
@@ -135,6 +136,21 @@ $(BUILD)/%.o: %.c
 # The seam test from ADR-0007, mechanised. A port that includes libretro.h can
 # no longer be built without a core, which destroys the reason the desktop
 # backend exists. Cheap to check, so check it.
+# Two mechanical checks, both guarding a rule that decays the moment nothing
+# fails when it is broken. check-seam has held since day one for exactly that
+# reason; the register drifted 418 -> 992 lines in three days because nothing
+# ever complained.
+check: check-seam check-register
+
+check-register:
+	@python3 tools/check-register.py
+
+# Use in a commit hook or by hand before committing: enforces that a resolution
+# REPLACES the question it answers rather than being appended below it, which
+# is the habit that broke the register.
+check-register-diff:
+	@python3 tools/check-register.py --diff
+
 check-seam:
 	@if grep -nE '^[[:space:]]*#[[:space:]]*include.*libretro\.h' \
 	        port/*.c include/*.h 2>/dev/null; then \
