@@ -796,7 +796,7 @@ int main(int argc, char **argv)
 	 * the crop. nearest because sharp earned nothing visible at these factors
 	 * and is the only thing that has made this loop miss a frame. */
 	const char *display = "stretch", *filter = "nearest";
-	const char *state_load = NULL, *state_exit = NULL, *firmware = NULL;
+	const char *state_load = NULL, *state_exit = NULL, *firmware = NULL, *tap = NULL;
 	const char *sock = getenv("DIATOM_SOCKET");
 	bool list_options = false;
 	diatom_filter start_filter;
@@ -815,6 +815,7 @@ int main(int argc, char **argv)
 		else if (!strcmp(argv[i], "--load-state") && i + 1 < argc) state_load = argv[++i];
 		else if (!strcmp(argv[i], "--state-on-exit") && i + 1 < argc) state_exit = argv[++i];
 		else if (!strcmp(argv[i], "--firmware") && i + 1 < argc) firmware = argv[++i];
+		else if (!strcmp(argv[i], "--tap-audio") && i + 1 < argc) tap = argv[++i];
 		else if (!strcmp(argv[i], "--socket") && i + 1 < argc) sock = argv[++i];
 		else if (!strcmp(argv[i], "--list-options")) list_options = true;
 		else if (!strcmp(argv[i], "--core-option") && i + 1 < argc) {
@@ -871,6 +872,13 @@ int main(int argc, char **argv)
 	 * exactly the case worth reporting. */
 	install_crash_handlers();
 
+	if (tap) {
+		char a[512], b[512];
+		snprintf(a, sizeof a, "%s.in.raw",  tap);
+		snprintf(b, sizeof b, "%s.out.raw", tap);
+		diatom_audio_tap(a, b);
+	}
+
 	/* Two modes, and standalone is the primary one - designing for a program
 	 * that stands alone is a stricter test than designing for one embedder.
 	 *
@@ -920,6 +928,7 @@ int main(int argc, char **argv)
 		int rc = run_session(&sn);
 		if (rc) return rc;
 	}
+	diatom_audio_tap_close();
 	diatom_port_shutdown();
 	free(g_frame);
 	return 0;

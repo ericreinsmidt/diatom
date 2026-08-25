@@ -16,10 +16,29 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <stdio.h>
 
 #include "diatom.h"
 
 #define OUT_CHUNK 2048
+
+/* Raw taps, opt-in. Writing to /tmp on the device is tmpfs, so this is a RAM
+ * copy rather than an SD write in the frame path. Both sides are captured so a
+ * defect can be attributed: present in IN means the core or the game, present
+ * only in OUT means us, present in neither means downstream of us. */
+static FILE *g_tap_in, *g_tap_out;
+
+void diatom_audio_tap(const char *in_path, const char *out_path)
+{
+	if (in_path)  g_tap_in  = fopen(in_path,  "wb");
+	if (out_path) g_tap_out = fopen(out_path, "wb");
+}
+
+void diatom_audio_tap_close(void)
+{
+	if (g_tap_in)  { fclose(g_tap_in);  g_tap_in  = NULL; }
+	if (g_tap_out) { fclose(g_tap_out); g_tap_out = NULL; }
+}
 
 /* How far the resample ratio may be nudged. 0.5% is the usual figure: enough to
  * absorb clock drift, small enough that the pitch shift is inaudible. */
@@ -60,6 +79,7 @@ static void push(const int16_t *f, size_t n)
 	}
 	g_total += (uint64_t)n * 2;
 
+	if (g_tap_out) fwrite(f, sizeof(int16_t) * 2, n, g_tap_out);
 	took = diatom_port_audio_write(f, n);
 	if (took < n) g_dropped += (uint64_t)(n - took);
 }
@@ -72,6 +92,7 @@ static double   g_in_sq;
 
 void diatom_audio_note_input(const int16_t *f, size_t n)
 {
+	if (g_tap_in) fwrite(f, sizeof(int16_t) * 2, n, g_tap_in);
 	size_t i;
 	for (i = 0; i < n * 2; i++) {
 		int v = f[i] < 0 ? -f[i] : f[i];

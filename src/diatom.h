@@ -200,6 +200,9 @@ uint64_t diatom_audio_dropped(void);
 /* Peak absolute sample, and how many of the samples written were non-zero.
  * The first thing to check when nothing is audible. */
 void     diatom_audio_note_input(const int16_t *f, size_t n);
+/* Raw S16 stereo taps either side of the resampler, for offline analysis. */
+void     diatom_audio_tap(const char *in_path, const char *out_path);
+void     diatom_audio_tap_close(void);
 int      diatom_audio_in_peak(void);
 uint64_t diatom_audio_in_nonzero(void);
 uint64_t diatom_audio_in_samples(void);

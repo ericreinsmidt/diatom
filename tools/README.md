@@ -273,3 +273,27 @@ instrument - only opinions about opinions.
 The lesson is not to listen more carefully. It is that **"does this sound right"
 has a number behind it**, and that number was ten minutes of work away using
 `arecord`, which was on the device the whole time.
+
+## `--tap-audio` - the raw samples, both sides of the resampler
+
+Not a tool in `tools/`, but it belongs with them. `diatom --tap-audio /tmp/x`
+writes `x.in.raw` and `x.out.raw`: interleaved S16 stereo, exactly what the core
+handed us and exactly what we handed the port. On the device `/tmp` is tmpfs, so
+this is a RAM copy rather than an SD write in the frame path.
+
+It exists because "the audio sounds wrong" needs to be attributable. Present in
+IN means the core or the game; present only in OUT means us; present in neither
+means downstream of us. That three-way split is what identified the resampler as
+the source of the chirps on 2026-08-25, after a mic capture could not separate
+the artefact from Contra's own gunfire.
+
+The measurement that did it, on 15s of Contra:
+
+| | HF energy >10 kHz | variability (cv) |
+|---|---|---|
+| IN (from the core) | 0.0055 | 1.63 |
+| OUT (after resampling) | 0.0068 | **4.23** |
+
+**18% of windows leave with MORE high-frequency energy than they arrived with.**
+Linear interpolation is a lowpass and cannot add high frequencies; energy above
+10 kHz that was not in the source is aliasing.
