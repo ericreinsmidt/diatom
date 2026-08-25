@@ -121,6 +121,41 @@ verified rather than assumed.
 
 ---
 
+## 1b. Implementation language *(settled 2026-08-24)*
+
+**C, and it stays C.** Never previously decided - it was inherited rather than
+chosen - so it is written down now.
+
+The deciding number: of 2,410 lines outside `libretro.h`, only 342 (`scale.c`,
+`audio.c`) are pure logic. The other 2,068 are the C ABI, `dlopen`'d function
+pointers, raw frame buffers, `mmap`, `ioctl` and pixel loops. **In Rust that is
+86% `unsafe`** - a memory-safe language whose guarantee stops exactly where the
+risk lives. Diatom is almost entirely boundary, because that is what a frontend
+is.
+
+- **C++** is worse than neutral here: Diatom `dlopen`s C++ cores, and bringing
+  its own libstdc++ risks two C++ runtimes in one process. `RTLD_LOCAL`
+  (ADR-0010) isolates symbols, not exception tables or static init order.
+- **Go** fails on FFI shape, not weight. libretro is callback-driven: a core
+  polls `input_state` per button per frame, and each is a C-to-Go transition
+  with a scheduler hop, plus a GC that can land inside a 16.6 ms budget already
+  carrying 8.4 ms of blit.
+- **Rust** is viable and buys little, per the 86% above.
+- **Zig** would be the interesting choice if starting today - it targets a
+  chosen glibc version natively, which is half of ADR-0012 for free - but it is
+  pre-1.0 and breaks between releases, which contradicts pinning the toolchain
+  by digest.
+
+Weight is not the constraint on this device class and that assumption was wrong:
+Diatom is 51 KB against a 12.6 MB Genesis Plus GX core and 975 MB of RAM. A Go
+binary would be one core's worth.
+
+**Revisit if** Diatom grows a large *safe* surface - a real UI, netplay, save
+sync, scripting - which inverts the ratio, or if a target is Android, where
+bionic and JNI change everything.
+
+---
+
 ## 2. The layer model - "what goes where"
 
 ### Vocabulary *(settled 2026-08-23)*
@@ -358,6 +393,33 @@ Two amendments ADR-0007 makes to the table above:
       other.** 256×**243** at 3× is 768×**729** - exceeds the Miniloong's 720
       lines, fits the Brick's 768. So PCE gets 2× on one and 3× on the other.
       First real instance of ADR-0007's "doesn't fit" default.
+- [ ] **[LATER]** **Drop SDL2 from the Brick port?** Video already left in
+      ADR-0013; SDL2 now only does audio, joystick, clock and BMP capture there.
+      **Measured 2026-08-24: SDL2 costs 223 ms at startup** - `SDL_Init` 86.7 ms
+      (udev enumeration) plus `SDL_OpenAudioDevice` 135.9 ms - against a cold
+      core `dlopen` of 232 ms. That lands squarely on the project's headline
+      value, instant launches.
+
+      **Not decidable yet**: the gain is only the *difference*, and raw ALSA
+      also has to pay for opening the device. Needs a spike timing a direct
+      ALSA open and an OSS `/dev/dsp` open before it is arithmetic rather than
+      a guess.
+
+      Secondary benefit if done: DRC currently targets `SDL_GetQueuedAudioSize`,
+      which is SDL's own queue rather than the hardware buffer. Reading
+      `snd_pcm_avail` would let the control loop measure the thing it actually
+      controls, and would explain the queue overshoot logged at 4927 frames
+      against a stated 4096 capacity.
+
+      Cost: ~250 lines of device-only code that cannot be tested on the
+      development machine, and a desktop port that becomes a weaker behavioural
+      proxy for the device.
+
+      **Explicitly NOT a portability argument.** Static linking cannot deliver
+      that: `dlopen` in a static binary still requires the shared libraries from
+      the glibc it was linked against, which is the coupling it was supposed to
+      escape. ADR-0012 already solves portability by building against the oldest
+      glibc in scope.
 - [ ] **[OPEN]** GL/GLES or software blit on device?
 - [ ] **[LATER]** Shaders/overlays - probably "no" forever. Decide and write it down.
 
