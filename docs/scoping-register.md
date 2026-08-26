@@ -975,12 +975,12 @@ pad attached, which is why the real pad has a Mode switch.
       `LOAD` or `STOP`, and slot naming stays entirely in the launcher as
       ADR-0016 requires. The handoff it rests on is in §3.
       [protocol log](discussion/2026-08-25-protocol.md).
-- [ ] **[OPEN]** **`PREVIEW` is declared in ADR-0009 and not emitted, and it
-      now has a consumer.** PlayOS reads `.minui/<folder>/<base>.9.bmp` and
-      draws it on a game's card, so the shelf shows the last frame played;
-      minarch writes it. **Hard parity requirement** for PlayOS adopting
-      Diatom, and Phase 1 of its migration plan - the only phase that is
-      Diatom's work rather than PlayOS's.
+- [x] **[OPEN]** **`PREVIEW` is emitted** →
+      **[ADR-0024](decisions/0024-session-persistence-paths.md)** *(Accepted)*.
+      RUN carries `resume=`/`exit_state=`/`preview=`; the preview is the core's
+      frame (172 KB, not 2.3 MB of panel), written at pause and exit, announced
+      before EXIT. Verified on hardware: two Contra sessions, the second
+      resuming the first's state, artifacts at PlayOS's exact paths.
 - [ ] **[LB]** Rewind: support or drop? Real RAM cost on a 1GB device.
 - [x] **[OPEN]** CD support → done for PC Engine. **CHD needs nothing** - read
       natively at 59.81 fps against a 59.8200 target, 0 resyncs. The System Card

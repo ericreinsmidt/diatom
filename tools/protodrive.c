@@ -108,6 +108,7 @@ int main(int argc, char **argv)
 	struct sockaddr_un a;
 	int secs, i, attempt, nopt = 0, exercise = 0, argi = 3, menu = 0, menus = 0;
 	int state = 0;
+	const char *persist = getenv("PROTODRIVE_PERSIST");   /* path base, no ext */
 	const char *optkey = "", *optval = "";
 
 	/* Line-buffered, because this tool watches things that die. Redirected to
@@ -201,7 +202,14 @@ int main(int argc, char **argv)
 
 		t0 = us();
 		t_last = t0;
-		if (fw && *fw)
+		/* PROTODRIVE_PERSIST=<base> exercises ADR-0024: the RUN carries
+		 * <base>.state and <base>.bmp the way a launcher would. */
+		if (persist && *persist)
+			wline("RUN\tcore=%s\trom=%s%s%s"
+			      "\tresume=%s.state\texit_state=%s.state\tpreview=%s.bmp",
+			      spec, rom, fw && *fw ? "\tfirmware=" : "", fw && *fw ? fw : "",
+			      persist, persist, persist);
+		else if (fw && *fw)
 			wline("RUN\tcore=%s\trom=%s\tfirmware=%s", spec, rom, fw);
 		else
 			wline("RUN\tcore=%s\trom=%s", spec, rom);
@@ -211,7 +219,8 @@ int main(int argc, char **argv)
 			if (!l) { fprintf(stderr, "connection closed\n"); return 3; }
 			if (!strncmp(l, "INPUTS", 6) || !strncmp(l, "INPUT\t", 6) ||
 			    !strncmp(l, "MAP", 3) || !strncmp(l, "LEVELS", 6) ||
-			    !strncmp(l, "LEVEL\t", 6) || !strncmp(l, "DISPLAY", 7)) {
+			    !strncmp(l, "LEVEL\t", 6) || !strncmp(l, "DISPLAY", 7) ||
+			    !strncmp(l, "PREVIEW", 7) || !strncmp(l, "RESETDONE", 9)) {
 				printf("    <- %.100s\n", l);
 			} else if (!strncmp(l, "OPTIONS", 7) || !strncmp(l, "OPTION\t", 7) ||
 			    !strncmp(l, "OPTSET", 6) || !strncmp(l, "SAVED", 5) ||
@@ -317,8 +326,13 @@ int main(int argc, char **argv)
 			}
 		}
 	}
-	wline("QUIT");
-	printf("sent QUIT\n");
+	/* PROTODRIVE_KEEP leaves the resident alive - what a launcher does, and
+	 * what a resume test needs, since QUIT would take the next run's peer
+	 * down with this one. */
+	if (!getenv("PROTODRIVE_KEEP")) {
+		wline("QUIT");
+		printf("sent QUIT\n");
+	}
 	close(fd);
 	return 0;
 }

@@ -13,6 +13,11 @@ PORT ?= desktop
 CC      ?= cc
 CFLAGS  += -std=gnu11 -Wall -Wextra -Wno-unused-parameter -O2
 CFLAGS  += -Iinclude -Isrc
+# Header dependency tracking. Without it, changing a struct in diatom.h leaves
+# stale objects calling through old member offsets - which on 2026-08-26 turned
+# serialize_size() into a call to a different function entirely and made state
+# saving report "no state" while every freshly built file was correct.
+CFLAGS  += -MMD -MP
 LDFLAGS +=
 
 # Objects live under build/$(PORT)/ so host and cross builds cannot collide:
@@ -212,3 +217,9 @@ conform: $(CONFORM)
 conform-device:
 	@tools/conform-device.sh
 .PHONY: conform-device
+
+# At the END, after `all:` is established: an included .d file's first rule
+# would otherwise become the default goal, and `make` would silently build one
+# object and stop - which it did, on 2026-08-26, and looked exactly like the
+# docker mtime staleness it was added to prevent.
+-include $(OBJ:.o=.d)

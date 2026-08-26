@@ -52,6 +52,7 @@ typedef struct {
 	bool   (*load_game)(const struct retro_game_info *);
 	void   (*unload_game)(void);
 	void   (*run)(void);
+	void   (*reset)(void);
 	size_t (*serialize_size)(void);
 	bool   (*serialize)(void *, size_t);
 	bool   (*unserialize)(const void *, size_t);
@@ -107,6 +108,7 @@ typedef enum {
 	DIATOM_MSG_STOP,
 	DIATOM_MSG_QUIT,
 	DIATOM_MSG_RESUME,     /* leave the menu, Diatom takes the display back */
+	DIATOM_MSG_RESET,      /* retro_reset: the menu's Reset row, and nothing else */
 	DIATOM_MSG_SAVE,       /* write a state to `path` */
 	DIATOM_MSG_LOAD,       /* read a state from `path` */
 	DIATOM_MSG_OPTIONS,    /* enumerate this core's options */
@@ -131,6 +133,11 @@ typedef struct {
 	char firmware[128];    /* RUN: what this content needs in the system dir */
 	char tag[64];
 	char slot[64];
+	/* Session persistence, ADR-0024: the launcher passes explicit paths
+	 * (ADR-0016), and these are how they arrive. All optional. */
+	char resume[1024];     /* RUN: state to load at start, if it exists */
+	char exit_state[1024]; /* RUN: state written on every way out */
+	char preview[1024];    /* RUN: BMP of the frame, on pause and on exit */
 	char path[1024];       /* SAVE / LOAD */
 	char key[80];          /* SETOPT */
 	char value[128];       /* SETOPT */

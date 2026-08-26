@@ -53,6 +53,7 @@ bool diatom_core_open(diatom_core *c, const char *path)
 	BIND(load_game,                  "retro_load_game");
 	BIND(unload_game,                "retro_unload_game");
 	BIND(run,                        "retro_run");
+	BIND(reset,                      "retro_reset");
 	BIND(serialize_size,             "retro_serialize_size");
 	BIND(serialize,                  "retro_serialize");
 	BIND(unserialize,                "retro_unserialize");

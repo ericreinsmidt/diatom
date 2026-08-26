@@ -121,7 +121,35 @@ send("LEVELS"); check("desktop has no levels", drain(), ["LEVELS\tcount=0"])
 send("SETLEVEL\tkind=brightness\tindex=3\tcount=12")
 check("setlevel refused with no control", drain(), ["ERROR\tcode=bad_level\tmsg=brightness"])
 
+send("RESET"); check("reset while running", drain(), ["RESETDONE"])
+
 send("STOP"); print("STOP ->", drain(2.0))
+
+# --- ADR-0024: session persistence over the protocol -----------------------
+import tempfile, pathlib
+tmp = tempfile.mkdtemp(prefix="diatom-persist-")
+st, pv = f"{tmp}/game.state", f"{tmp}/game.bmp"
+
+send(f"RUN\tcore={ROOT}/build/desktop/stubcore.so\texit_state={st}\tpreview={pv}")
+print("RUN(persist) ->", drain(3.0))
+send("STOP"); got = drain(3.0)
+check_that("exit emits PREVIEW then EXIT, in that order",
+           len(got) >= 2 and got[-2].startswith("PREVIEW\tpath=") and got[-1].startswith("EXIT"),
+           got)
+check_that("exit state and preview are on disk and non-empty",
+           pathlib.Path(st).stat().st_size > 0 and pathlib.Path(pv).stat().st_size > 0,
+           [f"{st}: {pathlib.Path(st).stat().st_size}b",
+            f"{pv}: {pathlib.Path(pv).stat().st_size}b"])
+
+# resume from what was just written: no ERROR, straight to RUNNING
+send(f"RUN\tcore={ROOT}/build/desktop/stubcore.so\tresume={st}\texit_state={st}\tpreview={pv}")
+got = drain(3.0)
+check_that("resume path accepted, game reaches RUNNING",
+           "RUNNING" in got and not any(l.startswith("ERROR") for l in got), got)
+# pause writes the preview BEFORE announcing PAUSED - the order is the contract
+before = pathlib.Path(pv).stat().st_mtime_ns
+send("STOP"); drain(2.0)
+
 send("QUIT"); time.sleep(0.4)
 s.close(); p.terminate(); p.wait(timeout=5)
 print("\n" + ("ALL PASS" if not fails else f"{len(fails)} FAILED: {fails}"))

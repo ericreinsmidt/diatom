@@ -29,12 +29,85 @@ static bool        g_frame_fresh;
 
 /* ADR-0020's state plane, defined below but reachable from the menu loop that
  * comes first. */
+/* The session, up here because menu_pause reads its persistence paths. The
+ * lifecycle comment lives with run_session_inner below, which is what actually
+ * runs one. */
+typedef struct diatom_session {
+	const char   *core, *rom, *shot, *state_load, *state_exit;
+	const char   *preview;    /* BMP of the frame, written on pause and exit */
+	const char   *firmware;   /* what the launcher says this content needs */
+	long          limit;
+	int           mode;
+	diatom_filter filter;
+	bool          list_only;
+} diatom_session;
+
 static bool state_plane_msg(const diatom_msg *m);
 static void levels_forget(void);
 static void apply_display(int mode, diatom_filter filter);
 
 static diatom_core     *g_core;   /* resident, never unloaded - ADR-0006 */
 static diatom_policy    g_policy;
+
+/* The preview is the CORE'S frame, not the screen. Three reasons, none of
+ * them taste: it is 8-30x smaller (a 256x224 frame against a 1024x768 panel),
+ * it never contains the OSD bar or a menu, and it needs nothing from the port
+ * - the host already holds the last frame for dupe handling. minarch's
+ * previews are small for the same reason a launcher cares: it decodes one per
+ * visible card, on a shelf of dozens. BMP because that is what PlayOS already
+ * reads, top-down rows because that is what BMP wants for a positive height...
+ * negative height, rather - top-down needs biHeight < 0, and getting that
+ * wrong renders every card upside down. */
+static bool write_preview(const char *path)
+{
+	FILE *f;
+	unsigned char hdr[54];
+	int w = g_frame_w, h = g_frame_h, y, x;
+	size_t row = (size_t)w * 3, pad = (4 - (row & 3)) & 3;
+	unsigned int size = 54 + (unsigned int)((row + pad) * (size_t)h);
+
+	if (!g_frame || w <= 0 || h <= 0) return false;
+	f = fopen(path, "wb");
+	if (!f) return false;
+
+	memset(hdr, 0, sizeof hdr);
+	hdr[0] = 'B'; hdr[1] = 'M';
+	hdr[2]  = (unsigned char)size;       hdr[3]  = (unsigned char)(size >> 8);
+	hdr[4]  = (unsigned char)(size >> 16); hdr[5] = (unsigned char)(size >> 24);
+	hdr[10] = 54;
+	hdr[14] = 40;
+	hdr[18] = (unsigned char)w; hdr[19] = (unsigned char)(w >> 8);
+	hdr[22] = (unsigned char)h; hdr[23] = (unsigned char)(h >> 8);
+	hdr[26] = 1;                          /* planes */
+	hdr[28] = 24;                         /* bpp */
+	fwrite(hdr, 1, sizeof hdr, f);
+
+	/* Bottom-up, as positive-height BMP requires. */
+	for (y = h - 1; y >= 0; y--) {
+		const unsigned char *src = (const unsigned char *)g_frame
+		                         + (size_t)y * g_frame_pitch;
+		unsigned char px[3] = { 0, 0, 0 };
+
+		for (x = 0; x < w; x++) {
+			if (g_policy.pixfmt == DIATOM_PIX_RGB565) {
+				unsigned v = ((const unsigned short *)src)[x];
+				px[2] = (unsigned char)(((v >> 11) & 0x1f) * 255 / 31);
+				px[1] = (unsigned char)(((v >>  5) & 0x3f) * 255 / 63);
+				px[0] = (unsigned char)(( v        & 0x1f) * 255 / 31);
+			} else {   /* XRGB8888 */
+				unsigned v = ((const unsigned *)src)[x];
+				px[2] = (unsigned char)(v >> 16);
+				px[1] = (unsigned char)(v >> 8);
+				px[0] = (unsigned char)v;
+			}
+			fwrite(px, 1, 3, f);
+		}
+		if (pad) { unsigned char z[3] = {0,0,0}; fwrite(z, 1, pad, f); }
+	}
+	fclose(f);
+	return true;
+}
+
 static diatom_port_caps g_caps;
 static diatom_rect      g_dst;   /* locked at load - ADR-0011 */
 
@@ -254,7 +327,7 @@ static void usage(void)
 		"              [--display <mode>] [--filter nearest|sharp]\n"
 		"              [--load-state <file>] [--state-on-exit <file>]\n"
 		"              [--firmware <name>]  required in --system, checked first\n"
-		"              [--frames <n>] [--shot <file.bmp>]\n"
+		"              [--frames <n>] [--shot <file.bmp>] [--preview-on-exit <file.bmp>]\n"
 		"              [--socket <path>]   launcher protocol, ADR-0009\n"
 		"              [--core-option key=value] ...   repeatable\n"
 		"              [--list-options]    what this core offers, then exit\n"
@@ -323,8 +396,14 @@ static void report_slot(int mode, diatom_filter filter)
  * the core would advance a world the player cannot see.
  *
  * Returns false if the session should end. */
-static bool menu_pause(void)
+static bool menu_pause(const diatom_session *sn)
 {
+	/* The pause preview goes out BEFORE PAUSED, so by the time the launcher
+	 * hears it owns the display, the frame it will dim and draw its menu over
+	 * is already on disk. The order is the contract. ADR-0024. */
+	if (sn->preview && write_preview(sn->preview))
+		diatom_proto_send("PREVIEW\tpath=%s", sn->preview);
+
 	/* Symmetrical with RUNNING: the launcher may draw from here. */
 	diatom_proto_send("PAUSED");
 
@@ -354,6 +433,12 @@ static bool menu_pause(void)
 			diatom_proto_send(diatom_state_load(g_core, m.path)
 			                  ? "LOADED\tpath=%s" : "ERROR\tcode=state_rejected\tmsg=%s",
 			                  m.path);
+			break;
+		case DIATOM_MSG_RESET:
+			/* The menu's Reset row. The game stays paused - the launcher
+			 * still owns the display and sends RESUME when it is done. */
+			g_core->reset();
+			diatom_proto_send("RESETDONE");
 			break;
 		case DIATOM_MSG_OPTIONS:
 			diatom_options_emit();
@@ -429,14 +514,6 @@ static int display_chord(uint32_t buttons, uint32_t prev)
  *
  * Returns 0 on a clean run, or a non-zero code that main turns into an exit
  * status or an ERROR message depending on how Diatom was started. */
-typedef struct {
-	const char   *core, *rom, *shot, *state_load, *state_exit;
-	const char   *firmware;   /* what the launcher says this content needs */
-	long          limit;
-	int           mode;
-	diatom_filter filter;
-	bool          list_only;
-} diatom_session;
 
 /* ---- ADR-0020's state plane ------------------------------------------- */
 
@@ -856,6 +933,10 @@ static int run_session_inner(const diatom_session *sn)
 				                  ? "LOADED\tpath=%s"
 				                  : "ERROR\tcode=state_rejected\tmsg=%s", m.path);
 				break;
+			case DIATOM_MSG_RESET:
+				g_core->reset();
+				diatom_proto_send("RESETDONE");
+				break;
 			/* HANGUP is deliberately not a stop. ADR-0008 exists so a
 			 * launcher that died cannot take a running game with it. */
 			default: state_plane_msg(&m); break;
@@ -874,7 +955,7 @@ static int run_session_inner(const diatom_session *sn)
 		if ((buttons & ~prev_buttons) & DIATOM_BIT(DIATOM_BTN_MENU)) {
 			if (!diatom_proto_active()) {
 				stop = true;
-			} else if (!menu_pause()) {
+			} else if (!menu_pause(sn)) {
 				stop = true;
 			} else {
 				/* The clock ran on while the menu was open. Without this the
@@ -938,6 +1019,13 @@ static int run_session_inner(const diatom_session *sn)
 	 * it is a defect, then the state, which is a convenience. */
 	diatom_save_shutdown();
 	if (sn->state_exit) diatom_state_save(g_core, sn->state_exit);
+
+	/* The frame the player was looking at, for the launcher's card - written
+	 * with the exit state so a card that shows a preview always has a state
+	 * to resume, and announced before EXIT so it is on disk before the
+	 * launcher redraws. ADR-0024. */
+	if (sn->preview && write_preview(sn->preview))
+		diatom_proto_send("PREVIEW\tpath=%s", sn->preview);
 
 	{
 		uint64_t t_end = diatom_port_now_us();
@@ -1015,6 +1103,7 @@ int main(int argc, char **argv)
 	 * and is the only thing that has made this loop miss a frame. */
 	const char *display = "stretch", *filter = "nearest";
 	const char *state_load = NULL, *state_exit = NULL, *firmware = NULL, *tap = NULL;
+	const char *preview_path = NULL;
 	const char *sock = getenv("DIATOM_SOCKET");
 	bool list_options = false;
 	diatom_filter start_filter;
@@ -1032,6 +1121,7 @@ int main(int argc, char **argv)
 		else if (!strcmp(argv[i], "--filter") && i + 1 < argc) filter = argv[++i];
 		else if (!strcmp(argv[i], "--load-state") && i + 1 < argc) state_load = argv[++i];
 		else if (!strcmp(argv[i], "--state-on-exit") && i + 1 < argc) state_exit = argv[++i];
+		else if (!strcmp(argv[i], "--preview-on-exit") && i + 1 < argc) preview_path = argv[++i];
 		else if (!strcmp(argv[i], "--firmware") && i + 1 < argc) firmware = argv[++i];
 		else if (!strcmp(argv[i], "--tap-audio") && i + 1 < argc) tap = argv[++i];
 		else if (!strcmp(argv[i], "--socket") && i + 1 < argc) sock = argv[++i];
@@ -1144,6 +1234,13 @@ int main(int argc, char **argv)
 			sn.core     = m.core;
 			sn.rom      = m.rom[0] ? m.rom : NULL;
 			sn.firmware = m.firmware[0] ? m.firmware : NULL;
+			/* ADR-0024: the launcher owns where things persist and says so
+			 * per game. resume is load-if-exists - a missing state is a
+			 * fresh start, not an error, which is what makes it safe to
+			 * pass unconditionally. */
+			sn.state_load = m.resume[0]     ? m.resume     : NULL;
+			sn.state_exit = m.exit_state[0] ? m.exit_state : NULL;
+			sn.preview    = m.preview[0]    ? m.preview    : NULL;
 			sn.mode   = start_mode;
 			sn.filter = start_filter;
 			run_session(&sn);   /* its own ERROR/EXIT is the report */
@@ -1151,7 +1248,7 @@ int main(int argc, char **argv)
 		diatom_proto_close();
 	} else {
 		diatom_session sn = { core_path, rom_path, shot_path,
-		                      state_load, state_exit, firmware,
+		                      state_load, state_exit, preview_path, firmware,
 		                      limit, start_mode, start_filter,
 		                      list_options };
 		int rc = run_session(&sn);

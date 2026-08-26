@@ -158,6 +158,7 @@ static void parse_line(char *line, diatom_msg *out)
 	else if (!strcmp(field, "STOP"))    out->kind = DIATOM_MSG_STOP;
 	else if (!strcmp(field, "QUIT"))    out->kind = DIATOM_MSG_QUIT;
 	else if (!strcmp(field, "RESUME"))  out->kind = DIATOM_MSG_RESUME;
+	else if (!strcmp(field, "RESET"))   out->kind = DIATOM_MSG_RESET;
 	else if (!strcmp(field, "SAVE"))    out->kind = DIATOM_MSG_SAVE;
 	else if (!strcmp(field, "LOAD"))    out->kind = DIATOM_MSG_LOAD;
 	else if (!strcmp(field, "OPTIONS")) out->kind = DIATOM_MSG_OPTIONS;
@@ -190,6 +191,12 @@ static void parse_line(char *line, diatom_msg *out)
 			snprintf(out->firmware, sizeof out->firmware, "%s", v);
 		else if (!strcmp(field, "tag"))  snprintf(out->tag,  sizeof out->tag,  "%s", v);
 		else if (!strcmp(field, "slot")) snprintf(out->slot,  sizeof out->slot,  "%s", v);
+		else if (!strcmp(field, "resume"))
+			snprintf(out->resume, sizeof out->resume, "%s", v);
+		else if (!strcmp(field, "exit_state"))
+			snprintf(out->exit_state, sizeof out->exit_state, "%s", v);
+		else if (!strcmp(field, "preview"))
+			snprintf(out->preview, sizeof out->preview, "%s", v);
 		else if (!strcmp(field, "path")) snprintf(out->path,  sizeof out->path,  "%s", v);
 		else if (!strcmp(field, "key"))  snprintf(out->key,   sizeof out->key,   "%s", v);
 		else if (!strcmp(field, "value"))snprintf(out->value, sizeof out->value, "%s", v);
