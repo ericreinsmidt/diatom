@@ -46,6 +46,10 @@ int main(int argc, char **argv)
 		put(fd, EV_ABS, ABS_HAT0Y, atoi(argv[3]));
 		usleep(90 * 1000);
 		put(fd, EV_ABS, ABS_HAT0Y, 0);
+	} else if (!strcmp(argv[2], "hatx")) {
+		put(fd, EV_ABS, ABS_HAT0X, atoi(argv[3]));
+		usleep(90 * 1000);
+		put(fd, EV_ABS, ABS_HAT0X, 0);
 	}
 	close(fd);
 	return 0;

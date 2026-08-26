@@ -144,13 +144,12 @@ verified rather than assumed.
       question never contemplated. Licences now recorded by `fetch-cores.sh`.
 - [x] **[LB]** Standalone repository → **[ADR-0002](decisions/0002-separate-repository.md)** *(Accepted)*
 - [x] **[LB]** Decision-recording practice: ADRs → **[ADR-0001](decisions/0001-record-architecture-decisions.md)** *(Accepted)*
-- [ ] **[OPEN]** **Nothing has ever driven Diatom but a stand-in.** Every
-      protocol test uses `tools/protodrive.c`, written by the same hand as the
-      protocol, so it tests what its author expected rather than what a
-      launcher does. PlayOS adopting Diatom is planned in that repo's
-      `DIATOM-MIGRATION.md` (2026-08-26): three functions in its `platform.c`
-      are the whole surface, seven of its eight minarch overrides are already
-      native here, and the two gaps are `PREVIEW` and the in-game menu.
+- [x] **[OPEN]** **A real launcher drives Diatom in production.** PlayOS
+      migrated 2026-08-26 (its `DIATOM-MIGRATION.md`, five phases, all
+      verified on hardware): Diatom is its resident emulator, its one-shot
+      fallback, and its only emulator - minarch is deleted. First contact
+      found the zip gap in under a minute and the launch-animation display
+      hazard, exactly the class of thing the stand-in could not.
 - [ ] **[DEFERRED]** Consumption model - submodule, subtree, vendored copy, or
       prebuilt artifact. **Deliberately deferred 2026-08-23: nothing consumes
       Diatom yet.** Choosing an integration model before either side exists means
@@ -738,24 +737,11 @@ deliberate target**, not an edge case - Probotector is PAL-only Contra. Pacing
       not silence. Feedback is a 6px bar matching the device UI. Verified on
       hardware: silent at zero, no pop returning.
       [analysis](discussion/2026-08-25-volume-ownership.md).
-- [ ] **[LB]** **Volume and brightness set in-game do not survive the exit, and
-      brightness cannot even be expressed to the launcher.** Observed
-      2026-08-25: the launcher re-applies its own stored levels the moment its
-      UI resumes, so both are silently discarded. Measured 2026-08-26: it is
-      worse than discarding. PlayOS's brightness ladder is eleven geometric
-      levels (`1 8 16 32 48 72 96 128 160 192 255`); Diatom's is twenty linear
-      steps, and almost none of its values exist on that ladder - so on resume
-      brightness snaps to the launcher's nearest level, and Diatom's own first
-      press divides a raw value by a scale the launcher never used. The two
-      sides do not disagree about a number; they disagree about what the
-      numbers are. **Diatom's half is built and verified**
-      (**[ADR-0020](decisions/0020-shared-state-plane.md)**, Accepted): `count=`
-      travels with `index=` so a level is a fraction, and a launcher asking for
-      its own rung 8 of 11 is answered rung 9 of 12. 78 key presses in a game
-      reported 78 events, every step ±1, both endpoints reached, and volume
-      stayed silent throughout. **Still open because PlayOS does not use it** -
-      nothing survives the exit until the launcher sends `SETLEVEL` at startup
-      and stores the `LEVEL` events.
+- [x] **[LB]** **Levels survive the exit, from both sides** →
+      **[ADR-0020](decisions/0020-shared-state-plane.md)**. A level is a
+      fraction (`index=` with `count=`), and PlayOS sends SETLEVEL at launch
+      and lands LEVEL events in libmsettings when EXIT returns ownership -
+      closed 2026-08-26 by its migration. History and the ladder mismatch:
       [measurement](spikes/2026-08-26-backlight-floor.md).
 - [x] **[OPEN]** **Brightness works during a game** too - front keys
       (`BTN_THUMBL`/`THUMBR`, SDL 9/10), 20 steps sharing volume's scale, via
