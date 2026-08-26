@@ -1076,12 +1076,17 @@ operation never occurs.
       ([spike](spikes/2026-08-23-rss-and-dlopen.md)), and RSS was identical
       after 120 and 720 frames, so nothing observable leaks in that span. The
       instrument is the accounting; there is no way to do it from inside.
-- [ ] **[LB]** Set an explicit **RSS budget** and assert it in tests. Still
-      unasserted - ADR-0006 names a 250 MB trigger, and §10 records that it is
-      badly calibrated at 16x the measured figure. ~50 MB would mean something.
-- [ ] **[OPEN]** Arena/static allocation; no malloc in the frame loop.
-      **Unverified.** Believed true - the frame buffer is grown once and reused
-      - but nothing proves it, and this section is the project's stated thesis.
+- [x] **[LB]** **RSS budget: 24 MB, asserted** by `tools/conform-device.sh`.
+      Measured 2026-08-26 on hardware: **8.2-8.4 MB** peak with FCEUmm loaded
+      and running, flat across 300, 600 and 1200 frames. One ceiling covers the
+      heaviest configuration shipped too, since rssprobe puts six cores mapped
+      with one running at 15.0 MB. ADR-0006's 250 MB stands as its own trigger
+      and is 30x this; the budget that would notice a regression is this one.
+- [x] **[OPEN]** **No malloc in the frame loop - verified, and stronger than
+      the claim.** Diatom allocates **3 times in its entire life** (126 kB) and
+      frees all three, identical at 300 and 600 frames. `tools/allocwatch.c`
+      wraps malloc at link time, so it counts Diatom's calls and not a
+      `dlopen`ed core's - the right boundary, since cores must allocate.
 
 ---
 
@@ -1120,8 +1125,12 @@ operation never occurs.
       checklist.
 
       Consequences recorded below in §5, §6, §7 and §12.
-- [ ] **[OPEN]** Headless conformance test: run N frames, checksum framebuffer,
-      assert RSS ceiling.
+- [x] **[OPEN]** **Headless conformance test** → `make conform-check`
+      (`test/conform.py`) and `make conform-device` (`tools/conform-device.sh`).
+      Determinism, a frame-count control that proves it can fail, the RSS
+      budget, and the allocation count. Not in `make check`: it needs a build
+      and runs in real time, ~20s. Both assertions were run to failure on
+      purpose before being trusted.
 - [ ] **[LATER]** CI.
 
 ---

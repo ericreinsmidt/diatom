@@ -297,3 +297,37 @@ The measurement that did it, on 15s of Contra:
 **18% of windows leave with MORE high-frequency energy than they arrived with.**
 Linear interpolation is a lowpass and cannot add high frequencies; energy above
 10 kHz that was not in the source is aliasing.
+
+---
+
+## allocwatch.c - what does Diatom allocate, and when?
+
+§11 is the section this project calls its own thesis, and its "no malloc in the
+frame loop" item read **Unverified. Believed true.** for three days. This is what
+turned it into a number.
+
+Linked with `-Wl,--wrap=malloc` (and calloc, realloc, free), which rewrites those
+calls in the objects being *linked*. A core arrives by `dlopen` and binds its own
+malloc through libc, so it never appears here - and that is the right boundary,
+because the claim under test is that *Diatom* does not allocate per frame, not
+that no code anywhere does. Cores allocate; several of them must.
+
+The measurement is **differential**: run N frames and 2N frames and compare.
+Start-up costs are identical in both, so anything the frame loop does is the
+difference. That is what lets the whole thing live outside Diatom - no counter to
+arm, no hook to call, nothing test-shaped in the shipped binary, for the same
+reason the crash fixture lives in `stubcore` rather than behind a `--crash` flag.
+
+Measured on a Brick, 2026-08-26, FCEUmm running Contra:
+
+| frames | Diatom's allocations | peak RSS |
+|---|---|---|
+| 300 | `malloc=2 calloc=0 realloc=1 free=3` | 8.24 MB |
+| 600 | `malloc=2 calloc=0 realloc=1 free=3` | 8.23 MB |
+| 1200 | `malloc=2 calloc=0 realloc=1 free=3` | 8.44 MB |
+
+**Three allocations, 126 kB, for the entire life of the process, all three
+freed.** The claim was "nothing per frame"; the answer is very nearly nothing at
+all. Driven by `tools/conform-device.sh`, which also asserts the 24 MB budget -
+and both assertions were run to failure on purpose, with the ceiling forced below
+the measured figure, before either was trusted.

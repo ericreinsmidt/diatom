@@ -21,6 +21,7 @@ BUILD := build/$(PORT)
 SRC   := src/main.c src/core.c src/env.c src/scale.c src/audio.c src/save.c src/proto.c src/options.c port/$(PORT).c
 OBJ   := $(SRC:%.c=$(BUILD)/%.o)
 BIN   := $(BUILD)/diatom
+CONFORM := $(BUILD)/diatom-conform
 
 ifeq ($(PORT),desktop)
   # sdl2-config ships with SDL2 itself; pkg-config is a separate install and is
@@ -142,6 +143,16 @@ $(BUILD)/%.o: %.c
 # ever complained.
 check: check-seam check-register check-corefacts
 
+# Deliberately NOT part of `check`. It needs a build and it runs in real time -
+# Diatom paces to the core's frame rate, so 300 frames costs five seconds of
+# wall clock and the suite costs about twenty. `check` is what runs before every
+# commit and it stays instant and offline; this is what runs before a release or
+# after touching the frame loop, and it is named in README so it does not
+# quietly stop being run.
+conform-check: $(BIN)
+	@python3 test/conform.py
+.PHONY: conform-check
+
 check-register:
 	@python3 tools/check-register.py
 
@@ -168,3 +179,25 @@ check-seam:
 
 clean:
 	rm -rf build
+
+# The conformance build: identical to $(BIN) but with its own allocations
+# counted. Separate target rather than a flag, so nothing test-shaped is linked
+# into what ships. --wrap is a GNU ld feature; Apple's ld64 has no equivalent,
+# which makes this a Linux and device check. That is the platform the memory
+# thesis is actually about.
+$(TOOLS_DIR)/allocwatch.o: tools/allocwatch.c
+	@mkdir -p $(TOOLS_DIR)
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+$(CONFORM): $(OBJ) $(TOOLS_DIR)/allocwatch.o
+	$(CC) -o $@ $^ $(LDFLAGS) \
+	  -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=realloc -Wl,--wrap=free
+
+conform: $(CONFORM)
+.PHONY: conform
+
+# The device half of the same suite: allocation counts and the RSS budget, on
+# the hardware §11's thesis is actually about. Needs a Brick over adb.
+conform-device:
+	@tools/conform-device.sh
+.PHONY: conform-device

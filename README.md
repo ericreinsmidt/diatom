@@ -34,6 +34,17 @@ drifting out of shape, and on documented core measurements describing binaries
 the project no longer ships. Each of those exists because the rule it guards
 decayed the moment nothing failed when it was broken.
 
+Two suites sit outside it because they need a build or a device, and are named
+here so they do not quietly stop being run:
+
+    make conform-check          determinism, RSS, allocations (~20s, no device)
+    make conform-device         the RSS budget and allocation count, on a Brick
+    python3 test/stateplane.py  the launcher state plane, against the stub core
+
+`conform` is where the memory claims stop being claims. Diatom allocates **three
+times in its entire life** and holds **8.2 MB** with a core running, and both
+are now assertions rather than sentences.
+
 ## Layout
 
 | Path | What it is |
@@ -43,7 +54,8 @@ decayed the moment nothing failed when it was broken.
 | `include/diatom_port.h` | The one load-bearing seam, and the rules that keep it honest |
 | `test/stubcore.c` | A libretro core that is not an emulator, so the frontend can be exercised with no third-party binary |
 | `tools/` | Measurement instruments and checks. Every number cited in `docs/` came from one of these |
-| `docs/decisions/` | 18 ADRs, 17 accepted. Immutable once accepted - superseded, never edited |
+| `test/` | The stub core, and the suites that exercise the frontend against it |
+| `docs/decisions/` | 20 ADRs, 19 accepted. Immutable once accepted - superseded, never edited |
 | `docs/scoping-register.md` | The living checklist: what is still open, and nothing else |
 | `docs/spikes/`, `docs/discussion/` | Measurements and dated session logs |
 
