@@ -111,6 +111,137 @@ static diatom_rect  g_map_dst;
 static diatom_filter g_map_filter;
 static bool          g_map_valid;
 
+/* Output gain, by ioctl on /dev/snd/controlC0.
+ *
+ * No alsa-lib or tinyalsa in the sysroot, and forking `tinymix` per keypress
+ * means a process spawn in the input path plus a dependency on a firmware
+ * binary. So: a raw ioctl on a device node, which is what this port already
+ * does for /dev/fb0. The struct layout is vendored from the kernel UAPI rather
+ * than depended on, and its SIZE is baked into the request number by _IOWR -
+ * validated against the running kernel by tools/mixprobe.c before it was
+ * written here (sizeof 1224, read agreed with tinymix to the digit).
+ *
+ * `digital volume` is 0-63 and **INVERTED**: 0 is loudest, 63 is silence. The
+ * driver advertises `dBscale-min=-74.24dB, step=+1.16dB`, i.e. that higher is
+ * louder. That metadata is wrong. Proven by diffing the mixer across a
+ * volume-up press in the device UI: 37 -> 15 when turned UP.
+ *
+ * `Headphone Volume` is deliberately untouched. It is not a speaker level -
+ * raising it routes output to the headphone JACK and mutes the speakers.
+ */
+struct dm_ctl_elem_id {
+	unsigned int numid; int iface; unsigned int device, subdevice;
+	unsigned char name[44]; unsigned int index;
+};
+struct dm_aes_iec958 {
+	unsigned char status[24], subcode[147], pad, dig_subframe[4];
+};
+struct dm_ctl_elem_value {
+	struct dm_ctl_elem_id id;
+	unsigned int indirect: 1;
+	union {
+		union { long value[128]; long *value_ptr; } integer;
+		union { long long value[64]; long long *value_ptr; } integer64;
+		union { unsigned int item[128]; unsigned int *item_ptr; } enumerated;
+		union { unsigned char data[512]; unsigned char *data_ptr; } bytes;
+		struct dm_aes_iec958 iec958;
+	} value;
+	unsigned char reserved[128];
+};
+#define DM_CTL_ELEM_READ   _IOWR('U', 0x12, struct dm_ctl_elem_value)
+#define DM_CTL_ELEM_WRITE  _IOWR('U', 0x13, struct dm_ctl_elem_value)
+
+#define GAIN_CTL     "digital volume"
+#define GAIN_RAW_MAX 63         /* control range; 0 is loudest, 63 silent */
+#define GAIN_LEVELS  20         /* what the USER moves in: 20 steps of 5% */
+
+static int g_mixer_fd = -1;
+static int g_level = -1;        /* 0..GAIN_LEVELS, or -1 before first read */
+static uint64_t g_osd_until;    /* show the bar until this time */
+
+/* The port thinks in percent and converts; the inverted register never leaves
+ * this file. Rounded both ways so a read-back lands on the level it came from. */
+static int level_to_raw(int lv)
+{
+	return GAIN_RAW_MAX - (lv * GAIN_RAW_MAX + GAIN_LEVELS / 2) / GAIN_LEVELS;
+}
+static int raw_to_level(int raw)
+{
+	return ((GAIN_RAW_MAX - raw) * GAIN_LEVELS + GAIN_RAW_MAX / 2) / GAIN_RAW_MAX;
+}
+
+static int gain_io(long *val, int write)
+{
+	struct dm_ctl_elem_value v;
+
+	if (g_mixer_fd < 0) return -1;
+	memset(&v, 0, sizeof v);
+	v.id.iface = 2;                                 /* SNDRV_CTL_ELEM_IFACE_MIXER */
+	snprintf((char *)v.id.name, sizeof v.id.name, "%s", GAIN_CTL);
+	if (write) {
+		v.value.integer.value[0] = *val;
+		return ioctl(g_mixer_fd, DM_CTL_ELEM_WRITE, &v);
+	}
+	if (ioctl(g_mixer_fd, DM_CTL_ELEM_READ, &v) < 0) return -1;
+	*val = v.value.integer.value[0];
+	return 0;
+}
+
+/* `dir` is +1 for louder. One step is 5% of the range. */
+static void gain_nudge(int dir)
+{
+	long v;
+
+	if (g_level < 0) {
+		if (gain_io(&v, 0) < 0) return;
+		g_level = raw_to_level((int)v);
+	}
+	g_level += dir;
+	if (g_level < 0)           g_level = 0;
+	if (g_level > GAIN_LEVELS) g_level = GAIN_LEVELS;
+	v = level_to_raw(g_level);
+	if (gain_io(&v, 1) < 0) return;
+
+	/* Feedback lives here too: the launcher owns UI, but it is not drawing
+	 * while a game runs, so nothing else can show this. 1.5s from the last
+	 * press, so holding a key keeps the bar up. */
+	g_osd_until = diatom_port_now_us() + 1500000ull;
+}
+
+/* The one indicator, matching what the device UI draws so volume reads the same
+ * in a game as on the shelf: a scrim across the very top with a 6px bar in it.
+ * No glyph, no number - you know which button you just pressed.
+ *
+ * Drawn straight into the page after the blit and before publish, so it rides
+ * the same flip and costs one pass over 12 rows. */
+static void draw_gain_bar(uint8_t *base)
+{
+	const unsigned ro = g_vinfo.red.offset, go = g_vinfo.green.offset;
+	const unsigned bo = g_vinfo.blue.offset;
+	const int pad = 3, bar = 6;
+	const int W = (int)g_vinfo.xres;
+	int fill = g_level < 0 ? 0 : (W * g_level) / GAIN_LEVELS;
+	int y, x;
+
+	for (y = 0; y < pad * 2 + bar; y++) {
+		uint32_t *row = (uint32_t *)(base + (size_t)y * g_finfo.line_length);
+		for (x = 0; x < W; x++) {
+			uint32_t p = row[x];
+			if (y < pad || y >= pad + bar) {
+				/* Scrim: halve what is already there. */
+				uint32_t r = ((p >> ro) & 0xff) >> 1;
+				uint32_t g = ((p >> go) & 0xff) >> 1;
+				uint32_t b = ((p >> bo) & 0xff) >> 1;
+				row[x] = (r << ro) | (g << go) | (b << bo) | g_opaque;
+			} else if (x < fill) {
+				row[x] = (235u << ro) | (235u << go) | (240u << bo) | g_opaque;
+			} else {
+				row[x] = (60u << ro) | (62u << go) | (72u << bo) | g_opaque;
+			}
+		}
+	}
+}
+
 static uint8_t *page_base(int page)
 {
 	return g_fb + (size_t)page * g_vinfo.yres * g_finfo.line_length;
@@ -155,6 +286,7 @@ bool diatom_port_init(diatom_port_caps *out)
 {
 	SDL_AudioSpec want, have;
 
+	g_mixer_fd = open("/dev/snd/controlC0", O_RDWR);
 	g_input_debug   = getenv("DIATOM_INPUT_DEBUG") != NULL;
 	g_present_debug = getenv("DIATOM_PRESENT_DEBUG") != NULL;
 
@@ -257,6 +389,7 @@ void diatom_port_shutdown(void)
 	}
 	free(g_colmap);
 	free(g_rowmap);
+	if (g_mixer_fd >= 0) { close(g_mixer_fd); g_mixer_fd = -1; }
 	if (g_fb)         munmap(g_fb, g_fb_size);
 	if (g_fb_fd >= 0) close(g_fb_fd);
 	if (g_joy)        SDL_JoystickClose(g_joy);
@@ -546,6 +679,7 @@ void diatom_port_present(const void *src, int w, int h, size_t pitch,
 
 	if (g_pan_broken) {
 		blit(page_base(g_front), src, w, h, pitch, fmt, dst);
+		if (diatom_port_now_us() < g_osd_until) draw_gain_bar(page_base(g_front));
 		return;
 	}
 
@@ -566,6 +700,7 @@ void diatom_port_present(const void *src, int w, int h, size_t pitch,
 	if (g_present_debug) t0 = diatom_port_now_us();
 
 	blit(page_base(page), src, w, h, pitch, fmt, dst);
+	if (diatom_port_now_us() < g_osd_until) draw_gain_bar(page_base(page));
 
 	pthread_mutex_lock(&g_flip_mx);
 	g_pending = page;
@@ -656,6 +791,11 @@ static const struct { int idx; int btn; } joymap[] = {
  * slamming to +32767 when pressed - a digital switch in axis clothing, so
  * half travel is a comfortable threshold. The other four axes belong to the
  * stick-bearing siblings this driver also serves. */
+/* Volume, from the same measured table: SDL indices 13 and 14 are VOL_DN and
+ * VOL_UP. Absent from joymap[] on purpose - they are not game inputs. */
+#define JOY_VOL_DN 13
+#define JOY_VOL_UP 14
+
 #define AXIS_L2 2
 #define AXIS_R2 5
 #define AXIS_PRESSED 16384
@@ -683,6 +823,20 @@ void diatom_port_input_poll(void)
 		case SDL_JOYBUTTONUP: {
 			bool down = (ev.type == SDL_JOYBUTTONDOWN);
 			debug_event("joy button", ev.jbutton.button, down);
+
+			/* Volume is the port's, and stops here. Whoever owns the
+			 * input loop during a game has to handle these, because
+			 * nothing else sees them - the device UI is not running.
+			 * They are never reported upward and never reach a core. */
+			if (ev.jbutton.button == JOY_VOL_UP) {
+				if (down) gain_nudge(+1);
+				break;
+			}
+			if (ev.jbutton.button == JOY_VOL_DN) {
+				if (down) gain_nudge(-1);
+				break;
+			}
+
 			for (i = 0; i < sizeof joymap / sizeof joymap[0]; i++) {
 				if (joymap[i].idx != ev.jbutton.button) continue;
 				if (down) g_buttons |=  DIATOM_BIT(joymap[i].btn);

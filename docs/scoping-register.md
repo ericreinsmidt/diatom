@@ -729,13 +729,15 @@ deliberate target**, not an edge case - Probotector is PAL-only Contra. Pacing
       the launcher it hands over the display (ADR-0016). The L3/R3 worry is
       handled in the port - the Brick's front keys report as
       `BTN_THUMBL`/`THUMBR` and stay unmapped.
-- [ ] **[LB]** **Volume and brightness keys do nothing while a game runs**, and
-      "they stay with the firmware" was an assumption, not a finding - PlayOS is
-      killed during a Diatom session, so nothing reads them. Whoever owns the
-      input loop must handle them; that is why minarch does it despite volume
-      being firmware's. Three placements, and the OSD is two rectangles rather
-      than the blocker it was claimed to be:
+- [x] **[LB]** **Volume keys work during a game**, handled in the port and
+      never reported upward - whoever owns the input loop must, because nothing
+      else sees them. 20 steps of 5%; the inverted `digital volume` register
+      never leaves `brick.c`. Feedback is a 6px bar across the top, matching
+      what the device UI draws. Verified on hardware.
       [analysis](discussion/2026-08-25-volume-ownership.md).
+- [ ] **[OPEN]** **Brightness keys still do nothing** during a game - the front
+      keys (`BTN_THUMBL`/`THUMBR`) are unmapped. Same argument as volume, same
+      place to put it, and the bar is already written.
 - [x] **[LB]** Analog sticks: **no analog support at all** →
       **[ADR-0003](decisions/0003-digital-only-input.md)** *(Accepted)*
 - [x] **[OPEN]** Button count is **not** a constraint. Six is the maximum any
