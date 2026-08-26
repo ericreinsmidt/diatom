@@ -742,11 +742,11 @@ deliberate target**, not an edge case - Probotector is PAL-only Contra. Pacing
       in-scope system asks (SNES, 6-button Genesis, CPS2), covered by the
       standard 4+L1/R1 mapping - the same layout SNES uses. An earlier claim
       that six-button games map "badly" was wrong.
-- [ ] **[OPEN]** **What do L2/R2 report as on the Brick?** They exist
-      physically, but the kernel capability mask has no `BTN_TL2`/`BTN_TR2`, and
-      `BTN_THUMBL`/`THUMBR` are the front keys per PlayOS's own source. So they
-      report as something else - `KEY_F1`/`F2` are the unaccounted codes.
-      Unmapped until measured; absence from a mask is not absence of a button.
+- [x] **[OPEN]** L2/R2 report as **axes, not keys** - `ABS_Z` and `ABS_RZ`,
+      SDL axes 2 and 5, resting at -32768 and slamming to +32767. Digital
+      switches in axis clothing. Measured 2026-08-24, handled in `brick.c`
+      since, and re-confirmed from raw evdev 2026-08-25 (0 to 255 to 0). The
+      KEY mask having no `BTN_TL2`/`TR2` is why, and is not evidence of absence.
 - [x] **[OPEN]** Same curation on both devices? **Probably yes.** With no analog,
       the two devices are input-equivalent, so one test matrix rather than two.
       (Follows from ADR-0003; revisit if the class widens.)
