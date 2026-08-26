@@ -26,6 +26,7 @@
 #include <poll.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -161,6 +162,11 @@ static void parse_line(char *line, diatom_msg *out)
 	else if (!strcmp(field, "LOAD"))    out->kind = DIATOM_MSG_LOAD;
 	else if (!strcmp(field, "OPTIONS")) out->kind = DIATOM_MSG_OPTIONS;
 	else if (!strcmp(field, "SETOPT"))  out->kind = DIATOM_MSG_SETOPT;
+	else if (!strcmp(field, "INPUTS"))   out->kind = DIATOM_MSG_INPUTS;
+	else if (!strcmp(field, "MAP"))      out->kind = DIATOM_MSG_MAP;
+	else if (!strcmp(field, "SETMAP"))   out->kind = DIATOM_MSG_SETMAP;
+	else if (!strcmp(field, "LEVELS"))   out->kind = DIATOM_MSG_LEVELS;
+	else if (!strcmp(field, "SETLEVEL")) out->kind = DIATOM_MSG_SETLEVEL;
 	else {
 		log_(DIATOM_LOG_WARN, "proto: ignoring unknown verb '%s'", field);
 		out->kind = DIATOM_MSG_NONE;
@@ -185,6 +191,10 @@ static void parse_line(char *line, diatom_msg *out)
 		else if (!strcmp(field, "path")) snprintf(out->path,  sizeof out->path,  "%s", v);
 		else if (!strcmp(field, "key"))  snprintf(out->key,   sizeof out->key,   "%s", v);
 		else if (!strcmp(field, "value"))snprintf(out->value, sizeof out->value, "%s", v);
+		else if (!strcmp(field, "map"))  snprintf(out->map,   sizeof out->map,   "%s", v);
+		else if (!strcmp(field, "kind")) snprintf(out->lkind, sizeof out->lkind, "%s", v);
+		else if (!strcmp(field, "index")) out->index = (int)strtol(v, NULL, 10);
+		else if (!strcmp(field, "count")) out->count = (int)strtol(v, NULL, 10);
 		/* anything else: forward compatibility, ignore */
 	}
 }
@@ -242,7 +252,11 @@ diatom_msg_kind diatom_proto_poll(diatom_msg *out, int timeout_ms, bool running)
 		/* Tell a fresh launcher whether the screen is already spoken for.
 		 * Without this, a launcher restarted by launch.sh while a game runs
 		 * would draw its shelf over live output. */
-		diatom_proto_send("READY\tproto=1\tstate=%s", running ? "running" : "idle");
+		/* proto=2 adds ADR-0020's state plane. ADR-0009 already promises
+		 * unknown verbs are ignored, so an old launcher is unaffected; this is
+		 * how a NEW launcher discovers the plane is absent rather than
+		 * inferring it from silence. */
+		diatom_proto_send("READY\tproto=2\tstate=%s", running ? "running" : "idle");
 		return DIATOM_MSG_NONE;
 	}
 

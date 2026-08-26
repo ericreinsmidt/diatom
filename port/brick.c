@@ -228,19 +228,21 @@ static int ctl_io(const char *name, long *val, int write)
 
 static int gain_io(long *val, int write) { return ctl_io(GAIN_CTL, val, write); }
 
-/* `dir` is +1 for louder. One step is 5% of the range. */
-static void gain_nudge(int dir)
+/* Split from the key handler so the level can be read without one being
+ * pressed: the host polls these to report levels upward (ADR-0020). */
+static void gain_ensure(void)
 {
 	long v;
 
-	if (g_level < 0) {
-		if (gain_io(&v, 0) < 0) return;
-		g_level = raw_to_level((int)v);
-	}
-	g_level += dir;
-	if (g_level < 0)           g_level = 0;
-	if (g_level > GAIN_LEVELS) g_level = GAIN_LEVELS;
-	v = level_to_raw(g_level);
+	if (g_level >= 0) return;
+	if (gain_io(&v, 0) < 0) return;
+	g_level = raw_to_level((int)v);
+}
+
+static void gain_apply(void)
+{
+	long v = level_to_raw(g_level);
+
 	if (gain_io(&v, 1) < 0) return;
 
 	/* Zero has to cut the path, not just attenuate it. The control advertises
@@ -250,43 +252,68 @@ static void gain_nudge(int dir)
 	 * So the speaker switch carries the last step. */
 	v = (g_level > 0);
 	ctl_io(SPEAKER_CTL, &v, 1);
+}
 
+static void osd_show(int level, int max)
+{
 	/* Feedback lives here too: the launcher owns UI, but it is not drawing
 	 * while a game runs, so nothing else can show this. 1.5s from the last
 	 * press, so holding a key keeps the bar up. */
-	g_osd_level = g_level;
-	g_osd_max   = GAIN_LEVELS;
+	g_osd_level = level;
+	g_osd_max   = max;
 	g_osd_until = diatom_port_now_us() + 1500000ull;
 }
 
-static void bright_nudge(int dir)
+/* `dir` is +1 for louder. One step is 5% of the range. */
+static void gain_nudge(int dir)
+{
+	gain_ensure();
+	if (g_level < 0) return;
+
+	g_level += dir;
+	if (g_level < 0)           g_level = 0;
+	if (g_level > GAIN_LEVELS) g_level = GAIN_LEVELS;
+	gain_apply();
+	osd_show(g_level, GAIN_LEVELS);
+}
+
+static void bright_ensure(void)
 {
 	unsigned long a[4] = { 0, 0, 0, 0 };
 	int raw, i;
 
+	if (g_bright >= 0 || g_disp_fd < 0) return;
+	raw = ioctl(g_disp_fd, DISP_LCD_GET_BRIGHTNESS, a);
+	if (raw < 0) return;
+
+	/* Nearest rung, so the first press moves one step from where the launcher
+	 * left the panel rather than jumping. Exact for every level the launcher
+	 * can set except its black one. */
+	g_bright = 0;
+	for (i = 1; i <= BRIGHT_LEVELS; i++)
+		if (abs(bright_ladder[i] - raw) < abs(bright_ladder[g_bright] - raw))
+			g_bright = i;
+}
+
+static void bright_apply(void)
+{
+	unsigned long a[4] = { 0, 0, 0, 0 };
+
+	a[1] = bright_ladder[g_bright];
+	ioctl(g_disp_fd, DISP_LCD_SET_BRIGHTNESS, a);
+}
+
+static void bright_nudge(int dir)
+{
 	if (g_disp_fd < 0) return;
-	if (g_bright < 0) {
-		raw = ioctl(g_disp_fd, DISP_LCD_GET_BRIGHTNESS, a);
-		if (raw < 0) return;
-		/* Nearest rung, so the first press moves one step from where the
-		 * launcher left the panel rather than jumping. Exact for every level
-		 * the launcher can set except its black one. */
-		g_bright = 0;
-		for (i = 1; i <= BRIGHT_LEVELS; i++)
-			if (abs(bright_ladder[i] - raw) <
-			    abs(bright_ladder[g_bright] - raw))
-				g_bright = i;
-	}
+	bright_ensure();
+	if (g_bright < 0) return;
+
 	g_bright += dir;
 	if (g_bright < 0)             g_bright = 0;
 	if (g_bright > BRIGHT_LEVELS) g_bright = BRIGHT_LEVELS;
-
-	a[1] = bright_ladder[g_bright];
-	if (ioctl(g_disp_fd, DISP_LCD_SET_BRIGHTNESS, a) < 0) return;
-
-	g_osd_level = g_bright;
-	g_osd_max   = BRIGHT_LEVELS;
-	g_osd_until = diatom_port_now_us() + 1500000ull;
+	bright_apply();
+	osd_show(g_bright, BRIGHT_LEVELS);
 }
 
 /* The one indicator, matching what the device UI draws so volume reads the same
@@ -994,6 +1021,67 @@ void diatom_port_input_poll(void)
 }
 
 uint32_t diatom_port_input_state(void) { return g_buttons; }
+
+/* ADR-0020's rescale: round-to-nearest, endpoints exact. The endpoints matter
+ * most - they are where a user is most likely to sit, and a minimum that drifts
+ * off silence after a few round trips is the bug this whole design exists to
+ * prevent. */
+static int rescale(int index, int from, int to)
+{
+	if (from <= 1 || to <= 1) return 0;
+	if (index < 0)        index = 0;
+	if (index > from - 1) index = from - 1;
+	return (index * (to - 1) + (from - 1) / 2) / (from - 1);
+}
+
+void diatom_port_level_invalidate(void)
+{
+	g_level  = -1;
+	g_bright = -1;
+}
+
+/* `*count` is positions, not a maximum index, so it is one MORE than the
+ * internal level ceiling. That off-by-one is the whole reason ADR-0020 pins the
+ * word. */
+bool diatom_port_level_get(diatom_level_kind kind, int *index, int *count)
+{
+	switch (kind) {
+	case DIATOM_LEVEL_VOLUME:
+		if (g_mixer_fd < 0) return false;
+		gain_ensure();
+		if (g_level < 0) return false;
+		*index = g_level;
+		*count = GAIN_LEVELS + 1;
+		return true;
+	case DIATOM_LEVEL_BRIGHTNESS:
+		if (g_disp_fd < 0) return false;
+		bright_ensure();
+		if (g_bright < 0) return false;
+		*index = g_bright;
+		*count = BRIGHT_LEVELS + 1;
+		return true;
+	default:
+		return false;
+	}
+}
+
+bool diatom_port_level_set(diatom_level_kind kind, int index, int count)
+{
+	switch (kind) {
+	case DIATOM_LEVEL_VOLUME:
+		if (g_mixer_fd < 0) return false;
+		g_level = rescale(index, count, GAIN_LEVELS + 1);
+		gain_apply();
+		return true;
+	case DIATOM_LEVEL_BRIGHTNESS:
+		if (g_disp_fd < 0) return false;
+		g_bright = rescale(index, count, BRIGHT_LEVELS + 1);
+		bright_apply();
+		return true;
+	default:
+		return false;
+	}
+}
 bool     diatom_port_should_quit(void) { return g_quit; }
 
 bool diatom_port_capture(const char *path)

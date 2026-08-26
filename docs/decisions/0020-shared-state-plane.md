@@ -1,6 +1,6 @@
 # 0020. The protocol grows a state plane, with one owner per item
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-08-26
 - **Supersedes:** -
 - **Superseded by:** -
@@ -99,6 +99,11 @@ out of the protocol exactly as `libretro.h` stays out of the port (ADR-0007).
 Cores may call `SET_INPUT_DESCRIPTORS` more than once and late. Query-on-demand
 rather than push-on-load makes that a non-issue.
 
+**A button with no label is omitted**, and `count=` counts only what is listed.
+That covers three cases at once: the core described nothing (many do not), it
+described only some buttons, or the button is mapped to `none`. A launcher shows
+its own name for anything absent, which it must be able to do regardless.
+
 ### Button map
 
 ```
@@ -116,18 +121,62 @@ unplayable in a way that is hard to diagnose.
 rejected on either side of a pair**, which is ADR-0019's fourth rule appearing
 where it can actually be enforced.
 
+**A rejected `SETMAP` is rejected whole**, and Diatom answers with the current
+unchanged `MAP`. Atomicity is worth nothing if a bad pair can leave half a table
+behind, and a silent rejection would leave the launcher believing a map it does
+not have.
+
+**`RUN` resets the map to identity.** Diatom is resident, so without this a map
+sent for one game silently governs the next, and a launcher offering per-game
+maps would have to remember to clear it - a footgun that fires only on the games
+where the user did *not* configure anything. The launcher sends `SETMAP` after
+`RUN` when it wants one. The race is benign: no input reaches a core before
+`RUNNING`, and `RUNNING` is emitted after the load completes.
+
 ### Levels
 
 ```
 Diatom   → LEVEL kind=brightness index=7 count=12
-launcher → LEVELS                                       query both
+launcher → LEVELS                                       query
+Diatom   → LEVELS count=2                               then one LEVEL each
 launcher → SETLEVEL kind=brightness index=7 count=12
 ```
 
+`LEVELS count=0` is the answer on a port with no level control of its own, such
+as the desktop backend, and tells a launcher not to expect events rather than
+leaving it to infer that from silence.
+
+The ownership rule needs no enforcement while Diatom is idle, and it is worth
+recording why rather than assuming it: the idle loop blocks on the socket and
+never reads input at all, so Diatom cannot move a level between games even by
+accident. Its joystick handle does not `EVIOCGRAB`, so the launcher continues to
+see the same key presses it always did.
+
 **`count=` always travels with `index=`, in both directions.** This is the whole
 fix for the ladder mismatch, and it is one rule: *a level is a fraction, not a
-number*. Neither side may assume the other's scale, and a receiver whose own
-count differs scales proportionally and lands on its own nearest rung.
+number*. Neither side may assume the other's scale.
+
+Two things have to be pinned here or they will drift, which is the failure this
+whole design exists to prevent:
+
+**`count` is the number of distinct positions; `index` is 0-based and valid over
+`0 .. count-1`.** Not a maximum index. Volume's twenty steps of 5% are
+twenty-*one* positions, so it reports `count=21`, and brightness's twelve rungs
+report `count=12`. "Twenty steps" and "twenty levels" differ by one, and an
+off-by-one in a shared scale is exactly the class of bug that produces a silent
+disagreement rather than an error.
+
+**Rescaling is round-to-nearest with exact endpoints:**
+
+```
+index' = (index * (count' - 1) + (count - 1) / 2) / (count - 1)      integer
+```
+
+with `index' = 0` when `count' == 1`. Endpoints are exact in both directions, so
+minimum and maximum never drift no matter how many times a level crosses the
+socket - which matters most for the two positions a user is most likely to sit
+on. Saying only "scales proportionally" would let two implementations round
+differently and disagree about silence.
 
 Raw device units never cross the socket. The port's ladder stays inside the port,
 where it is hardware truth (ADR-0019 rule 1).
@@ -148,6 +197,21 @@ Once per frame, alongside the input bitfield it already polls, and the host emit
 `LEVEL` when a value differs from the last one it sent. No new callback
 direction, no reentrancy, no work in the port's key handler beyond what it
 already does.
+
+A third call earns its place on that seam:
+
+```c
+void diatom_port_level_invalidate(void);
+```
+
+The port caches its level rather than issuing an ioctl per frame, and **Diatom
+is resident**. So whenever the launcher owns levels - between games, and while a
+menu is up - it can move them underneath a cache that is still holding the old
+value. Without an invalidate, the first press after a handover steps from a
+level nobody is at, and the first `LEVEL` of a new game reports a stale one as
+though it were current. It is called wherever ownership returns: at `RUN` and at
+`RESUME`. This is what "`RUNNING` transfers ownership" costs in practice, and it
+was missed in the first draft of this decision.
 
 ### Version
 

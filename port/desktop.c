@@ -257,3 +257,21 @@ void diatom_port_log(diatom_log_level lvl, const char *msg)
 	static const char *tag[] = { "debug", "info", "warn", "error" };
 	fprintf(stderr, "[%s] %s\n", tag[lvl], msg);
 }
+
+/* No volume or brightness control here: the desktop backend is for iteration,
+ * and the machine's own mixer and display already own both. Reporting false
+ * makes `LEVELS count=0` the answer to a launcher's query, which tells it not
+ * to expect events rather than leaving it to infer that from silence. */
+bool diatom_port_level_get(diatom_level_kind kind, int *index, int *count)
+{
+	(void)kind; (void)index; (void)count;
+	return false;
+}
+
+bool diatom_port_level_set(diatom_level_kind kind, int index, int count)
+{
+	(void)kind; (void)index; (void)count;
+	return false;
+}
+
+void diatom_port_level_invalidate(void) { }

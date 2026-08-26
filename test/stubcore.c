@@ -164,11 +164,26 @@ static void crash_configure(void)
 	if (at) crash_at = (unsigned)strtoul(at + 1, NULL, 10);
 }
 
+/* Deliberately partial and deliberately not in enum order: real cores describe
+ * only the buttons a game uses, so a frontend that assumed a full array or an
+ * ordered one would pass here and fail on hardware. */
+static const struct retro_input_descriptor descriptors[] = {
+	{ 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_A,     "Fire" },
+	{ 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_B,     "Jump" },
+	{ 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_START, "Pause" },
+	{ 1, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_A,     "P2 Fire" },
+	{ 0 }
+};
+
 bool retro_load_game(const struct retro_game_info *game)
 {
 	enum retro_pixel_format fmt = RETRO_PIXEL_FORMAT_RGB565;
 	(void)game;                                  /* content is optional here */
 	crash_configure();
+	/* Offered by every real core and discarded by Diatom until ADR-0020. The
+	 * port-1 entry is here so the "port 0 only" filter has something to
+	 * exclude rather than being untested. */
+	if (env) env(RETRO_ENVIRONMENT_SET_INPUT_DESCRIPTORS, (void *)descriptors);
 	/* Before RUNNING has gone out, so the frontend owes the launcher an ERROR
 	 * and must keep its hands off the display. */
 	if (!strcmp(crash_mode, "load")) *null_ptr = 1;

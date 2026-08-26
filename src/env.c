@@ -16,6 +16,8 @@
 
 #define MASK(x) ((x) & 0xffff)   /* experimental commands carry 0x10000 */
 
+static void capture_descriptors(const struct retro_input_descriptor *d);
+
 static diatom_policy    *g_policy;
 static diatom_port_caps *g_caps;
 static bool              g_geometry_dirty;
@@ -138,9 +140,15 @@ static bool env_cb(unsigned cmd, void *data)
 		*(bool *)data = diatom_options_take_update();
 		return true;
 
+	case MASK(RETRO_ENVIRONMENT_SET_INPUT_DESCRIPTORS):
+		/* "B = Jump" for this game, offered free on every load. Kept rather
+		 * than discarded because it is what makes a remap screen readable:
+		 * without it a launcher can only offer `B -> ?`. ADR-0020. */
+		capture_descriptors((const struct retro_input_descriptor *)data);
+		return true;
+
 	/* ---- accepted and ignored ------------------------------------------- */
 	case MASK(RETRO_ENVIRONMENT_SET_PERFORMANCE_LEVEL):
-	case MASK(RETRO_ENVIRONMENT_SET_INPUT_DESCRIPTORS):
 	case MASK(RETRO_ENVIRONMENT_SET_CONTROLLER_INFO):
 	case MASK(RETRO_ENVIRONMENT_SET_MEMORY_MAPS):
 	case MASK(RETRO_ENVIRONMENT_SET_SUPPORT_ACHIEVEMENTS):
@@ -172,9 +180,21 @@ static void cb_input_poll(void)
 	diatom_port_input_poll();
 }
 
+/* Canonical button names. The protocol speaks these, never retropad numbers,
+ * so libretro's numbering stops at this file exactly as it stops at the port
+ * (ADR-0007, ADR-0020). Order matches the enum. */
+static const char *const button_names[DIATOM_BTN_COUNT] = {
+	"up", "down", "left", "right", "a", "b", "x", "y",
+	"l1", "r1", "l2", "r2", "select", "start", "menu"
+};
+
 /* Canonical Diatom buttons -> retropad. Near-identity by design; its purpose is
- * keeping libretro.h out of the port, not translation. */
-static const int button_map[DIATOM_BTN_COUNT] = {
+ * keeping libretro.h out of the port, not translation.
+ *
+ * No longer const: ADR-0019 makes this the ONE layer a remap touches, so there
+ * is one implementation of remapping however many ports exist. It is data, and
+ * `identity_map` below is what RUN resets it to. */
+static int button_map[DIATOM_BTN_COUNT] = {
 	[DIATOM_BTN_UP]     = RETRO_DEVICE_ID_JOYPAD_UP,
 	[DIATOM_BTN_DOWN]   = RETRO_DEVICE_ID_JOYPAD_DOWN,
 	[DIATOM_BTN_LEFT]   = RETRO_DEVICE_ID_JOYPAD_LEFT,
@@ -192,6 +212,161 @@ static const int button_map[DIATOM_BTN_COUNT] = {
 	[DIATOM_BTN_MENU]   = -1,          /* Diatom's own; never reaches a core */
 };
 
+static int identity_map[DIATOM_BTN_COUNT];
+static bool g_map_saved;
+
+/* Labels the core gave us, indexed by canonical button after resolving the
+ * active map - so they track a remap for free and a launcher never has to. */
+static char g_label[DIATOM_BTN_COUNT][64];
+static char g_retro_label[16][64];   /* by retropad id, as the core sends them */
+
+static void relabel(void)
+{
+	int b;
+
+	for (b = 0; b < DIATOM_BTN_COUNT; b++) {
+		int id = button_map[b];
+		g_label[b][0] = '\0';
+		if (id >= 0 && id < (int)(sizeof g_retro_label / sizeof g_retro_label[0]))
+			snprintf(g_label[b], sizeof g_label[b], "%s", g_retro_label[id]);
+	}
+}
+
+static void capture_descriptors(const struct retro_input_descriptor *d)
+{
+	memset(g_retro_label, 0, sizeof g_retro_label);
+	/* Port 0 only. Multiple controller ports are not in scope (ADR-0003 keeps
+	 * input digital; nothing here has asked for a second pad yet), and taking
+	 * port 0's labels is right for the single-player case that does exist. */
+	for (; d && d->description; d++)
+		if (d->port == 0 && d->device == RETRO_DEVICE_JOYPAD &&
+		    d->id < sizeof g_retro_label / sizeof g_retro_label[0])
+			snprintf(g_retro_label[d->id], sizeof g_retro_label[d->id],
+			         "%s", d->description);
+	relabel();
+}
+
+static int button_by_name(const char *name)
+{
+	int b;
+
+	for (b = 0; b < DIATOM_BTN_COUNT; b++)
+		if (!strcmp(button_names[b], name)) return b;
+	return -1;
+}
+
+static void ensure_identity(void)
+{
+	if (g_map_saved) return;                 /* what we shipped with IS identity */
+	memcpy(identity_map, button_map, sizeof identity_map);
+	g_map_saved = true;
+}
+
+/* RUN resets the map. Diatom is resident, so without this a table sent for one
+ * game silently governs the next - a footgun that fires only on the games the
+ * user did NOT configure, which is the worst possible place for it. ADR-0020. */
+void diatom_input_reset_map(void)
+{
+	ensure_identity();
+	memcpy(button_map, identity_map, sizeof button_map);
+	relabel();
+}
+
+/* `spec` is ADR-0020's whole-table form: `a:b,x:none`, or `identity`.
+ * Applied whole or not at all - a half-applied map is unplayable in a way that
+ * is hard to diagnose, so a single bad pair rejects the message. */
+bool diatom_input_set_map(const char *spec)
+{
+	int next[DIATOM_BTN_COUNT];
+	char buf[512], *save = NULL, *pair;
+
+	ensure_identity();
+	if (!spec || !*spec || !strcmp(spec, "identity")) {
+		diatom_input_reset_map();
+		return true;
+	}
+
+	/* Built beside the live table, never in it. Rejecting a bad pair after
+	 * having already cleared the old map would be a silent third outcome:
+	 * neither the requested map nor the one the launcher still believes in. */
+	memcpy(next, identity_map, sizeof next);
+	snprintf(buf, sizeof buf, "%s", spec);
+
+	for (pair = strtok_r(buf, ",", &save); pair; pair = strtok_r(NULL, ",", &save)) {
+		char *colon = strchr(pair, ':');
+		int from, to;
+
+		if (!colon) return false;
+		*colon = '\0';
+		from = button_by_name(pair);
+		/* MENU is unmappable BY CONSTRUCTION, not by policy - ADR-0019's
+		 * fourth rule. Refusing it on either side is the only place that rule
+		 * can actually be enforced, and letting it through would let a user
+		 * map away the button that opens the screen which would undo it. */
+		if (from < 0 || from == DIATOM_BTN_MENU) return false;
+
+		if (!strcmp(colon + 1, "none")) {
+			next[from] = -1;
+			continue;
+		}
+		to = button_by_name(colon + 1);
+		if (to < 0 || to == DIATOM_BTN_MENU) return false;
+		next[from] = identity_map[to];
+	}
+
+	memcpy(button_map, next, sizeof button_map);
+	relabel();
+	return true;
+}
+
+void diatom_input_emit_map(void)
+{
+	char out[512];
+	size_t n = 0;
+	int b;
+
+	/* Not optional. `identity_map` is zero until something saves it, and every
+	 * canonical button then compares unequal to its own identity and reports
+	 * `none` - so an idle Diatom, asked for its map before any game had run,
+	 * answered that every button was unbound. Found on hardware 2026-08-26;
+	 * the desktop test missed it because RUN saves identity on the way past. */
+	ensure_identity();
+	out[0] = '\0';
+	for (b = 0; b < DIATOM_BTN_COUNT; b++) {
+		const char *to = "none";
+		int t;
+
+		if (button_map[b] == identity_map[b]) continue;
+		for (t = 0; t < DIATOM_BTN_COUNT; t++)
+			if (button_map[b] >= 0 && identity_map[t] == button_map[b]) {
+				to = button_names[t];
+				break;
+			}
+		n += (size_t)snprintf(out + n, sizeof out - n, "%s%s:%s",
+		                      n ? "," : "", button_names[b], to);
+		if (n >= sizeof out) break;
+	}
+	diatom_proto_send("MAP\tmap=%s", out[0] ? out : "identity");
+}
+
+void diatom_input_emit_labels(void)
+{
+	int b, n = 0;
+
+	for (b = 0; b < DIATOM_BTN_COUNT; b++)
+		if (g_label[b][0]) n++;
+
+	/* A button with no label is omitted and does not count. Many cores
+	 * describe nothing at all, several describe only some buttons, and a
+	 * button mapped to `none` has nothing to describe - one rule covers all
+	 * three, and a launcher shows its own name for whatever is absent. */
+	diatom_proto_send("INPUTS\tcount=%d", n);
+	for (b = 0; b < DIATOM_BTN_COUNT; b++)
+		if (g_label[b][0])
+			diatom_proto_send("INPUT\tid=%s\tlabel=%s",
+			                  button_names[b], g_label[b]);
+}
+
 static int16_t cb_input_state(unsigned port, unsigned device,
                               unsigned index, unsigned id)
 {
@@ -202,9 +377,14 @@ static int16_t cb_input_state(unsigned port, unsigned device,
 	if (port != 0 || device != RETRO_DEVICE_JOYPAD) return 0;
 
 	state = diatom_port_input_state() & ~g_suppress;
+
+	/* OR, not first-match. Under an identity map no two canonical buttons
+	 * share a target so returning the first was always correct; remapping
+	 * makes sharing legal, and `SETMAP map=x:b,y:b` must fire for either.
+	 * Returning early would have silently dropped one of them. */
 	for (b = 0; b < DIATOM_BTN_COUNT; b++)
-		if (button_map[b] == (int)id)
-			return (state & DIATOM_BIT(b)) ? 1 : 0;
+		if (button_map[b] == (int)id && (state & DIATOM_BIT(b)))
+			return 1;
 	return 0;
 }
 

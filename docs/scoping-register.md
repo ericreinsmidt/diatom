@@ -712,7 +712,7 @@ deliberate target**, not an edge case - Probotector is PAL-only Contra. Pacing
 - [x] **[LB]** Where button remapping belongs →
       **[ADR-0019](decisions/0019-input-mapping-and-remapping.md)** *(Accepted)*;
       how it arrives → **[ADR-0020](decisions/0020-shared-state-plane.md)**
-      *(Proposed)*. Two translations, never collapsed: the port owns
+      *(Accepted)*. Two translations, never collapsed: the port owns
       physical→canonical and is never configurable, the host owns
       canonical→retropad as **data**, the launcher owns the config.
 - [x] **[LB]** **The physical switch is out of scope, reserved for the
@@ -721,11 +721,11 @@ deliberate target**, not an edge case - Probotector is PAL-only Contra. Pacing
       is **state, not events** - it has a value before Diatom starts and after
       it exits. Diatom must not learn it exists; any per-game meaning arrives as
       a protocol message, not a button.
-- [ ] **[OPEN]** `SET_INPUT_DESCRIPTORS` is accepted and discarded. It is the
-      core telling us "B = Jump" for this game - the labels a remap screen needs
-      to be usable. Free on every load. Designed as `INPUTS`/`INPUT` in
-      **[ADR-0020](decisions/0020-shared-state-plane.md)** *(Proposed)*,
-      reporting canonical buttons so labels track the active remap; not built.
+- [x] **[OPEN]** `SET_INPUT_DESCRIPTORS` is **captured and served** as
+      `INPUTS`/`INPUT`, reporting canonical buttons rather than retropad ids so
+      labels track the active remap for free. Verified on hardware 2026-08-26:
+      FCEUmm's own labels, and `x` reading "Turbo A" before a remap and "B"
+      after → **[ADR-0020](decisions/0020-shared-state-plane.md)** *(Accepted)*.
 - [x] **[OPEN]** MENU is Diatom's own key and never reaches a core. The port
       reports it and does not act on it: standalone it ends the session, under
       the launcher it hands over the display (ADR-0016). The L3/R3 worry is
@@ -747,10 +747,12 @@ deliberate target**, not an edge case - Probotector is PAL-only Contra. Pacing
       brightness snaps to the launcher's nearest level, and Diatom's own first
       press divides a raw value by a scale the launcher never used. The two
       sides do not disagree about a number; they disagree about what the
-      numbers are. Designed as `LEVEL`/`SETLEVEL` in
-      **[ADR-0020](decisions/0020-shared-state-plane.md)** *(Proposed)*: `count=`
-      always travels with `index=`, so a level is a fraction rather than a
-      number and neither side assumes the other's ladder. Not built.
+      numbers are. **Diatom's half is built and verified**
+      (**[ADR-0020](decisions/0020-shared-state-plane.md)**, Accepted): `count=`
+      travels with `index=` so a level is a fraction, and a launcher asking for
+      its own rung 8 of 11 is answered rung 9 of 12. **Still open because
+      PlayOS does not use it** - nothing survives the exit until the launcher
+      sends `SETLEVEL` at startup and stores the `LEVEL` events.
       [measurement](spikes/2026-08-26-backlight-floor.md).
 - [x] **[OPEN]** **Brightness works during a game** too - front keys
       (`BTN_THUMBL`/`THUMBR`, SDL 9/10), 20 steps sharing volume's scale, via

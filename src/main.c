@@ -27,6 +27,11 @@ static int         g_frame_w, g_frame_h;
 static size_t      g_frame_pitch;
 static bool        g_frame_fresh;
 
+/* ADR-0020's state plane, defined below but reachable from the menu loop that
+ * comes first. */
+static bool state_plane_msg(const diatom_msg *m);
+static void levels_forget(void);
+
 static diatom_core     *g_core;   /* resident, never unloaded - ADR-0006 */
 static diatom_policy    g_policy;
 static diatom_port_caps g_caps;
@@ -311,6 +316,11 @@ static bool menu_pause(void)
 
 		switch (diatom_proto_poll(&m, -1, false)) {
 		case DIATOM_MSG_RESUME:
+			/* The launcher had the display and therefore owned the levels;
+			 * it may have moved either while its menu was up. Re-read rather
+			 * than step from a cached value nobody is at. ADR-0020. */
+			diatom_port_level_invalidate();
+			levels_forget();
 			diatom_proto_send("RUNNING");
 			return true;
 		case DIATOM_MSG_STOP:
@@ -335,6 +345,13 @@ static bool menu_pause(void)
 			diatom_proto_send(diatom_options_set(m.key, m.value)
 			                  ? "OPTSET\tkey=%s" : "ERROR\tcode=bad_option\tmsg=%s",
 			                  m.key);
+			break;
+		case DIATOM_MSG_INPUTS:
+		case DIATOM_MSG_MAP:
+		case DIATOM_MSG_SETMAP:
+		case DIATOM_MSG_LEVELS:
+		case DIATOM_MSG_SETLEVEL:
+			state_plane_msg(&m);
 			break;
 		case DIATOM_MSG_HANGUP:
 			/* The launcher died while holding the menu open. Resuming is the
@@ -404,6 +421,98 @@ typedef struct {
 	bool          list_only;
 } diatom_session;
 
+/* ---- ADR-0020's state plane ------------------------------------------- */
+
+static const char *const level_kind_name[DIATOM_LEVEL_COUNT] = {
+	"volume", "brightness"
+};
+static int g_last_index[DIATOM_LEVEL_COUNT];
+static int g_last_count[DIATOM_LEVEL_COUNT];
+
+static void levels_forget(void)
+{
+	int k;
+	for (k = 0; k < DIATOM_LEVEL_COUNT; k++) g_last_index[k] = g_last_count[k] = -1;
+}
+
+static void level_emit(int k, int idx, int cnt)
+{
+	g_last_index[k] = idx;
+	g_last_count[k] = cnt;
+	diatom_proto_send("LEVEL\tkind=%s\tindex=%d\tcount=%d",
+	                  level_kind_name[k], idx, cnt);
+}
+
+/* Polled with the input bitfield and emitted on change. The port cannot send
+ * anything itself - it must not know the protocol exists (ADR-0007) - so this
+ * is the whole path by which a volume press during a game reaches a launcher
+ * that is not drawing and cannot see it. */
+static void levels_tick(void)
+{
+	int k, idx, cnt;
+
+	if (!diatom_proto_connected()) return;
+	for (k = 0; k < DIATOM_LEVEL_COUNT; k++) {
+		if (!diatom_port_level_get((diatom_level_kind)k, &idx, &cnt)) continue;
+		if (idx == g_last_index[k] && cnt == g_last_count[k]) continue;
+		level_emit(k, idx, cnt);
+	}
+}
+
+static void levels_emit_all(void)
+{
+	int k, idx, cnt, n = 0;
+
+	for (k = 0; k < DIATOM_LEVEL_COUNT; k++)
+		if (diatom_port_level_get((diatom_level_kind)k, &idx, &cnt)) n++;
+
+	/* count=0 is the answer on a port with no level control of its own, and
+	 * says "expect no events" instead of leaving it to be inferred. */
+	diatom_proto_send("LEVELS\tcount=%d", n);
+	for (k = 0; k < DIATOM_LEVEL_COUNT; k++)
+		if (diatom_port_level_get((diatom_level_kind)k, &idx, &cnt))
+			level_emit(k, idx, cnt);
+}
+
+static void level_set(const diatom_msg *m)
+{
+	int k, idx, cnt;
+
+	for (k = 0; k < DIATOM_LEVEL_COUNT; k++)
+		if (!strcmp(level_kind_name[k], m->lkind)) break;
+
+	if (k == DIATOM_LEVEL_COUNT || m->count <= 0 ||
+	    !diatom_port_level_set((diatom_level_kind)k, m->index, m->count)) {
+		diatom_proto_send("ERROR\tcode=bad_level\tmsg=%s", m->lkind);
+		return;
+	}
+	/* Answer in OUR positions rather than echoing theirs. The launcher sent a
+	 * fraction of its own ladder and needs to know which rung it landed on. */
+	if (diatom_port_level_get((diatom_level_kind)k, &idx, &cnt))
+		level_emit(k, idx, cnt);
+}
+
+/* Shared by all three message loops. A launcher may read or write any of this
+ * whenever it likes: the two moments it is drawing - menu and idle - are
+ * exactly the moments Diatom is not, and it is no less valid mid-game. */
+static bool state_plane_msg(const diatom_msg *m)
+{
+	switch (m->kind) {
+	case DIATOM_MSG_INPUTS: diatom_input_emit_labels(); return true;
+	case DIATOM_MSG_MAP:    diatom_input_emit_map();    return true;
+	case DIATOM_MSG_SETMAP:
+		if (!diatom_input_set_map(m->map))
+			diatom_proto_send("ERROR\tcode=bad_map\tmsg=%s", m->map);
+		/* Answered either way, so a refusal cannot leave the launcher
+		 * believing a map it does not have. */
+		diatom_input_emit_map();
+		return true;
+	case DIATOM_MSG_LEVELS:   levels_emit_all(); return true;
+	case DIATOM_MSG_SETLEVEL: level_set(m);      return true;
+	default: return false;
+	}
+}
+
 static int run_session_inner(const diatom_session *sn)
 {
 	struct retro_system_av_info av;
@@ -411,6 +520,13 @@ static int run_session_inner(const diatom_session *sn)
 	double   frame_us, next_us;
 	uint64_t t_start;
 	uint32_t buttons = 0, prev_buttons = 0;
+
+	/* Every game starts from identity and from an unknown level, so a launcher
+	 * that sends no map gets no map, and the first poll reports where the
+	 * levels actually are without being asked. ADR-0020. */
+	diatom_input_reset_map();
+	levels_forget();
+	diatom_port_level_invalidate();
 	long frames = 0, geom_changes = 0, resyncs = 0;
 	size_t q_min = (size_t)-1, q_max = 0;
 	bool stop = false;
@@ -642,9 +758,11 @@ static int run_session_inner(const diatom_session *sn)
 				break;
 			/* HANGUP is deliberately not a stop. ADR-0008 exists so a
 			 * launcher that died cannot take a running game with it. */
-			default: break;
+			default: state_plane_msg(&m); break;
 			}
 		}
+
+		levels_tick();
 
 		buttons = diatom_port_input_state();
 		display_chord(buttons, prev_buttons);
@@ -904,7 +1022,7 @@ int main(int argc, char **argv)
 			 * would ask. Found 2026-08-25 while testing the crash paths: every
 			 * run ended on the watchdog's SIGKILL rather than on QUIT. */
 			case DIATOM_MSG_QUIT:    g_quit_requested = true; continue;
-			default:                 continue;
+			default:                 state_plane_msg(&m); continue;
 			}
 			if (!m.core[0]) {
 				diatom_proto_send("ERROR\tcode=core_missing\tmsg=no core given");

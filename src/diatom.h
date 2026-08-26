@@ -110,6 +110,14 @@ typedef enum {
 	DIATOM_MSG_LOAD,       /* read a state from `path` */
 	DIATOM_MSG_OPTIONS,    /* enumerate this core's options */
 	DIATOM_MSG_SETOPT,     /* set `key` to `value` */
+	/* The state plane - ADR-0020. Each is query / write, and the query verb
+	 * doubles as the unsolicited change event so a launcher parses one shape
+	 * per state rather than two. */
+	DIATOM_MSG_INPUTS,     /* enumerate this game's button labels */
+	DIATOM_MSG_MAP,        /* report the active remap table */
+	DIATOM_MSG_SETMAP,     /* replace it whole: `map` = "a:b,x:none" */
+	DIATOM_MSG_LEVELS,     /* report volume and brightness */
+	DIATOM_MSG_SETLEVEL,   /* set `lkind` to `index` of `count` positions */
 	DIATOM_MSG_HANGUP      /* launcher went away; the game keeps running */
 } diatom_msg_kind;
 
@@ -123,7 +131,16 @@ typedef struct {
 	char path[1024];       /* SAVE / LOAD */
 	char key[80];          /* SETOPT */
 	char value[128];       /* SETOPT */
+	char map[512];         /* SETMAP */
+	char lkind[32];        /* SETLEVEL: volume | brightness */
+	int  index, count;     /* SETLEVEL: `count` is POSITIONS, not a max index */
 } diatom_msg;
+
+/* Input mapping and labels live in env.c, the one layer a remap touches. */
+void diatom_input_reset_map(void);
+bool diatom_input_set_map(const char *spec);
+void diatom_input_emit_map(void);
+void diatom_input_emit_labels(void);
 
 bool diatom_proto_listen(const char *path);
 void diatom_proto_close(void);

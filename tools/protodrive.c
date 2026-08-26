@@ -16,6 +16,17 @@
  * something nobody asked it to.
  *
  *   protodrive <socket> <secs> [--exercise <optkey> <optval>] <core>|<rom>[|<firmware>] ...
+ *   protodrive <socket> <secs> --state [<core>|<rom> ...]
+ *
+ * `--state` drives ADR-0020's state plane - labels, remap, levels - which is
+ * the half that cannot be tested on the desktop backend, because a desktop has
+ * no volume or brightness of its own to report.
+ *
+ * With NO content spec it drives an IDLE Diatom, which is the useful way to
+ * test levels: the state plane answers the same in every loop, so the round
+ * trip is fully exercised with no core loaded and therefore in silence.
+ * Sweeping volume with a game running means sweeping it audibly, and that is a
+ * poor thing to do to whoever else is in the room.
  */
 #define _GNU_SOURCE
 #include <errno.h>
@@ -25,6 +36,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <poll.h>
 #include <sys/un.h>
 #include <time.h>
 #include <unistd.h>
@@ -61,6 +73,26 @@ static char *rline(void)
 	}
 }
 
+/* Read and print whatever arrives for `secs`, then return. The state plane
+ * answers with a variable number of lines - LEVELS is a count plus one per
+ * kind - so waiting on a line count would hang on the shortest reply. */
+static void drain_for(int secs)
+{
+	uint64_t end = us() + (uint64_t)secs * 1000000ull;
+
+	for (;;) {
+		struct pollfd p = { fd, POLLIN, 0 };
+		uint64_t now = us();
+		char *l;
+
+		if (now >= end) return;
+		if (poll(&p, 1, (int)((end - now) / 1000)) <= 0) return;
+		l = rline();
+		if (!l) return;
+		printf("    <- %.110s\n", l);
+	}
+}
+
 static void wline(const char *fmt, ...)
 {
 	char b[2048];
@@ -75,6 +107,7 @@ int main(int argc, char **argv)
 {
 	struct sockaddr_un a;
 	int secs, i, attempt, nopt = 0, exercise = 0, argi = 3, menu = 0, menus = 0;
+	int state = 0;
 	const char *optkey = "", *optval = "";
 
 	/* Line-buffered, because this tool watches things that die. Redirected to
@@ -87,14 +120,15 @@ int main(int argc, char **argv)
 
 	/* protodrive <sock> <secs> --menu <spec>  waits for the player to press
 	 * MENU, which is the one path no automated client can trigger. */
-	if (argc > 3 && !strcmp(argv[3], "--menu")) { menu = 1; argi = 4; }
+	if (argc > 3 && !strcmp(argv[3], "--menu"))  { menu = 1; argi = 4; }
+	if (argc > 3 && !strcmp(argv[3], "--state")) { state = 1; argi = 4; }
 
 	/* Optional: protodrive <sock> <secs> --exercise <optkey> <optval> <spec>...
 	 * Scanned in place rather than by shifting argv, which loses argv[1]. */
 	if (argc > 5 && !strcmp(argv[3], "--exercise")) {
 		exercise = 1; optkey = argv[4]; optval = argv[5]; argi = 6;
 	}
-	if (argc < 4) {
+	if (argc < 4 || (argc <= argi && !state)) {
 		fprintf(stderr, "usage: protodrive <socket> <secs> <core>|<rom> ...\n");
 		return 1;
 	}
@@ -111,6 +145,35 @@ int main(int argc, char **argv)
 		usleep(200000);
 	}
 	if (fd < 0) { fprintf(stderr, "protodrive: cannot connect to %s\n", argv[1]); return 2; }
+
+	/* Idle state-plane drive: no RUN, no core, no sound. */
+	if (state && argc <= argi) {
+		int k;
+		printf("driving the state plane against an IDLE Diatom\n");
+		wline("INPUTS");                    drain_for(1);
+		wline("MAP");                       drain_for(1);
+		wline("SETMAP\tmap=x:b,y:a");       drain_for(1);
+		wline("SETMAP\tmap=menu:b");        drain_for(1);
+		wline("SETMAP\tmap=identity");      drain_for(1);
+		wline("LEVELS");                    drain_for(1);
+		/* The launcher's brightness ladder is 11 positions and the port's is
+		 * 12. Every rung of theirs is asked for, and what comes back is the
+		 * rung the PORT landed on - the round trip ADR-0020 exists for. */
+		for (k = 0; k < 11; k++) {
+			wline("SETLEVEL\tkind=brightness\tindex=%d\tcount=11", k);
+			drain_for(1);
+		}
+		/* Volume: silent, because nothing is loaded to make a sound. */
+		for (k = 0; k <= 20; k += 5) {
+			wline("SETLEVEL\tkind=volume\tindex=%d\tcount=21", k);
+			drain_for(1);
+		}
+		wline("LEVELS");                    drain_for(1);
+		wline("QUIT");
+		printf("sent QUIT\n");
+		close(fd);
+		return 0;
+	}
 	printf("<- %s\n", rline());
 
 	for (i = argi; i < argc; i++) {
@@ -140,7 +203,11 @@ int main(int argc, char **argv)
 		for (;;) {
 			char *l = rline();
 			if (!l) { fprintf(stderr, "connection closed\n"); return 3; }
-			if (!strncmp(l, "OPTIONS", 7) || !strncmp(l, "OPTION\t", 7) ||
+			if (!strncmp(l, "INPUTS", 6) || !strncmp(l, "INPUT\t", 6) ||
+			    !strncmp(l, "MAP", 3) || !strncmp(l, "LEVELS", 6) ||
+			    !strncmp(l, "LEVEL\t", 6)) {
+				printf("    <- %.100s\n", l);
+			} else if (!strncmp(l, "OPTIONS", 7) || !strncmp(l, "OPTION\t", 7) ||
 			    !strncmp(l, "OPTSET", 6) || !strncmp(l, "SAVED", 5) ||
 			    !strncmp(l, "LOADED", 6)) {
 				if (nopt < 4 || strncmp(l, "OPTION\t", 7)) printf("    <- %.100s\n", l);
@@ -189,6 +256,31 @@ int main(int argc, char **argv)
 					wline("LOAD\tpath=/mnt/SDCARD/diatom/proto.state");
 					sleep(1);
 				}
+				/* The state plane. Levels are the interesting half: the
+				 * launcher's ladder and the port's differ, so this sends a
+				 * level in ITS OWN positions and watches which rung Diatom
+				 * reports back - the round trip ADR-0020 exists for. */
+				if (state) {
+					wline("INPUTS");   sleep(1);
+					wline("MAP");      sleep(1);
+					wline("SETMAP\tmap=x:b,y:a"); sleep(1);
+					wline("INPUTS");   sleep(1);
+					wline("SETMAP\tmap=menu:b");  sleep(1);
+					wline("LEVELS");   sleep(1);
+					/* PlayOS's brightness ladder is 11 positions; the port's
+					 * is 12. Asking for its rung 1 must land on a rung the
+					 * port has, and come back described in the port's scale. */
+					wline("SETLEVEL\tkind=brightness\tindex=1\tcount=11");
+					sleep(1);
+					wline("SETLEVEL\tkind=brightness\tindex=8\tcount=11");
+					sleep(1);
+					/* Volume is swept by the IDLE drive instead, where no core
+					 * is loaded and the sweep is therefore silent. Doing it
+					 * here would put the speaker to maximum with a game
+					 * running, which is a rude thing to do to a room. */
+					wline("LEVELS"); sleep(1);
+					printf("     >>> now press the BRIGHTNESS keys on the device\n");
+				}
 				if (secs == 0) {
 					printf("     waiting for it to end by itself\n");
 					continue;
@@ -204,6 +296,11 @@ int main(int argc, char **argv)
 			} else if (!strncmp(l, "ERROR", 5)) {
 				printf("  <- %s   (+%.2fs, launcher keeps the display)\n",
 				       l, (us() - t_last) / 1000000.0);
+				/* Not fatal while driving the state plane. This break is for
+				 * a launch that failed; ADR-0020 makes ERROR an ordinary
+				 * answer - a refused map is a normal reply - and breaking on
+				 * it abandoned every message queued behind it. */
+				if (state) continue;
 				break;
 			}
 		}

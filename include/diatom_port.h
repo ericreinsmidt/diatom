@@ -115,6 +115,40 @@ size_t diatom_port_audio_queued(void);
 void     diatom_port_input_poll(void);
 uint32_t diatom_port_input_state(void);
 
+/* Levels the user can change with the device's own keys while a game runs -
+ * volume and brightness on the Brick, nothing at all on the desktop.
+ *
+ * Polled rather than pushed. The port must not know the launcher protocol
+ * exists (ADR-0007), so it cannot report anything itself; the host reads these
+ * alongside the input bitfield it already polls every frame and emits a
+ * protocol event when a value moves. No callback into the host, no work in the
+ * port's key handler beyond what it already does.
+ *
+ * `index` is 0-based over `0 .. *count - 1`, and `*count` is the number of
+ * distinct positions rather than a maximum index - the two differ by one, and
+ * ADR-0020 pins it here because a shared scale that is off by one produces a
+ * silent disagreement instead of an error. Raw device units (mixer registers,
+ * backlight duty) never leave the port.
+ *
+ * Returns false for a kind this port has no control over. */
+typedef enum {
+	DIATOM_LEVEL_VOLUME = 0,
+	DIATOM_LEVEL_BRIGHTNESS,
+	DIATOM_LEVEL_COUNT
+} diatom_level_kind;
+
+/* Forget any cached level and re-read the hardware on the next get.
+ *
+ * Needed because Diatom is RESIDENT: the port caches its level to avoid an
+ * ioctl per frame, and the launcher owns levels whenever Diatom is not
+ * presenting (ADR-0020). So between games, and across a menu, the value in the
+ * port can be overwritten underneath it. Without this the first press after a
+ * handover steps from a level nobody is at. */
+void diatom_port_level_invalidate(void);
+
+bool diatom_port_level_get(diatom_level_kind kind, int *index, int *count);
+bool diatom_port_level_set(diatom_level_kind kind, int index, int count);
+
 /* True once the port's surface has gone away - a closed window on desktop.
  * Not anticipated by ADR-0007; surfaced during implementation. It concerns the
  * port's own viability, not anything about games, so it belongs here. */
