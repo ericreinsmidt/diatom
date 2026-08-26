@@ -1,9 +1,9 @@
 # 0011. Lock the display rect at load from base geometry
 
-- **Status:** Accepted
+- **Status:** Superseded by [0021](0021-settle-the-rect-before-locking.md)
 - **Date:** 2026-08-23
 - **Supersedes:** -
-- **Superseded by:** -
+- **Superseded by:** [0021](0021-settle-the-rect-before-locking.md)
 
 ## Context
 

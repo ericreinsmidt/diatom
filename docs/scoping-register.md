@@ -508,24 +508,13 @@ Two amendments ADR-0007 makes to the table above:
       the glibc it was linked against, which is the coupling it was supposed to
       escape. ADR-0012 already solves portability by building against the oldest
       glibc in scope.
-- [ ] **[LB] [OPEN]** **ADR-0011's locked rect assumes base geometry is
-      representative, and for Sega cores it is not.** Measured 2026-08-24,
-      Herzog Zwei: PicoDrive reports base 320x240, Genesis Plus GX reports
-      **256x192** (max 348x240, borders included). Both then call SET_GEOMETRY
-      once as the game leaves its boot mode. So `integer` locks 960x720 for one
-      core and **1024x768** for the other, and once the real mode arrives the
-      actual factors are 3.00x/3.21x and 3.20x/3.43x - **not integer**, which is
-      the one thing that mode promises.
+- [x] **[LB] [OPEN]** **ADR-0011 locked the rect from a boot artefact** →
+      **[ADR-0021](decisions/0021-settle-the-rect-before-locking.md)**
+      *(Proposed)*. genesis_plus_gx's load-time 256x192 lasts 1-29 frames of
+      3600, so `integer` scaled Herzog Zwei by 3.20x/3.43x; relocking when the
+      locked geometry proves transient gives 3.00x on both axes. PC Engine was
+      wrong too, and core-facts.md was generated from the boot mode.
 
-      ADR-0011 was written from the SNES and PC Engine hires case, where locking
-      is correct because the *change* is the anomaly. This is the opposite: the
-      base value itself is the anomaly.
-
-      **The default insulates against it** - `stretch` (ADR-0014) uses the whole
-      panel regardless of source size - so this only bites in integer, aspect
-      and fill. Options if revisited: lock from `max` rather than `base`, settle
-      for N frames before locking, or recompute only when the aspect moves
-      materially.
 - [ ] **[OPEN]** **Saves do not transfer between cores for the same game.**
       Measured: Herzog Zwei reports 16 KB of SRAM under PicoDrive and **64 KB**
       under Genesis Plus GX, with states of 679 KB and 1036 KB. ADR-0016's

@@ -21,6 +21,8 @@ static void capture_descriptors(const struct retro_input_descriptor *d);
 static diatom_policy    *g_policy;
 static diatom_port_caps *g_caps;
 static bool              g_geometry_dirty;
+static int               g_new_w, g_new_h;
+static double            g_new_aspect;
 static uint32_t          g_suppress;
 
 void diatom_env_suppress(uint32_t mask)
@@ -33,6 +35,18 @@ bool diatom_env_geometry_changed(void)
 	bool v = g_geometry_dirty;
 	g_geometry_dirty = false;
 	return v;
+}
+
+/* What the core changed it TO. Only meaningful straight after
+ * diatom_env_geometry_changed() returned true. */
+bool diatom_env_new_geometry(int *w, int *h, double *aspect)
+{
+	if (g_new_w <= 0 || g_new_h <= 0) return false;
+	*w = g_new_w;
+	*h = g_new_h;
+	*aspect = g_new_aspect > 0.0 ? g_new_aspect
+	                             : (double)g_new_w / (double)g_new_h;
+	return true;
 }
 
 static void core_log(enum retro_log_level level, const char *fmt, ...)
@@ -68,11 +82,27 @@ static bool env_cb(unsigned cmd, void *data)
 		return true;
 	}
 	case MASK(RETRO_ENVIRONMENT_SET_GEOMETRY):
-	case MASK(RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO):
-		/* Measured: 3 of 6 cores do this mid-run. SNES reports max 604x478
-		 * against base 256x224; PC Engine 512x243. Recompute on change. */
+	case MASK(RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO): {
+		/* The new geometry is CARRIED now, not just flagged.
+		 *
+		 * ADR-0011 locked the rect from load-time geometry on the theory that a
+		 * mid-run change is a hires excursion. Measured 2026-08-26, that is
+		 * false for Genesis: genesis_plus_gx reports 256x192 at load and
+		 * switches to 320x224 at frame 1 (Phantasy Star IV) or 29 (Herzog
+		 * Zwei), then stays there. The load-time value is a boot artefact and
+		 * the caller cannot tell without seeing what replaced it. */
+		const struct retro_game_geometry *g = data;
+
+		if (MASK(cmd) == MASK(RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO) && data)
+			g = &((const struct retro_system_av_info *)data)->geometry;
+		if (g && g->base_width && g->base_height) {
+			g_new_w      = (int)g->base_width;
+			g_new_h      = (int)g->base_height;
+			g_new_aspect = (double)g->aspect_ratio;
+		}
 		g_geometry_dirty = true;
 		return true;
+	}
 	case MASK(RETRO_ENVIRONMENT_GET_CAN_DUPE):
 		*(bool *)data = true;
 		return true;

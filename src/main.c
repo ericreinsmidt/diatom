@@ -179,6 +179,12 @@ static void install_crash_handlers(void)
 	atexit(on_exit_hook);
 }
 
+/* How long a rect has to survive before it counts as the real mode. Herzog
+ * Zwei, the slowest observed, corrects at frame 29; three seconds is two orders
+ * of margin over that and still far short of anything a person would reach by
+ * opening a menu. */
+#define SETTLE_FRAMES 180
+
 /* Display mode state. The BASE geometry is kept because that, not the current
  * geometry, is what a rect is ever computed from: ADR-0011's invariant is
  * "never recompute from a mid-run SET_GEOMETRY", which a deliberate user-driven
@@ -520,6 +526,7 @@ static int run_session_inner(const diatom_session *sn)
 	double   frame_us, next_us;
 	uint64_t t_start;
 	uint32_t buttons = 0, prev_buttons = 0;
+	long     locked_at = 0;     /* frame the current rect was computed on */
 
 	/* Every game starts from identity and from an unknown level, so a launcher
 	 * that sends no map gets no map, and the first poll reports where the
@@ -655,6 +662,7 @@ static int run_session_inner(const diatom_session *sn)
 	g_base_h      = (int)av.geometry.base_height;
 	g_base_aspect = (double)av.geometry.aspect_ratio;
 	apply_display(sn->mode, sn->filter);
+	locked_at = 0;
 
 	/* Pace against a monotonic clock at the core's own rate, on an ABSOLUTE
 	 * schedule kept in floating point.
@@ -713,9 +721,56 @@ static int run_session_inner(const diatom_session *sn)
 		g_core->run();
 		frames++;
 
-		/* Noted, not acted on: the rect is locked (ADR-0011). The port scales
-		 * whatever arrives into it, so a hires frame keeps its screen size. */
-		if (diatom_env_geometry_changed()) geom_changes++;
+		/* ADR-0011 locked the rect and never moved it. That is right when the
+		 * load-time geometry is the mode the game runs in and the change is an
+		 * excursion - SNES and PC Engine hires - and wrong when the load-time
+		 * value is a boot artefact.
+		 *
+		 * Measured 2026-08-26 with tools/envlog.c over 3600 frames:
+		 *
+		 *   genesis_plus_gx  Herzog Zwei       256x192 for 29 frames, then
+		 *                                      320x224 for the other 3571
+		 *                    Phantasy Star IV  256x192 for ONE frame
+		 *   snes9x2010       four games        256x224 for all 3600
+		 *   mednafen_pce_fast three games      256x243 for all 3600
+		 *
+		 * So the discriminator is not what changed, it is whether what we
+		 * locked onto ever really held: relock only if the geometry we are
+		 * displaying turned out to be transient. Genesis corrects itself
+		 * within half a second, during the boot logo. A hires menu opened
+		 * minutes in does not qualify and the rect stays put, which is the
+		 * behaviour ADR-0011 exists to protect. */
+		if (diatom_env_geometry_changed()) {
+			int nw, nh;
+			double na;
+
+			geom_changes++;
+			if (frames - locked_at < SETTLE_FRAMES &&
+			    diatom_env_new_geometry(&nw, &nh, &na) &&
+			    (nw != g_base_w || nh != g_base_h)) {
+				printf("diatom: geometry settled %dx%d -> %dx%d "
+				       "at frame %ld\n",
+				       g_base_w, g_base_h, nw, nh, frames);
+				/* Reprinted in the SAME format as the load-time
+				 * line so anything parsing that format sees the
+				 * mode the game actually runs in by taking the
+				 * last one. tools/corefacts.sh took the first and
+				 * recorded Genesis as 256x192 at 1.5238 - twenty-
+				 * nine frames of boot - which ADR-0018's display
+				 * table was then computed from. */
+				printf("diatom: %dx%d (max %ux%u) aspect %.4f, "
+				       "%.4f fps, %.0f Hz -> %d Hz\n",
+				       nw, nh, av.geometry.max_width,
+				       av.geometry.max_height, na,
+				       av.timing.fps, av.timing.sample_rate,
+				       g_caps.audio_rate);
+				g_base_w      = nw;
+				g_base_h      = nh;
+				g_base_aspect = na;
+				apply_display(g_mode, g_filter);
+				locked_at = frames;
+			}
+		}
 
 		{
 			uint64_t p0 = diatom_port_now_us();

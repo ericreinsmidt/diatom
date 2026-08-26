@@ -59,7 +59,7 @@ never started.
 | [0008](0008-separate-long-lived-process.md) | Diatom runs as a separate, long-lived process | Accepted |
 | [0009](0009-launcher-protocol.md) | The launcher ↔ Diatom protocol | Accepted |
 | [0010](0010-rtld-local-is-mandatory.md) | `RTLD_LOCAL` is mandatory, and load-bearing | Accepted |
-| [0011](0011-lock-the-display-rect.md) | Lock the display rect at load from base geometry | Accepted |
+| [0011](0011-lock-the-display-rect.md) | Lock the display rect at load from base geometry | Superseded by 0021 |
 | [0012](0012-independent-toolchain.md) | Build our own toolchain; depend on nothing from NextUI or MinUI | Accepted |
 | [0013](0013-brick-fbdev-flip-thread.md) | The Brick presents via fbdev, with a flip thread | Accepted |
 | [0014](0014-display-modes-and-default.md) | Offer six display modes; default to stretch | Accepted |
@@ -69,3 +69,4 @@ never started.
 | [0018](0018-integer-vertical-remeasured.md) | Integer-vertical, re-measured: it is not "never worse" | Accepted |
 | [0019](0019-input-mapping-and-remapping.md) | Two input translations, and only one of them is remappable | Accepted |
 | [0020](0020-shared-state-plane.md) | The protocol grows a state plane, with one owner per item | Accepted |
+| [0021](0021-settle-the-rect-before-locking.md) | Lock the rect, but relock if what we locked onto was never real | Proposed |

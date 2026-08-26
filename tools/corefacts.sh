@@ -102,8 +102,19 @@ script=$(mktemp)
         [ -n "$fw" ] && fwarg="--firmware \"$fw\"" || fwarg=""
         echo "printf '%s\\t' \"$sys\" \"$core\""
         echo "./diatom --core \"$STAGE/${core}_libretro.so\" --rom \"$ROMS/$rom\" \\"
-        echo "  --system \"$ROMS\" $fwarg --frames 30 2>&1 \\"
-        echo "  | grep -E '^diatom: [0-9]+x[0-9]+' | head -1"
+        # 30 frames was cutting it fine: Herzog Zwei settles at frame 27, so a
+        # slightly slower boot would have measured the boot mode and looked
+        # completely stable doing it. 180 matches SETTLE_FRAMES in main.c, which
+        # is the window Diatom will actually relock within - measuring past that
+        # would record a geometry the frontend would never adopt.
+        echo "  --system \"$ROMS\" $fwarg --frames 180 2>&1 \\"
+        # tail, not head. The FIRST line is what the core reports at load, and
+        # for Genesis that is 29 frames of boot mode: 256x192 at 1.5238, where
+        # the game actually runs 320x224 at 1.3061. Diatom reprints the line in
+        # the same format once the geometry settles, so the last one is the mode
+        # that holds. Taking the first is what put a boot artefact in this file
+        # and, from there, into ADR-0018's display table.
+        echo "  | grep -E '^diatom: [0-9]+x[0-9]+' | tail -1"
     done
 } > "$script"
 

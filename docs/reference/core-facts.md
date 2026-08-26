@@ -19,10 +19,10 @@ and aspect, so one row per system cannot be correct.
 | SNES (NTSC) | `snes9x2010` | `3933890f520a` | 256x224 | 1024x478 | 1.3061 | 60.0985 | 32040 |
 | Game Boy | `mgba` | `abde7a0764f0` | 160x144 | 256x224 | 1.1111 | 59.7275 | 131072 |
 | GBA | `mgba` | `abde7a0764f0` | 240x160 | 240x160 | 1.5000 | 59.7275 | 65536 |
-| Genesis | `genesis_plus_gx` | `3673a22b9065` | 256x192 | 348x240 | 1.5238 | 59.9227 | 44100 |
+| Genesis | `genesis_plus_gx` | `3673a22b9065` | 320x224 | 348x240 | 1.3061 | 59.9227 | 44100 |
 | Master System | `genesis_plus_gx` | `3673a22b9065` | 256x192 | 284x240 | 1.5238 | 59.9227 | 44100 |
 | Game Gear | `genesis_plus_gx` | `3673a22b9065` | 160x144 | 284x240 | 1.3333 | 59.9227 | 44100 |
-| PC Engine | `mednafen_pce_fast` | `aca90a14b181` | 256x243 | 512x243 | 1.2000 | 59.8200 | 44100 |
+| PC Engine | `mednafen_pce_fast` | `aca90a14b181` | 256x240 | 512x243 | 1.2150 | 59.8200 | 44100 |
 
 ## Pinned set at time of measurement
 

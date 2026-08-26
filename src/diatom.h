@@ -71,7 +71,8 @@ int          diatom_core_resident_count(void);
 
 /* env.c */
 void diatom_env_bind(diatom_core *c, diatom_policy *p, diatom_port_caps *caps);
-bool diatom_env_geometry_changed(void);   /* consumes the flag */
+bool diatom_env_geometry_changed(void);
+bool diatom_env_new_geometry(int *w, int *h, double *aspect);   /* consumes the flag */
 
 /* Buttons the host is using for itself this frame and the core must not see.
  * Diatom owns MENU outright (it never appears in the retropad map); this is

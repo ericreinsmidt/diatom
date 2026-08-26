@@ -7,7 +7,14 @@
  * Answers the minimum needed for a core to get going and declines everything
  * else -- a decline is still a data point, which is the whole purpose.
  *
- * usage: envlog <core.so> [rom]
+ * usage: envlog <core.so> [rom] [frames]
+ *
+ * `frames` defaults to 120. Raise it when the question is WHEN something
+ * happens rather than whether: ADR-0011 locks the display rect from the
+ * geometry reported at load, which assumes that geometry is representative.
+ * Cores that boot into one mode and switch to another do it some way into the
+ * run, so a 120-frame window can miss the change entirely and report a core as
+ * stable when it is not.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -18,6 +25,27 @@
 #include <dlfcn.h>
 #include "libretro.h"
 #include "env_names.h"   /* generated; see tools/gen_env_names.py */
+
+/* Geometry timeline: every distinct frame size the core emits, and the frame it
+ * first appeared on. This is what ADR-0011's assumption stands or falls on, and
+ * a count of SET_GEOMETRY calls cannot answer it - a core can change the size of
+ * the frames it delivers without announcing anything. */
+#define MAXGEO 32
+static struct { unsigned w, h; long first, count; } geo[MAXGEO];
+static int  n_geo;
+static long frame_no;
+
+static void note_geometry(unsigned w, unsigned h)
+{
+	int i;
+	for (i = 0; i < n_geo; i++)
+		if (geo[i].w == w && geo[i].h == h) { geo[i].count++; return; }
+	if (n_geo < MAXGEO) {
+		geo[n_geo].w = w; geo[n_geo].h = h;
+		geo[n_geo].first = frame_no; geo[n_geo].count = 1;
+		n_geo++;
+	}
+}
 
 #define MAXCMD 256
 #define M(x) ((x) & 0xffff)
@@ -100,8 +128,28 @@ static bool env_cb(unsigned cmd, void *data)
 		*(int *)data = 3; break;
 	case M(RETRO_ENVIRONMENT_GET_INPUT_BITMASKS):
 		answered = false; break;   /* decline: exercise per-button path */
-	case M(RETRO_ENVIRONMENT_SET_GEOMETRY):
-	case M(RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO):
+	case M(RETRO_ENVIRONMENT_SET_GEOMETRY): {
+		const struct retro_game_geometry *g = data;
+		if (g)
+			printf("  SET_GEOMETRY at frame %ld: base %ux%u max %ux%u aspect %.4f\n",
+			       frame_no, g->base_width, g->base_height,
+			       g->max_width, g->max_height, (double)g->aspect_ratio);
+		break;
+	}
+	case M(RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO): {
+		/* Logged separately from SET_GEOMETRY because a core may use either,
+		 * and reading only one of them makes a core look stable when it is
+		 * not. mednafen_pce_fast uses both, with different values. */
+		const struct retro_system_av_info *a = data;
+		if (a)
+			printf("  SET_SYSTEM_AV_INFO at frame %ld: base %ux%u max %ux%u "
+			       "aspect %.4f fps %.4f rate %.1f\n",
+			       frame_no, a->geometry.base_width, a->geometry.base_height,
+			       a->geometry.max_width, a->geometry.max_height,
+			       (double)a->geometry.aspect_ratio,
+			       a->timing.fps, a->timing.sample_rate);
+		break;
+	}
 	case M(RETRO_ENVIRONMENT_SET_MESSAGE):
 	case M(RETRO_ENVIRONMENT_SET_SUPPORT_ACHIEVEMENTS):
 	case M(RETRO_ENVIRONMENT_SET_PERFORMANCE_LEVEL):
@@ -119,7 +167,11 @@ static bool env_cb(unsigned cmd, void *data)
 }
 
 static void cb_video(const void *d, unsigned w, unsigned h, size_t p)
-{ (void)d; (void)w; (void)h; (void)p; }
+{
+	(void)p;
+	/* d == NULL is a duplicate-frame signal and carries no size. */
+	if (d) note_geometry(w, h);
+}
 static void cb_audio1(int16_t l, int16_t r) { (void)l; (void)r; }
 static size_t cb_audio(const int16_t *d, size_t f) { (void)d; return f; }
 static void cb_poll(void) { }
@@ -135,6 +187,7 @@ int main(int argc, char **argv)
 {
 	void *h;
 	void (*p_set_env)(retro_environment_t);
+	int frames;
 	void (*p_set_video)(retro_video_refresh_t);
 	void (*p_set_audio)(retro_audio_sample_t);
 	void (*p_set_audio_batch)(retro_audio_sample_batch_t);
@@ -154,7 +207,11 @@ int main(int argc, char **argv)
 	long romlen = 0;
 	int i, loaded = 0;
 
-	if (argc < 2) { fprintf(stderr, "usage: envlog <core.so> [rom]\n"); return 1; }
+	if (argc < 2) {
+		fprintf(stderr, "usage: envlog <core.so> [rom] [frames]\n");
+		return 1;
+	}
+	frames = argc > 3 ? atoi(argv[3]) : 120;
 
 	h = dlopen(argv[1], RTLD_NOW | RTLD_LOCAL);
 	if (!h) { fprintf(stderr, "dlopen: %s\n", dlerror()); return 2; }
@@ -208,7 +265,7 @@ int main(int argc, char **argv)
 			       av.geometry.max_width, av.geometry.max_height,
 			       av.timing.fps, av.timing.sample_rate);
 			phase = P_RUN;
-			for (i = 0; i < 120; i++) p_run();
+			for (i = 0; i < frames; i++) { frame_no = i; p_run(); }
 			phase = P_UNLOAD; p_unload();
 		}
 	}
@@ -230,6 +287,17 @@ int main(int argc, char **argv)
 		if (declined[i]) printf("  DECLINED:%u", declined[i]);
 		if (exp_bit[i]) printf("  [exp]");
 		printf("\n");
+	}
+	if (n_geo) {
+		int i;
+		printf("\ngeometry timeline (%d distinct frame size(s) over %d frames)\n",
+		       n_geo, frames);
+		for (i = 0; i < n_geo; i++)
+			printf("  %ux%-10u first seen frame %-6ld %ld frame(s)\n",
+			       geo[i].w, geo[i].h, geo[i].first, geo[i].count);
+		if (n_geo > 1)
+			printf("  NOTE: the size at load is not the only size this core "
+			       "emits - ADR-0011 locks the rect from the first.\n");
 	}
 	printf("### end %s\n\n", argv[1]);
 	free(rombuf);
