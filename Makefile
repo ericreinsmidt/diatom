@@ -145,7 +145,7 @@ $(BUILD)/%.o: %.c
 # fails when it is broken. check-seam has held since day one for exactly that
 # reason; the register drifted 418 -> 992 lines in three days because nothing
 # ever complained.
-check: check-seam check-register check-corefacts
+check: check-seam check-register check-corefacts check-rates
 
 # Deliberately NOT part of `check`. It needs a build and it runs in real time -
 # Diatom paces to the core's frame rate, so 300 frames costs five seconds of
@@ -165,6 +165,13 @@ check-register:
 # needs the device and the user's ROMs, so it cannot run on every build.
 check-corefacts:
 	@python3 tools/check-corefacts.py
+
+# core-facts.md is generated so rates are not recalled from memory. This is what
+# makes that true of the rest of the tree: a spike table once had Game Boy at
+# 32768 Hz, a rate no pinned core produces, and the hardest ratio in the matrix
+# went untested because of it.
+check-rates:
+	@python3 tools/check-rates.py
 
 # Use in a commit hook or by hand before committing: enforces that a resolution
 # REPLACES the question it answers rather than being appended below it, which

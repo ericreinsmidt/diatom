@@ -354,10 +354,15 @@ spur relative to the tone, bigger is better:
 
 | source → dest | tone | linear | windowed sinc |
 |---|---|---|---|
-| 32040 → 48000 | 8 kHz | **21.7 dB** | **68.0 dB** |
-| 32768 → 48000 | 5 kHz | 32.6 dB | 72.3 dB |
-| 65536 → 48000 | 8 kHz | 36.2 dB | 74.4 dB |
-| 48000 → 48000 | 3 kHz | 92.5 dB | 92.5 dB |
+| 32040 → 48000 (SNES) | 8 kHz | **21.7 dB** | **68.0 dB** |
+| 65536 → 48000 (GBA) | 8 kHz | 36.2 dB | 74.4 dB |
+| 131072 → 48000 (Game Boy, 2.73:1) | 15 kHz | 37.3 dB | 74.8 dB |
+| 48000 → 48000 (NES) | 3 kHz | 92.5 dB | 92.5 dB |
+
+Take the rates from `docs/reference/core-facts.md`, which is generated. The
+first version of this table had NES at 32040 and Game Boy at 32768; both are
+wrong, and the second is a rate no shipped core produces - so that row measured
+nothing, and the genuinely hardest ratio went untested as a result.
 
 The last row is the control: at a ratio of exactly 1.0 there is nothing to
 resample, both hit the 16-bit quantisation floor, and neither filter can be

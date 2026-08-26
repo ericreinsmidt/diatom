@@ -622,11 +622,11 @@ Two levers the spike discovered:
       frame loop drops its debt past four frames behind (§7). A blocking write
       would pace the whole program off the audio clock, which rules out DRC.
 - [x] **[LB]** **The resampler is a 32-tap polyphase windowed sinc**, replacing
-      linear interpolation. SFDR up a mean of **28.5 dB** over seven rate pairs
-      (worst case 21.7 → 68.0), and the passband stops drooping: linear was
-      -3.5 dB at 11 kHz, this is flat. Costs +0.16 ms of a 16.6 ms frame and no
-      dependency. "No audible problem has been measured" was true only in that
-      nobody had looked. [measurement](spikes/2026-08-26-resampler.md)
+      linear interpolation. SFDR up a mean of **27.6 dB** over nine rate pairs including
+      131072→48000, the 2.73:1 worst case (worst overall 21.7 → 68.0), and the
+      passband stops drooping: linear was -3.5 dB at 11 kHz, this is flat.
+      Costs +0.16 ms of a 16.6 ms frame, no dependency.
+      [measurement](spikes/2026-08-26-resampler.md)
 - [ ] **[LB]** **Who sets core-option defaults?** FCEUmm ships
       `fceumm_sndquality = Low`, plus "Reduce Triangle Channel Popping" and
       "Reduce DMC Channel Popping" both **disabled**. Very High plus both cut

@@ -30,8 +30,9 @@ alone is a stricter test than designing for one embedder.
 
 `make check` is not advice. It fails on a port including `libretro.h`
 ([ADR-0007](docs/decisions/0007-port-interface.md)), on the scoping register
-drifting out of shape, and on documented core measurements describing binaries
-the project no longer ships. Each of those exists because the rule it guards
+drifting out of shape, on documented core measurements describing binaries the
+project no longer ships, and on any sample rate stated as current truth that the
+generated core facts do not record. Each of those exists because the rule it guards
 decayed the moment nothing failed when it was broken.
 
 Two suites sit outside it because they need a build or a device, and are named

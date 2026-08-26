@@ -4,9 +4,9 @@
 - **Question:** *`audio.c` called its linear interpolation "not good enough to
   ship". Is that true, and what replaces it?*
 - **Status:** Answered. **True, and worse than the register thought.** Replaced
-  with a 32-tap polyphase windowed sinc: **+28.5 dB** mean SFDR across seven
-  rate pairs, for **+0.16 ms** per frame of a 16.6 ms budget and no new
-  dependency.
+  with a 32-tap polyphase windowed sinc: **+27.6 dB** mean SFDR across nine rate
+  pairs including the hardest one in the matrix, for **+0.16 ms** per frame of a
+  16.6 ms budget and no new dependency.
 - **Instruments:** [`tools/resampleprobe.c`](../../tools/resampleprobe.c),
   [`tools/spurs.py`](../../tools/spurs.py),
   [`tools/hfprobe.py`](../../tools/hfprobe.py)
@@ -57,17 +57,34 @@ being measured.
 
 | source → dest | tone | linear | sinc | gain |
 |---|---|---|---|---|
-| 32040 → 48000 (NES) | 3 kHz | 41.6 | **77.2** | +35.6 |
-| 32040 → 48000 | 8 kHz | **21.7** | **68.0** | +46.3 |
-| 32768 → 48000 (Game Boy) | 5 kHz | 32.6 | 72.3 | +39.7 |
-| 44100 → 48000 | 1 kHz | 67.3 | 79.1 | +11.8 |
-| 65536 → 48000 (mGBA) | 3 kHz | 55.9 | 84.1 | +28.2 |
-| 65536 → 48000 | 8 kHz | 36.2 | 74.4 | +38.2 |
-| 48000 → 48000 (exact) | 3 kHz | 92.5 | 92.5 | 0.0 |
+| 32040 → 48000 (SNES) | 3 kHz | 41.6 | **77.2** | +35.6 |
+| 32040 → 48000 (SNES) | 8 kHz | **21.7** | **68.0** | +46.3 |
+| 44100 → 48000 (Sega, PC Engine) | 1 kHz | 67.3 | 79.1 | +11.8 |
+| 65536 → 48000 (GBA) | 3 kHz | 55.9 | 84.1 | +28.2 |
+| 65536 → 48000 (GBA) | 8 kHz | 36.2 | 74.4 | +38.2 |
+| **131072 → 48000 (Game Boy)** | 3 kHz | 67.0 | 88.4 | +21.4 |
+| **131072 → 48000 (Game Boy)** | 8 kHz | 49.8 | 79.1 | +29.3 |
+| **131072 → 48000 (Game Boy)** | 15 kHz | 37.3 | 74.8 | +37.5 |
+| 48000 → 48000 (NES, exact) | 3 kHz | 92.5 | 92.5 | 0.0 |
 
 **21.7 dB is not a subtle defect.** It puts the loudest artefact 8% below the
 tone it came from. The register's "no audible problem has been measured" was
 true only in the sense that nobody had looked.
+
+### The rows in bold were added after this spike was first written, and that is
+### the more useful finding
+
+The first version of this table labelled 32040 as NES and tested 32768 as Game
+Boy. Both are wrong, and `docs/reference/core-facts.md` - a **generated** file,
+built for exactly this - says so on one line each: NES is 48000, SNES is 32040,
+and mGBA runs Game Boy at **131072**. 32768 is a rate no core in the pinned set
+produces, so that row measured nothing.
+
+The cost was not the labels. **131072 → 48000 is 2.73:1, the hardest ratio in
+the matrix and the one the register had specifically named, and it went
+untested.** It was caught by being challenged on a neighbouring number, not by
+any check here. A generated reference is only worth what it is worth if it is
+read, and it was sitting three directories away the whole time.
 
 The last row is both filters hitting the 16-bit quantisation floor, which is the
 control: at a ratio of exactly 1.0 there is nothing to resample and neither
