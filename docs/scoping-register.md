@@ -144,6 +144,13 @@ verified rather than assumed.
       question never contemplated. Licences now recorded by `fetch-cores.sh`.
 - [x] **[LB]** Standalone repository → **[ADR-0002](decisions/0002-separate-repository.md)** *(Accepted)*
 - [x] **[LB]** Decision-recording practice: ADRs → **[ADR-0001](decisions/0001-record-architecture-decisions.md)** *(Accepted)*
+- [ ] **[OPEN]** **Nothing has ever driven Diatom but a stand-in.** Every
+      protocol test uses `tools/protodrive.c`, written by the same hand as the
+      protocol, so it tests what its author expected rather than what a
+      launcher does. PlayOS adopting Diatom is planned in that repo's
+      `DIATOM-MIGRATION.md` (2026-08-26): three functions in its `platform.c`
+      are the whole surface, seven of its eight minarch overrides are already
+      native here, and the two gaps are `PREVIEW` and the in-game menu.
 - [ ] **[DEFERRED]** Consumption model - submodule, subtree, vendored copy, or
       prebuilt artifact. **Deliberately deferred 2026-08-23: nothing consumes
       Diatom yet.** Choosing an integration model before either side exists means
@@ -968,8 +975,12 @@ pad attached, which is why the real pad has a Mode switch.
       `LOAD` or `STOP`, and slot naming stays entirely in the launcher as
       ADR-0016 requires. The handoff it rests on is in §3.
       [protocol log](discussion/2026-08-25-protocol.md).
-- [ ] **[OPEN]** Preview screenshots for the launcher - frontend's job or host's?
-      `PREVIEW` is in ADR-0009's message table and is not emitted.
+- [ ] **[OPEN]** **`PREVIEW` is declared in ADR-0009 and not emitted, and it
+      now has a consumer.** PlayOS reads `.minui/<folder>/<base>.9.bmp` and
+      draws it on a game's card, so the shelf shows the last frame played;
+      minarch writes it. **Hard parity requirement** for PlayOS adopting
+      Diatom, and Phase 1 of its migration plan - the only phase that is
+      Diatom's work rather than PlayOS's.
 - [ ] **[LB]** Rewind: support or drop? Real RAM cost on a 1GB device.
 - [x] **[OPEN]** CD support → done for PC Engine. **CHD needs nothing** - read
       natively at 59.81 fps against a 59.8200 target, 0 resyncs. The System Card
