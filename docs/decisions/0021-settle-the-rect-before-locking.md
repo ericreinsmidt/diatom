@@ -91,6 +91,31 @@ booting relocks each time until one persists.
 **Fixed, and measured on hardware.** `integer` on Herzog Zwei now locks 960x672
 for 320x224 frames - **3.00x on both axes**, where it was 3.20x/3.43x.
 
+**It was not one mode. Before this, not one of the seven did what its name
+says** on Genesis, because all seven compute from the same geometry. Herzog
+Zwei, 320x224 frames into a 1024x768 panel, measured on hardware:
+
+| mode | before | factors | after | factors |
+|---|---|---|---|---|
+| integer | 1024x768 | 3.20 / 3.43 | **960x672** | **3.00 / 3.00** |
+| integer-vertical | 878x576 | 2.74 / 2.57 | **878x672** | 2.74 / 3.00 |
+| aspect | 1024x672 | 3.20 / 3.00 | **1003x768** | 3.13 / 3.43 |
+| fill | 1170x768 | 3.66 / 3.43 | 1024x784 | 3.20 / 3.50 |
+| stretch | 1024x768 | 3.20 / 3.43 | 1024x768 | 3.20 / 3.43 |
+| overscale | 1024x768 | 3.20 / 3.43 | **1280x896** | **4.00 / 4.00** |
+| native | 256x192 | 0.80 / 0.86 | **320x224** | **1.00 / 1.00** |
+
+The three modes that promise uniform pixels - `integer`, `overscale`, `native` -
+had **none**, and now have exactly. `native` is the clearest statement of the
+fault: a mode documented as *"1:1, no scaling at all"* was scaling by 0.80 and
+throwing away pixels, because it sized itself for a frame the core had stopped
+sending twenty-nine frames in. `aspect` was shaping to 1024/672 = 1.524, the
+boot mode's aspect, rather than the 1.306 the game runs at.
+
+`stretch`, the default, is identical before and after: it fills both axes by
+construction and never consulted the aspect. The one mode that was already
+right is the one nothing changed.
+
 **PC Engine was wrong too, and less visibly.** Under Diatom, mednafen_pce_fast
 settles 256x243 → 256x240 at frame 1. The old rect was 768x**729**, computed for
 a height the core stops using, so 240-tall frames scaled by 3.0375x. It is now
