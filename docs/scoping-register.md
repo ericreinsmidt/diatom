@@ -710,10 +710,11 @@ deliberate target**, not an edge case - Probotector is PAL-only Contra. Pacing
       retropad, a near-identity whose purpose is keeping `libretro.h` out of the
       port. Device quirks resolve in the port and never travel upward.
 - [x] **[LB]** Where button remapping belongs →
-      **[ADR-0019](decisions/0019-input-mapping-and-remapping.md)** *(Accepted)*.
-      Two translations, never collapsed: the port owns physical→canonical and is
-      never configurable, the host owns canonical→retropad as **data**, the
-      launcher owns the config. MENU is unmappable by construction.
+      **[ADR-0019](decisions/0019-input-mapping-and-remapping.md)** *(Accepted)*;
+      how it arrives → **[ADR-0020](decisions/0020-shared-state-plane.md)**
+      *(Proposed)*. Two translations, never collapsed: the port owns
+      physical→canonical and is never configurable, the host owns
+      canonical→retropad as **data**, the launcher owns the config.
 - [x] **[LB]** **The physical switch is out of scope, reserved for the
       launcher** (2026-08-25, judgement call). `gpio243`: unclaimed, no bounce,
       `edge` present so it can be interrupt-driven, unreferenced by PlayOS. It
@@ -722,8 +723,9 @@ deliberate target**, not an edge case - Probotector is PAL-only Contra. Pacing
       a protocol message, not a button.
 - [ ] **[OPEN]** `SET_INPUT_DESCRIPTORS` is accepted and discarded. It is the
       core telling us "B = Jump" for this game - the labels a remap screen needs
-      to be usable. Free on every load. Capturing and exposing it over the
-      protocol is what ADR-0019 leaves unbuilt.
+      to be usable. Free on every load. Designed as `INPUTS`/`INPUT` in
+      **[ADR-0020](decisions/0020-shared-state-plane.md)** *(Proposed)*,
+      reporting canonical buttons so labels track the active remap; not built.
 - [x] **[OPEN]** MENU is Diatom's own key and never reaches a core. The port
       reports it and does not act on it: standalone it ends the session, under
       the launcher it hands over the display (ADR-0016). The L3/R3 worry is
@@ -745,9 +747,10 @@ deliberate target**, not an edge case - Probotector is PAL-only Contra. Pacing
       brightness snaps to the launcher's nearest level, and Diatom's own first
       press divides a raw value by a scale the launcher never used. The two
       sides do not disagree about a number; they disagree about what the
-      numbers are. Protocol-shaped, not port-shaped, and belongs with
-      ADR-0019's remap message: either the port reports levels upward, or the
-      launcher supplies its ladder at startup.
+      numbers are. Designed as `LEVEL`/`SETLEVEL` in
+      **[ADR-0020](decisions/0020-shared-state-plane.md)** *(Proposed)*: `count=`
+      always travels with `index=`, so a level is a fraction rather than a
+      number and neither side assumes the other's ladder. Not built.
       [measurement](spikes/2026-08-26-backlight-floor.md).
 - [x] **[OPEN]** **Brightness works during a game** too - front keys
       (`BTN_THUMBL`/`THUMBR`, SDL 9/10), 20 steps sharing volume's scale, via
