@@ -750,9 +750,11 @@ deliberate target**, not an edge case - Probotector is PAL-only Contra. Pacing
       numbers are. **Diatom's half is built and verified**
       (**[ADR-0020](decisions/0020-shared-state-plane.md)**, Accepted): `count=`
       travels with `index=` so a level is a fraction, and a launcher asking for
-      its own rung 8 of 11 is answered rung 9 of 12. **Still open because
-      PlayOS does not use it** - nothing survives the exit until the launcher
-      sends `SETLEVEL` at startup and stores the `LEVEL` events.
+      its own rung 8 of 11 is answered rung 9 of 12. 78 key presses in a game
+      reported 78 events, every step ±1, both endpoints reached, and volume
+      stayed silent throughout. **Still open because PlayOS does not use it** -
+      nothing survives the exit until the launcher sends `SETLEVEL` at startup
+      and stores the `LEVEL` events.
       [measurement](spikes/2026-08-26-backlight-floor.md).
 - [x] **[OPEN]** **Brightness works during a game** too - front keys
       (`BTN_THUMBL`/`THUMBR`, SDL 9/10), 20 steps sharing volume's scale, via
