@@ -1,6 +1,6 @@
 # 0021. Lock the rect, but relock if what we locked onto was never real
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-08-26
 - **Supersedes:** [0011](0011-lock-the-display-rect.md)
 - **Superseded by:** -

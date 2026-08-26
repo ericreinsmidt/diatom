@@ -1,6 +1,6 @@
 # 0022. Display mode joins the state plane, and is the second contested row
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-08-26
 - **Supersedes:** -
 - **Superseded by:** -
