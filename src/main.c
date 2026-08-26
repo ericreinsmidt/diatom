@@ -404,6 +404,16 @@ static bool menu_pause(const diatom_session *sn)
 	if (sn->preview && write_preview(sn->preview))
 		diatom_proto_send("PREVIEW\tpath=%s", sn->preview);
 
+	/* One frame's settle before the handover. The last pan can still be in
+	 * flight on the flip thread, and the launcher starts drawing through GL
+	 * the moment it reads PAUSED - the handoff spike's invariant is one
+	 * presenter at a time, and 20ms is what guarantees the fbdev side has
+	 * gone quiet before the other side begins. */
+	{
+		struct timespec settle = { 0, 20 * 1000 * 1000 };
+		nanosleep(&settle, NULL);
+	}
+
 	/* Symmetrical with RUNNING: the launcher may draw from here. */
 	diatom_proto_send("PAUSED");
 

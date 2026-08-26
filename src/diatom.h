@@ -60,6 +60,11 @@ typedef struct {
 	size_t (*get_memory_size)(unsigned);
 } diatom_core;
 
+/* zip.c - launcher libraries arrive zipped, one ROM per archive */
+bool diatom_zip_is(const char *path);
+bool diatom_zip_load(const char *path, void **out, size_t *out_len,
+                     char *name, size_t name_n);
+
 /* core.c */
 bool diatom_core_open(diatom_core *c, const char *path);
 bool diatom_core_start(diatom_core *c, const char *rom_path);

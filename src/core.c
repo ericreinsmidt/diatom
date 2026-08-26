@@ -153,7 +153,45 @@ bool diatom_core_start(diatom_core *c, const char *rom_path)
 
 	memset(&gi, 0, sizeof gi);
 	gi.path = rom_path;
-	if (!si.need_fullpath) {
+
+	/* Zipped content - how a launcher's library actually arrives. The ROM is
+	 * extracted here rather than by the core: of the pinned set only some
+	 * cores unzip for themselves, and the first real launcher found that out
+	 * on the first game it handed over. One entry per archive (the largest);
+	 * a need_fullpath core gets the extraction as a tmpfs file, since it
+	 * wants to read from disk, and everything else gets the buffer. */
+	if (diatom_zip_is(rom_path)) {
+		char inner[512];
+
+		if (!diatom_zip_load(rom_path, &data, &len, inner, sizeof inner)) {
+			fprintf(stderr, "diatom: cannot extract %s\n", rom_path);
+			return false;
+		}
+		fprintf(stderr, "diatom: zip: %s -> %s (%zu bytes)\n",
+		        rom_path, inner, len);
+		if (si.need_fullpath) {
+			static char tmp[600];
+			FILE *tf;
+			const char *base = strrchr(inner, '/');
+
+			snprintf(tmp, sizeof tmp, "/tmp/diatom-%s",
+			         base ? base + 1 : inner);
+			tf = fopen(tmp, "wb");
+			if (!tf || fwrite(data, 1, len, tf) != len) {
+				if (tf) fclose(tf);
+				free(data);
+				fprintf(stderr, "diatom: cannot stage %s\n", tmp);
+				return false;
+			}
+			fclose(tf);
+			free(data);
+			data = NULL;
+			gi.path = tmp;
+		} else {
+			gi.data = data;
+			gi.size = len;
+		}
+	} else if (!si.need_fullpath) {
 		if (!read_file(rom_path, &data, &len)) {
 			fprintf(stderr, "diatom: cannot read %s\n", rom_path);
 			return false;
