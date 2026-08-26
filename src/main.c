@@ -31,6 +31,7 @@ static bool        g_frame_fresh;
  * comes first. */
 static bool state_plane_msg(const diatom_msg *m);
 static void levels_forget(void);
+static void apply_display(int mode, diatom_filter filter);
 
 static diatom_core     *g_core;   /* resident, never unloaded - ADR-0006 */
 static diatom_policy    g_policy;
@@ -284,6 +285,16 @@ static void apply_display(int mode, diatom_filter filter)
 	       diatom_modes[mode].name, filter_name(filter),
 	       g_dst.w, g_dst.h, g_dst.x, g_dst.y, diatom_modes[mode].note);
 	fflush(stdout);
+
+	/* Reported from the ONE place the mode ever changes, so a launcher hears
+	 * about it whether it asked, the user cycled it with a chord, or the rect
+	 * settled underneath it (ADR-0021). `rect=` is free here and is what a
+	 * launcher would otherwise have to recompute from geometry it does not
+	 * have. ADR-0022. */
+	if (diatom_proto_connected())
+		diatom_proto_send("DISPLAY\tmode=%s\tfilter=%s\trect=%dx%d+%d+%d",
+		                  diatom_modes[mode].name, filter_name(filter),
+		                  g_dst.w, g_dst.h, g_dst.x, g_dst.y);
 }
 
 /* Report what a combination cost, so the look and the price are read together.
@@ -498,6 +509,34 @@ static void level_set(const diatom_msg *m)
 		level_emit(k, idx, cnt);
 }
 
+static void display_set(const diatom_msg *m)
+{
+	int mode = g_mode, i;
+	diatom_filter filter = g_filter;
+
+	if (m->dmode[0]) {
+		for (i = 0; i < diatom_mode_count; i++)
+			if (!strcmp(diatom_modes[i].name, m->dmode)) break;
+		if (i == diatom_mode_count) {
+			diatom_proto_send("ERROR\tcode=bad_display\tmsg=%s", m->dmode);
+			return;
+		}
+		mode = i;
+	}
+	if (m->dfilter[0]) {
+		if      (!strcmp(m->dfilter, "nearest")) filter = DIATOM_FILTER_NEAREST;
+		else if (!strcmp(m->dfilter, "sharp"))   filter = DIATOM_FILTER_SHARP;
+		else {
+			diatom_proto_send("ERROR\tcode=bad_display\tmsg=%s", m->dfilter);
+			return;
+		}
+	}
+	/* Both fields validated before either is applied, for the same reason
+	 * SETMAP is all-or-nothing: a half-applied setting is one nobody asked
+	 * for and neither side believes in. */
+	apply_display(mode, filter);
+}
+
 /* Shared by all three message loops. A launcher may read or write any of this
  * whenever it likes: the two moments it is drawing - menu and idle - are
  * exactly the moments Diatom is not, and it is no less valid mid-game. */
@@ -515,6 +554,12 @@ static bool state_plane_msg(const diatom_msg *m)
 		return true;
 	case DIATOM_MSG_LEVELS:   levels_emit_all(); return true;
 	case DIATOM_MSG_SETLEVEL: level_set(m);      return true;
+	case DIATOM_MSG_DISPLAY:
+		/* apply_display is what emits, so ask it to restate the current one
+		 * rather than growing a second path that could disagree with it. */
+		apply_display(g_mode, g_filter);
+		return true;
+	case DIATOM_MSG_SETDISPLAY: display_set(m); return true;
 	default: return false;
 	}
 }
@@ -1020,6 +1065,17 @@ int main(int argc, char **argv)
 		usage();
 		return 1;
 	}
+
+	/* Reflect the process default in the live state, AFTER both are parsed.
+	 *
+	 * g_mode is a static and defaults to 0, which is diatom_modes[0] -
+	 * `integer`. The real default is `stretch`, and it was only ever applied
+	 * once a session started. Harmless while nothing could ask; ADR-0022 lets
+	 * a launcher query DISPLAY on an idle Diatom, and it answered
+	 * `mode=integer` for a frontend that would have used `stretch`. Caught on
+	 * hardware 2026-08-26 by asking with no game loaded. */
+	g_mode   = start_mode;
+	g_filter = start_filter;
 
 	if (!g_policy.system_dir) g_policy.system_dir = ".";
 	if (!g_policy.save_dir)   g_policy.save_dir   = ".";

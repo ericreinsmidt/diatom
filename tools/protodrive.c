@@ -155,6 +155,12 @@ int main(int argc, char **argv)
 		wline("SETMAP\tmap=x:b,y:a");       drain_for(1);
 		wline("SETMAP\tmap=menu:b");        drain_for(1);
 		wline("SETMAP\tmap=identity");      drain_for(1);
+		/* Queried with NO game loaded on purpose: the rect is computed from a
+		 * geometry that does not exist yet, and the answer should be an honest
+		 * zero rather than a crash or a stale rect from the last game. */
+		wline("DISPLAY");                   drain_for(1);
+		wline("SETDISPLAY\tmode=integer");  drain_for(1);
+		wline("SETDISPLAY\tmode=nonsense"); drain_for(1);
 		wline("LEVELS");                    drain_for(1);
 		/* The launcher's brightness ladder is 11 positions and the port's is
 		 * 12. Every rung of theirs is asked for, and what comes back is the
@@ -205,7 +211,7 @@ int main(int argc, char **argv)
 			if (!l) { fprintf(stderr, "connection closed\n"); return 3; }
 			if (!strncmp(l, "INPUTS", 6) || !strncmp(l, "INPUT\t", 6) ||
 			    !strncmp(l, "MAP", 3) || !strncmp(l, "LEVELS", 6) ||
-			    !strncmp(l, "LEVEL\t", 6)) {
+			    !strncmp(l, "LEVEL\t", 6) || !strncmp(l, "DISPLAY", 7)) {
 				printf("    <- %.100s\n", l);
 			} else if (!strncmp(l, "OPTIONS", 7) || !strncmp(l, "OPTION\t", 7) ||
 			    !strncmp(l, "OPTSET", 6) || !strncmp(l, "SAVED", 5) ||
@@ -279,6 +285,12 @@ int main(int argc, char **argv)
 					 * here would put the speaker to maximum with a game
 					 * running, which is a rude thing to do to a room. */
 					wline("LEVELS"); sleep(1);
+					/* In-game, where it has to survive ADR-0021's settle:
+					 * the rect moves once early, and a launcher that set a
+					 * mode should hear the new rect rather than the boot one. */
+					wline("DISPLAY");                  sleep(1);
+					wline("SETDISPLAY\tmode=integer"); sleep(1);
+					wline("SETDISPLAY\tmode=aspect");  sleep(1);
 					printf("     >>> now press the BRIGHTNESS keys on the device\n");
 				}
 				if (secs == 0) {

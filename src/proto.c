@@ -167,6 +167,8 @@ static void parse_line(char *line, diatom_msg *out)
 	else if (!strcmp(field, "SETMAP"))   out->kind = DIATOM_MSG_SETMAP;
 	else if (!strcmp(field, "LEVELS"))   out->kind = DIATOM_MSG_LEVELS;
 	else if (!strcmp(field, "SETLEVEL")) out->kind = DIATOM_MSG_SETLEVEL;
+	else if (!strcmp(field, "DISPLAY"))  out->kind = DIATOM_MSG_DISPLAY;
+	else if (!strcmp(field, "SETDISPLAY")) out->kind = DIATOM_MSG_SETDISPLAY;
 	else {
 		log_(DIATOM_LOG_WARN, "proto: ignoring unknown verb '%s'", field);
 		out->kind = DIATOM_MSG_NONE;
@@ -195,6 +197,8 @@ static void parse_line(char *line, diatom_msg *out)
 		else if (!strcmp(field, "kind")) snprintf(out->lkind, sizeof out->lkind, "%s", v);
 		else if (!strcmp(field, "index")) out->index = (int)strtol(v, NULL, 10);
 		else if (!strcmp(field, "count")) out->count = (int)strtol(v, NULL, 10);
+		else if (!strcmp(field, "mode"))  snprintf(out->dmode,  sizeof out->dmode,  "%s", v);
+		else if (!strcmp(field, "filter"))snprintf(out->dfilter,sizeof out->dfilter,"%s", v);
 		/* anything else: forward compatibility, ignore */
 	}
 }

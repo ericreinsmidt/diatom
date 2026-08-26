@@ -70,3 +70,4 @@ never started.
 | [0019](0019-input-mapping-and-remapping.md) | Two input translations, and only one of them is remappable | Accepted |
 | [0020](0020-shared-state-plane.md) | The protocol grows a state plane, with one owner per item | Accepted |
 | [0021](0021-settle-the-rect-before-locking.md) | Lock the rect, but relock if what we locked onto was never real | Proposed |
+| [0022](0022-display-mode-on-the-state-plane.md) | Display mode joins the state plane, and is the second contested row | Proposed |

@@ -426,6 +426,12 @@ Two amendments ADR-0007 makes to the table above:
       [ADR-0014](decisions/0014-display-modes-and-default.md): the question
       dissolves, because integer is now one choice among six rather than the
       rule. `integer` still letterboxes at the largest factor that fits.
+- [x] **[LB]** **A launcher can set the display mode per game** →
+      **[ADR-0022](decisions/0022-display-mode-on-the-state-plane.md)**
+      *(Proposed)*. `RUN` carried no mode, so it was process-wide; ADR-0018 and
+      ADR-0021 both show the best mode differs by system (16 points of panel
+      between `integer` and `aspect` on Genesis). Second contested row on
+      ADR-0020's plane, of the three its threshold allows.
 - [x] **[LB]** **Which display mode is default** →
       **[ADR-0014](decisions/0014-display-modes-and-default.md)** *(Accepted)*.
       `stretch`, judged on the panel: a handheld's screen is its whole

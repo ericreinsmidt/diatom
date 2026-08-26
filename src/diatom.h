@@ -119,6 +119,8 @@ typedef enum {
 	DIATOM_MSG_SETMAP,     /* replace it whole: `map` = "a:b,x:none" */
 	DIATOM_MSG_LEVELS,     /* report volume and brightness */
 	DIATOM_MSG_SETLEVEL,   /* set `lkind` to `index` of `count` positions */
+	DIATOM_MSG_DISPLAY,    /* report the display mode and filter */
+	DIATOM_MSG_SETDISPLAY, /* set them: `dmode`, `dfilter` */
 	DIATOM_MSG_HANGUP      /* launcher went away; the game keeps running */
 } diatom_msg_kind;
 
@@ -134,6 +136,8 @@ typedef struct {
 	char value[128];       /* SETOPT */
 	char map[512];         /* SETMAP */
 	char lkind[32];        /* SETLEVEL: volume | brightness */
+	char dmode[32];        /* SETDISPLAY: a name from diatom_modes[] */
+	char dfilter[16];      /* SETDISPLAY: nearest | sharp */
 	int  index, count;     /* SETLEVEL: `count` is POSITIONS, not a max index */
 } diatom_msg;
 

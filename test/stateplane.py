@@ -49,6 +49,12 @@ def check(name, got, want):
     print(("  ok   " if ok else "  FAIL ") + f"{name}\n         got  {got}\n         want {want}")
     if not ok: fails.append(name)
 
+def check_that(name, cond, got):
+    """For assertions that are a predicate rather than an exact value - a rect
+    is geometry-dependent, so only its prefix is fixed."""
+    print(("  ok   " if cond else "  FAIL ") + f"{name}\n         got  {got}")
+    if not cond: fails.append(name)
+
 print("READY:", (r := drain(2.0)))
 check("proto version", [x for x in r if x.startswith("READY")][0].split("\t")[1], "proto=2")
 
@@ -84,6 +90,32 @@ check("bad pair refuses whole message", got,
       ["ERROR\tcode=bad_map\tmsg=a:b,nonsense:x", "MAP\tmap=x:b,y:a"])
 
 send("SETMAP\tmap=identity"); check("identity clears", drain(), ["MAP\tmap=identity"])
+
+# Display mode. RUNNING already emitted one, so drain before asking.
+drain(0.5)
+send("DISPLAY"); got = drain()
+check_that("display reports mode, filter and rect",
+           len(got) == 1 and got[0].startswith("DISPLAY\tmode=stretch\tfilter=nearest\trect="),
+           got)
+
+send("SETDISPLAY\tmode=integer"); got = drain()
+check_that("setdisplay changes mode, keeps filter",
+           len(got) == 1 and got[0].startswith("DISPLAY\tmode=integer\tfilter=nearest\trect="),
+           got)
+
+send("SETDISPLAY\tmode=nonsense"); got = drain()
+check("unknown mode refused, nothing changes", got,
+      ["ERROR\tcode=bad_display\tmsg=nonsense"])
+send("DISPLAY"); got = drain()
+check_that("still on integer after the refusal",
+           len(got) == 1 and got[0].startswith("DISPLAY\tmode=integer"), got)
+
+send("SETDISPLAY\tmode=aspect\tfilter=bogus"); got = drain()
+check("bad filter refuses the whole message", got,
+      ["ERROR\tcode=bad_display\tmsg=bogus"])
+send("DISPLAY"); got = drain()
+check_that("mode did not move either",
+           len(got) == 1 and got[0].startswith("DISPLAY\tmode=integer"), got)
 
 send("LEVELS"); check("desktop has no levels", drain(), ["LEVELS\tcount=0"])
 send("SETLEVEL\tkind=brightness\tindex=3\tcount=12")
