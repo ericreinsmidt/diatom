@@ -735,17 +735,17 @@ deliberate target**, not an edge case - Probotector is PAL-only Contra. Pacing
       not silence. Feedback is a 6px bar matching the device UI. Verified on
       hardware: silent at zero, no pop returning.
       [analysis](discussion/2026-08-25-volume-ownership.md).
-- [ ] **[LB]** **Volume changed in-game does not survive the exit.** Observed
-      repeatedly 2026-08-25: `digital volume` snaps back to 37 the moment the
-      launcher's UI resumes, because it re-applies its own stored level. So the
-      two hold separate notions of the volume and neither is told about the
-      other - turn it down mid-game, exit, and the launcher is loud again.
-      Protocol-shaped, not port-shaped: either the port reports the new level
-      upward for the launcher to adopt, or Diatom is given the launcher's level
-      at startup so they at least begin in agreement.
-- [ ] **[OPEN]** **Brightness keys still do nothing** during a game - the front
-      keys (`BTN_THUMBL`/`THUMBR`) are unmapped. Same argument as volume, same
-      place to put it, and the bar is already written.
+- [ ] **[LB]** **Volume and brightness set in-game do not survive the exit.**
+      Observed 2026-08-25: the launcher re-applies its own stored levels the
+      moment its UI resumes, so both are silently discarded. The two sides hold
+      separate notions of each and neither is told about the other. Protocol-
+      shaped, not port-shaped, and belongs with ADR-0019's remap message: either
+      the port reports levels upward, or the launcher supplies them at startup.
+- [x] **[OPEN]** **Brightness works during a game** too - front keys
+      (`BTN_THUMBL`/`THUMBR`, SDL 9/10), 20 steps sharing volume's scale, via
+      `DISP_LCD_SET_BRIGHTNESS` on `/dev/disp` (no `/sys/class/backlight` on
+      this device). Floored at 8/255: a black screen looks like a crash and
+      hides the bar you would need to recover. Same bar as volume, verified.
 - [x] **[LB]** Analog sticks: **no analog support at all** →
       **[ADR-0003](decisions/0003-digital-only-input.md)** *(Accepted)*
 - [x] **[OPEN]** Button count is **not** a constraint. Six is the maximum any

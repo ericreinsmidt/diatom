@@ -115,3 +115,35 @@ a second later.
 That fix is protocol-shaped rather than port-shaped, and belongs beside
 ADR-0019's remap message: either the port reports the level upward for the
 launcher to adopt, or the launcher supplies its level at startup. Tracked in §8.
+
+## Brightness, same shape (2026-08-25)
+
+Front keys, `BTN_THUMBL`/`THUMBR` (SDL 9 and 10), 20 steps sharing volume's
+level scale. Set via `DISP_LCD_SET_BRIGHTNESS` on `/dev/disp` - this device has
+no `/sys/class/backlight` at all, and the firmware's own settings library goes
+the same way. Plain command numbers with an `unsigned long[4]` block, so unlike
+the mixer there is no struct size to get wrong; `tools/dispprobe.c` validated
+the command numbers against the running kernel first anyway.
+
+**Floored at 8 of 255, deliberately.** A fully dark screen looks like a crash,
+and it would hide the very bar you need to find your way back. Volume has no
+floor because silence is a legitimate destination and darkness is not.
+
+Both share one bar and one timer, which is what PlayOS does on purpose - same
+pixels, different source value, so the feedback reads identically wherever you
+are. Confirmed in use: pressing brightness straight after volume reads as *"this
+is brightness now"* rather than as the volume moving by itself.
+
+### The bug that took two tries
+
+The first attempt showed a bar that never moved, for either control. The cause
+was an edit, not a design flaw: a search-and-replace anchored on the comment
+above `draw_gain_bar`, applied in the same batch that had just inserted
+`bright_nudge` above that comment. So the assignment meant for `gain_nudge`
+landed in `bright_nudge`, which ended up setting the shared level twice - the
+second overwriting it with volume's - while `gain_nudge` set the timer and never
+the level.
+
+Worth recording because the class recurs: **anchoring an edit on text that an
+earlier edit in the same batch has moved.** The symptom looked like a rendering
+problem and was a text-manipulation problem.

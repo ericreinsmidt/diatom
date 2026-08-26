@@ -156,9 +156,26 @@ struct dm_ctl_elem_value {
 #define GAIN_LEVELS  20         /* what the USER moves in: 20 steps of 5% */
 #define SPEAKER_CTL  "HpSpeaker Switch"   /* the only true mute on this codec */
 
+/* Backlight. This device has no /sys/class/backlight; the panel is driven by
+ * the Allwinner disp2 engine, and the firmware's own settings library goes
+ * through /dev/disp. These are plain command numbers with an unsigned long[4]
+ * argument block rather than _IOWR-encoded requests, so there is no struct size
+ * to get wrong - validated against the running kernel by tools/dispprobe.c
+ * before it was written here.
+ *
+ * Not inverted, unlike the mixer: 0 is dark, BRIGHT_RAW_MAX is full. */
+#define DISP_LCD_SET_BRIGHTNESS 0x102
+#define DISP_LCD_GET_BRIGHTNESS 0x103
+#define BRIGHT_RAW_MAX 255
+#define BRIGHT_RAW_MIN 8        /* never fully dark - a black screen looks broken */
+
+static int g_disp_fd = -1;
+static int g_bright = -1;       /* 0..GAIN_LEVELS, shares the level scale */
+
 static int g_mixer_fd = -1;
 static int g_level = -1;        /* 0..GAIN_LEVELS, or -1 before first read */
 static uint64_t g_osd_until;    /* show the bar until this time */
+static int      g_osd_level;    /* what the bar shows - volume OR brightness */
 
 /* The port thinks in percent and converts; the inverted register never leaves
  * this file. Rounded both ways so a read-back lands on the level it came from. */
@@ -216,6 +233,31 @@ static void gain_nudge(int dir)
 	/* Feedback lives here too: the launcher owns UI, but it is not drawing
 	 * while a game runs, so nothing else can show this. 1.5s from the last
 	 * press, so holding a key keeps the bar up. */
+	g_osd_level = g_level;
+	g_osd_until = diatom_port_now_us() + 1500000ull;
+}
+
+static void bright_nudge(int dir)
+{
+	unsigned long a[4] = { 0, 0, 0, 0 };
+	int raw;
+
+	if (g_disp_fd < 0) return;
+	if (g_bright < 0) {
+		raw = ioctl(g_disp_fd, DISP_LCD_GET_BRIGHTNESS, a);
+		if (raw < 0) return;
+		g_bright = (raw * GAIN_LEVELS + BRIGHT_RAW_MAX / 2) / BRIGHT_RAW_MAX;
+	}
+	g_bright += dir;
+	if (g_bright < 0)           g_bright = 0;
+	if (g_bright > GAIN_LEVELS) g_bright = GAIN_LEVELS;
+
+	raw = (g_bright * BRIGHT_RAW_MAX + GAIN_LEVELS / 2) / GAIN_LEVELS;
+	if (raw < BRIGHT_RAW_MIN) raw = BRIGHT_RAW_MIN;
+	a[1] = (unsigned long)raw;
+	if (ioctl(g_disp_fd, DISP_LCD_SET_BRIGHTNESS, a) < 0) return;
+
+	g_osd_level = g_bright;
 	g_osd_until = diatom_port_now_us() + 1500000ull;
 }
 
@@ -231,7 +273,7 @@ static void draw_gain_bar(uint8_t *base)
 	const unsigned bo = g_vinfo.blue.offset;
 	const int pad = 3, bar = 6;
 	const int W = (int)g_vinfo.xres;
-	int fill = g_level < 0 ? 0 : (W * g_level) / GAIN_LEVELS;
+	int fill = g_osd_level < 0 ? 0 : (W * g_osd_level) / GAIN_LEVELS;
 	int y, x;
 
 	for (y = 0; y < pad * 2 + bar; y++) {
@@ -298,6 +340,7 @@ bool diatom_port_init(diatom_port_caps *out)
 	SDL_AudioSpec want, have;
 
 	g_mixer_fd = open("/dev/snd/controlC0", O_RDWR);
+	g_disp_fd  = open("/dev/disp", O_RDWR);
 	g_input_debug   = getenv("DIATOM_INPUT_DEBUG") != NULL;
 	g_present_debug = getenv("DIATOM_PRESENT_DEBUG") != NULL;
 
@@ -416,6 +459,10 @@ void diatom_port_shutdown(void)
 		close(g_mixer_fd);
 		g_mixer_fd = -1;
 	}
+	/* Brightness is NOT restored: it is a user setting and the launcher
+	 * re-applies its own on resume anyway. Unlike the speaker switch, leaving
+	 * it strands nothing - the launcher's own control can always move it. */
+	if (g_disp_fd >= 0) { close(g_disp_fd); g_disp_fd = -1; }
 	if (g_fb)         munmap(g_fb, g_fb_size);
 	if (g_fb_fd >= 0) close(g_fb_fd);
 	if (g_joy)        SDL_JoystickClose(g_joy);
@@ -822,6 +869,13 @@ static const struct { int idx; int btn; } joymap[] = {
 #define JOY_VOL_DN 13
 #define JOY_VOL_UP 14
 
+/* The two front keys, reported as BTN_THUMBL/THUMBR - SDL indices 9 and 10,
+ * which minarch calls L3/R3. They are not game inputs; the firmware spends
+ * them on brightness and so do we. Absent from joymap[] on purpose: mapping
+ * them would send every brightness press to the core. */
+#define JOY_FN_L   9
+#define JOY_FN_R   10
+
 #define AXIS_L2 2
 #define AXIS_R2 5
 #define AXIS_PRESSED 16384
@@ -860,6 +914,14 @@ void diatom_port_input_poll(void)
 			}
 			if (ev.jbutton.button == JOY_VOL_DN) {
 				if (down) gain_nudge(-1);
+				break;
+			}
+			if (ev.jbutton.button == JOY_FN_R) {
+				if (down) bright_nudge(+1);
+				break;
+			}
+			if (ev.jbutton.button == JOY_FN_L) {
+				if (down) bright_nudge(-1);
 				break;
 			}
 
