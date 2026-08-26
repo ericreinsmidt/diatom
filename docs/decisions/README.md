@@ -71,3 +71,4 @@ never started.
 | [0020](0020-shared-state-plane.md) | The protocol grows a state plane, with one owner per item | Accepted |
 | [0021](0021-settle-the-rect-before-locking.md) | Lock the rect, but relock if what we locked onto was never real | Accepted |
 | [0022](0022-display-mode-on-the-state-plane.md) | Display mode joins the state plane, and is the second contested row | Accepted |
+| [0023](0023-core-licensing.md) | Diatom is MIT and ships no cores, which is what makes that safe | Proposed |

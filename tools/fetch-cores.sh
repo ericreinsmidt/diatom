@@ -24,6 +24,11 @@ set -eu
 
 ARCH=${ARCH:-linux/aarch64}
 BASE="https://buildbot.libretro.com/nightly/$ARCH/latest"
+# Licences come from libretro's own core-info repo, which is where the `license`
+# field a frontend would display is maintained. Recorded here rather than looked
+# up when someone wonders: the question "which of these are GPL" sat open in the
+# register for days, and the answer was three commands away the whole time.
+INFO="https://raw.githubusercontent.com/libretro/libretro-core-info/master"
 OUT=${OUT:-cores}
 MANIFEST=CORES.md
 
@@ -59,8 +64,12 @@ trap 'rm -rf "$tmp"' EXIT
 	echo "Source: \`$BASE\` - libretro's own buildbot. The path is **unpinned**;"
 	echo "these hashes are the pin."
 	echo
-	echo "| Core | Bytes | sha256 |"
-	echo "|---|---|---|"
+	echo "Licences are fetched with the binaries rather than remembered. The set is"
+	echo "**not uniformly GPL** and the differences matter to anyone shipping an"
+	echo "image - see [ADR-0023](docs/decisions/0023-core-licensing.md)."
+	echo
+	echo "| Core | Licence | Bytes | sha256 |"
+	echo "|---|---|---|---|"
 } > "$MANIFEST"
 
 for c in $CORES; do
@@ -74,8 +83,11 @@ for c in $CORES; do
 	so="$OUT/${c}_libretro.so"
 	sum=$(shasum -a 256 "$so" | cut -d' ' -f1)
 	sz=$(wc -c < "$so" | tr -d ' ')
-	echo "ok  $sz bytes"
-	printf '| `%s` | %s | `%s` |\n' "$c" "$sz" "$sum" >> "$MANIFEST"
+	lic=$(curl -sSfL --max-time 60 "$INFO/${c}_libretro.info" 2>/dev/null \
+	      | sed -n 's/^license *= *"\(.*\)"/\1/p' | head -1)
+	[ -n "$lic" ] || lic="UNKNOWN - fetch failed"
+	echo "ok  $sz bytes  $lic"
+	printf '| `%s` | %s | %s | `%s` |\n' "$c" "$lic" "$sz" "$sum" >> "$MANIFEST"
 done
 
 {

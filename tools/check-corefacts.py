@@ -47,7 +47,11 @@ FACTS = os.path.join(ROOT, "docs", "reference", "core-facts.md")
 MANIFEST = os.path.join(ROOT, "CORES.md")
 DOCS = os.path.join(ROOT, "docs")
 
-PIN = re.compile(r"`([a-z0-9_]+)`\s*\|\s*\d+\s*\|\s*`([a-f0-9]{64})`")
+# Name and hash, with whatever columns CORES.md carries between them. An earlier
+# version pinned the byte count's position and broke the day a licence column was
+# added - reporting that every core had been "unpinned", which is alarming and
+# false. Match the two things that identify a core, not the table's shape.
+PIN = re.compile(r"`([a-z0-9_]+)`\s*\|.*?\|\s*`([a-f0-9]{64})`")
 FACT_PIN = re.compile(r"^- `([a-z0-9_]+)` `([a-f0-9]{64})`", re.M)
 
 

@@ -136,11 +136,12 @@ verified rather than assumed.
       deciding difference is **attribution**, which is 0BSD's only practical
       cost: the code is ~2,400 lines but the artifact is the ADRs, the spikes
       and this register, and a copyright line is the thread back to them.
-- [ ] **[OPEN]** Confirm the licensing position on `dlopen`-ing GPL cores from a
-      permissively licensed frontend. The enabling fact is that `libretro.h` is
-      itself permissively licensed, explicitly so any-license frontends can host
-      any-license cores. Worth writing down once, properly, rather than
-      re-deciding later.
+- [x] **[OPEN]** Licensing position on `dlopen`-ing GPL cores from an MIT
+      frontend → **[ADR-0023](decisions/0023-core-licensing.md)** *(Proposed)*.
+      MIT is GPL-compatible, so even the strictest reading yields no conflict,
+      and Diatom ships no cores. **GPL was the easy half**: two of five pinned
+      cores are *non-commercial*, covering four of nine systems, which the
+      question never contemplated. Licences now recorded by `fetch-cores.sh`.
 - [x] **[LB]** Standalone repository → **[ADR-0002](decisions/0002-separate-repository.md)** *(Accepted)*
 - [x] **[LB]** Decision-recording practice: ADRs → **[ADR-0001](decisions/0001-record-architecture-decisions.md)** *(Accepted)*
 - [ ] **[DEFERRED]** Consumption model - submodule, subtree, vendored copy, or
