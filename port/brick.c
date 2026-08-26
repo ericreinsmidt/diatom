@@ -400,7 +400,22 @@ void diatom_port_shutdown(void)
 	}
 	free(g_colmap);
 	free(g_rowmap);
-	if (g_mixer_fd >= 0) { close(g_mixer_fd); g_mixer_fd = -1; }
+	/* Always hand the speaker back on, whatever the level was.
+	 *
+	 * Muting at level 0 switches HpSpeaker off, and that is device state which
+	 * outlives this process. Leaving it off strands the device: the launcher
+	 * drives `digital volume`, NOT this switch, so turning the volume up there
+	 * cannot undo it and the machine simply appears to have lost its speaker.
+	 *
+	 * The volume LEVEL is deliberately not restored - that is a user setting
+	 * and belongs wherever they left it. The switch is a mechanism, and nothing
+	 * above this port knows it exists. */
+	if (g_mixer_fd >= 0) {
+		long on = 1;
+		ctl_io(SPEAKER_CTL, &on, 1);
+		close(g_mixer_fd);
+		g_mixer_fd = -1;
+	}
 	if (g_fb)         munmap(g_fb, g_fb_size);
 	if (g_fb_fd >= 0) close(g_fb_fd);
 	if (g_joy)        SDL_JoystickClose(g_joy);
