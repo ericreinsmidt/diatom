@@ -735,6 +735,14 @@ deliberate target**, not an edge case - Probotector is PAL-only Contra. Pacing
       not silence. Feedback is a 6px bar matching the device UI. Verified on
       hardware: silent at zero, no pop returning.
       [analysis](discussion/2026-08-25-volume-ownership.md).
+- [ ] **[LB]** **Volume changed in-game does not survive the exit.** Observed
+      repeatedly 2026-08-25: `digital volume` snaps back to 37 the moment the
+      launcher's UI resumes, because it re-applies its own stored level. So the
+      two hold separate notions of the volume and neither is told about the
+      other - turn it down mid-game, exit, and the launcher is loud again.
+      Protocol-shaped, not port-shaped: either the port reports the new level
+      upward for the launcher to adopt, or Diatom is given the launcher's level
+      at startup so they at least begin in agreement.
 - [ ] **[OPEN]** **Brightness keys still do nothing** during a game - the front
       keys (`BTN_THUMBL`/`THUMBR`) are unmapped. Same argument as volume, same
       place to put it, and the bar is already written.

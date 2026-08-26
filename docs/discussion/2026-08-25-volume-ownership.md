@@ -89,3 +89,29 @@ Recorded in §6 and in `tools/brick-device-run.sh`, both learned expensively:
   louder, 0 is loudest - while the driver advertises `step=+1.16dB`.
 - `Headphone Volume` is **not** a speaker level. Raising it routes to the
   headphone jack and mutes the speakers. PlayOS zeroes it deliberately.
+
+## Built 2026-08-25, and what it does not cover
+
+The port owns it, as recommended. 20 steps of 5%, driven by a raw ioctl on
+`/dev/snd/controlC0` (no alsa-lib in the sysroot, and forking `tinymix` per
+keypress is a process spawn in the input path). Level 0 switches `HpSpeaker`
+off, because `digital volume` advertises `mute=0` and its minimum is about
+-74 dB rather than silence - audible with an ear against the speaker. Shutdown
+hands the speaker back unconditionally.
+
+**It is in-game only**, and that is correct rather than a limitation. Whoever
+owns the input loop handles these keys because nothing else sees them, and
+ownership alternates cleanly - the launcher has the display and the input
+between games and during an in-game menu pause, so it handles volume then.
+There is no window where neither does.
+
+**What is not handled is that the two do not agree.** The launcher re-applies
+its own stored level the moment its UI resumes, so a change made in-game is
+silently discarded on exit. Shutdown deliberately does not restore the level -
+it is a user setting - but that reasoning was incomplete, because *not*
+restoring it is not the same as it persisting when something else overwrites it
+a second later.
+
+That fix is protocol-shaped rather than port-shaped, and belongs beside
+ADR-0019's remap message: either the port reports the level upward for the
+launcher to adopt, or the launcher supplies its level at startup. Tracked in §8.
