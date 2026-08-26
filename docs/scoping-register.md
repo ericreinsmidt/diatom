@@ -730,10 +730,10 @@ deliberate target**, not an edge case - Probotector is PAL-only Contra. Pacing
       handled in the port - the Brick's front keys report as
       `BTN_THUMBL`/`THUMBR` and stay unmapped.
 - [x] **[LB]** **Volume keys work during a game**, handled in the port and
-      never reported upward - whoever owns the input loop must, because nothing
-      else sees them. 20 steps of 5%; the inverted `digital volume` register
-      never leaves `brick.c`. Feedback is a 6px bar across the top, matching
-      what the device UI draws. Verified on hardware.
+      never reported upward. 20 steps of 5%; level 0 cuts `HpSpeaker Switch`
+      because `digital volume` advertises `mute=0` - its minimum is ~-74 dB,
+      not silence. Feedback is a 6px bar matching the device UI. Verified on
+      hardware: silent at zero, no pop returning.
       [analysis](discussion/2026-08-25-volume-ownership.md).
 - [ ] **[OPEN]** **Brightness keys still do nothing** during a game - the front
       keys (`BTN_THUMBL`/`THUMBR`) are unmapped. Same argument as volume, same

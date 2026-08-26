@@ -89,15 +89,17 @@ int main(int argc, char **argv)
 
 	if (fd < 0) { perror("open /dev/snd/controlC0"); return 2; }
 
-	if (elem(fd, "digital volume", &v, 0) < 0) { perror("read"); return 1; }
-	printf("digital volume = %ld\n", v);
-
-	if (argc > 1) {
-		v = strtol(argv[1], NULL, 10);
-		if (elem(fd, "digital volume", &v, 1) < 0) { perror("write"); return 1; }
-		v = 0;
-		if (elem(fd, "digital volume", &v, 0) < 0) { perror("re-read"); return 1; }
-		printf("after write   = %ld\n", v);
+	{
+		const char *ctl = argc > 1 ? argv[1] : "digital volume";
+		if (elem(fd, ctl, &v, 0) < 0) { perror("read"); return 1; }
+		printf("%s = %ld\n", ctl, v);
+		if (argc > 2) {
+			v = strtol(argv[2], NULL, 10);
+			if (elem(fd, ctl, &v, 1) < 0) { perror("write"); return 1; }
+			v = 0;
+			if (elem(fd, ctl, &v, 0) < 0) { perror("re-read"); return 1; }
+			printf("after write   = %ld\n", v);
+		}
 	}
 	close(fd);
 	return 0;

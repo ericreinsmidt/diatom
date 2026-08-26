@@ -154,6 +154,7 @@ struct dm_ctl_elem_value {
 #define GAIN_CTL     "digital volume"
 #define GAIN_RAW_MAX 63         /* control range; 0 is loudest, 63 silent */
 #define GAIN_LEVELS  20         /* what the USER moves in: 20 steps of 5% */
+#define SPEAKER_CTL  "HpSpeaker Switch"   /* the only true mute on this codec */
 
 static int g_mixer_fd = -1;
 static int g_level = -1;        /* 0..GAIN_LEVELS, or -1 before first read */
@@ -170,14 +171,14 @@ static int raw_to_level(int raw)
 	return ((GAIN_RAW_MAX - raw) * GAIN_LEVELS + GAIN_RAW_MAX / 2) / GAIN_RAW_MAX;
 }
 
-static int gain_io(long *val, int write)
+static int ctl_io(const char *name, long *val, int write)
 {
 	struct dm_ctl_elem_value v;
 
 	if (g_mixer_fd < 0) return -1;
 	memset(&v, 0, sizeof v);
 	v.id.iface = 2;                                 /* SNDRV_CTL_ELEM_IFACE_MIXER */
-	snprintf((char *)v.id.name, sizeof v.id.name, "%s", GAIN_CTL);
+	snprintf((char *)v.id.name, sizeof v.id.name, "%s", name);
 	if (write) {
 		v.value.integer.value[0] = *val;
 		return ioctl(g_mixer_fd, DM_CTL_ELEM_WRITE, &v);
@@ -186,6 +187,8 @@ static int gain_io(long *val, int write)
 	*val = v.value.integer.value[0];
 	return 0;
 }
+
+static int gain_io(long *val, int write) { return ctl_io(GAIN_CTL, val, write); }
 
 /* `dir` is +1 for louder. One step is 5% of the range. */
 static void gain_nudge(int dir)
@@ -201,6 +204,14 @@ static void gain_nudge(int dir)
 	if (g_level > GAIN_LEVELS) g_level = GAIN_LEVELS;
 	v = level_to_raw(g_level);
 	if (gain_io(&v, 1) < 0) return;
+
+	/* Zero has to cut the path, not just attenuate it. The control advertises
+	 * `mute=0`, meaning its minimum is maximum attenuation - about -74 dB -
+	 * and not silence. Measured: with an ear against the speaker, level 0 is
+	 * still audible, and a mic across the room cannot tell it from the room.
+	 * So the speaker switch carries the last step. */
+	v = (g_level > 0);
+	ctl_io(SPEAKER_CTL, &v, 1);
 
 	/* Feedback lives here too: the launcher owns UI, but it is not drawing
 	 * while a game runs, so nothing else can show this. 1.5s from the last
