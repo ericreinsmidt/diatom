@@ -982,13 +982,12 @@ pad attached, which is why the real pad has a Mode switch.
       before EXIT. Verified on hardware: two Contra sessions, the second
       resuming the first's state, artifacts at PlayOS's exact paths.
 - [ ] **[LB]** Rewind: support or drop? Real RAM cost on a 1GB device.
-- [x] **[OPEN]** **Zipped content loads** - one ROM per archive, No-Intro
-      style, extracted by the host (largest entry; stored or deflate, zlib by
-      dlopen so nothing links it). Found by the FIRST game a real launcher
-      handed over: PlayOS's whole library is zipped and protodrive's never
-      was, which is the stand-in-tests-the-author's-expectations failure §13
-      predicted, arriving in under a minute. A need_fullpath core gets the
-      extraction staged to tmpfs; everything else gets the buffer.
+- [x] **[OPEN]** **Zipped content loads** - one ROM per archive, extracted by
+      the host (largest entry, stored or deflate, zlib by dlopen so nothing
+      links it); need_fullpath cores get it staged to tmpfs. Found by the
+      FIRST game a real launcher handed over: PlayOS's whole library is
+      zipped, protodrive's never was - the stand-in failure §13 predicted,
+      arriving in under a minute of first contact.
 - [x] **[OPEN]** CD support → done for PC Engine. **CHD needs nothing** - read
       natively at 59.81 fps against a 59.8200 target, 0 resyncs. The System Card
       is named by the launcher →
