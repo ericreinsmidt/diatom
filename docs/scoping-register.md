@@ -621,14 +621,12 @@ Two levers the spike discovered:
 - [x] **[OPEN]** Frame overrun → audio never blocks and drops on overflow; the
       frame loop drops its debt past four frames behind (§7). A blocking write
       would pace the whole program off the audio clock, which rules out DRC.
-- [ ] **[LB]** **The resampler is linear interpolation and `audio.c` says so:**
-      *"a placeholder... good enough to hear a game, not good enough to ship."*
-      Decided by default rather than chosen. libsamplerate is what minarch uses
-      and its licence needs checking before depending on it; hand-rolled cubic
-      is the other candidate. **No audible problem has been measured** - the
-      hardest ratio found, mGBA at 131072 Hz into 48000 (2.73:1), held at 0
-      resyncs and +0.209% drift - so this is a known-provisional rather than a
-      known-broken.
+- [x] **[LB]** **The resampler is a 32-tap polyphase windowed sinc**, replacing
+      linear interpolation. SFDR up a mean of **28.5 dB** over seven rate pairs
+      (worst case 21.7 → 68.0), and the passband stops drooping: linear was
+      -3.5 dB at 11 kHz, this is flat. Costs +0.16 ms of a 16.6 ms frame and no
+      dependency. "No audible problem has been measured" was true only in that
+      nobody had looked. [measurement](spikes/2026-08-26-resampler.md)
 - [ ] **[LB]** **Who sets core-option defaults?** FCEUmm ships
       `fceumm_sndquality = Low`, plus "Reduce Triangle Channel Popping" and
       "Reduce DMC Channel Popping" both **disabled**. Very High plus both cut

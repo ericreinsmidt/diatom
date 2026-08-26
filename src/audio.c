@@ -1,17 +1,22 @@
-/* Resampling, provisionally.
+/* Resampling.
  *
  * Cores emit whatever rate their hardware ran at; the device runs at whatever
  * it runs at. Measured across six cores: 32040, 32768, 44100, 44100, 48000,
  * 65536 Hz. mGBA's 65536 is above any device rate, so this resamples in both
  * directions and never by a tidy ratio.
  *
- * This is LINEAR INTERPOLATION and it is a placeholder. Register §6 has the
- * real design open: dynamic rate control, nudging the ratio to keep the port's
+ * A POLYPHASE WINDOWED-SINC FIR, 32 taps over 512 phases. It replaced linear
+ * interpolation, which was a placeholder that measurement caught: on Contra,
+ * 18% of 50 ms windows left the resampler with MORE energy above 10 kHz than
+ * they arrived with. A lowpass cannot add high frequencies, so that energy was
+ * imaging - linear interpolation attenuates the spectral images a rate change
+ * creates by only ~13 dB near Nyquist, and they fold back into the audible
+ * band. A 32-tap Blackman-windowed sinc puts them below -70 dB.
+ *
+ * Rate control rides on top: the ratio is nudged +-0.5% to keep the port's
  * buffer near half full. That is not optional here - no console runs at 60Hz
  * (measured: 50.0070 PAL, 59.7275, 59.8200, 60.0000), so a fixed ratio drifts
  * against the panel forever and eventually underruns or overflows.
- *
- * Good enough to hear a game. Not good enough to ship.
  */
 #include <stdlib.h>
 #include <string.h>
@@ -46,11 +51,29 @@ void diatom_audio_tap_close(void)
 #define P_GAIN 1.0
 #define I_GAIN 0.002     /* per frame; deliberately slow, ~8s to full authority */
 
+/* The filter. 32 taps is ~70 dB of image rejection with a Blackman window,
+ * against linear interpolation's ~13; 512 phases put the residual timing jitter
+ * around 20 ns, far below anything audible, which is what lets the inner loop
+ * pick a phase rather than interpolate between two and do twice the work.
+ *
+ * Both tables are static. Diatom allocates three times in its whole life
+ * (§11) and that is a property worth not spending here - 98 kB of BSS costs
+ * nothing on a device with 975 MB and keeps the frame loop allocation-free. */
+#define TAPS    32
+#define HALF    (TAPS / 2)
+#define PHASES  512
+#define ROLLOFF 0.92           /* cutoff, as a fraction of the lower Nyquist */
+#define MAX_IN  8192           /* input frames accepted in one pass */
+
+static void build_kernel(void);
+
+static float    g_kern[PHASES][TAPS];
+static int16_t  g_buf[MAX_IN + TAPS][2];
+static size_t   g_have;             /* frames held in g_buf */
+static double   g_pos;              /* read position within g_buf */
+
 static double   g_base_ratio = 1.0; /* src frames per dst frame, nominal */
 static double   g_ratio      = 1.0; /* nominal, adjusted by rate control */
-static double   g_phase;
-static int16_t  g_prev[2];
-static bool     g_have_prev;
 static int      g_capacity;
 static double   g_integral;
 static uint64_t g_dropped;      /* frames the port would not take */
@@ -119,12 +142,25 @@ uint64_t diatom_audio_dropped(void) { return g_dropped; }
 
 void diatom_audio_configure(double src_rate, int dst_rate, int capacity_frames)
 {
-	if (src_rate <= 0.0 || dst_rate <= 0) { g_base_ratio = g_ratio = 1.0; return; }
+	if (src_rate <= 0.0 || dst_rate <= 0) {
+		g_base_ratio = g_ratio = 1.0;
+		build_kernel();
+		memset(g_buf, 0, sizeof g_buf);
+		g_have = TAPS;
+		g_pos  = HALF;
+		return;
+	}
 	g_base_ratio = src_rate / (double)dst_rate;
 	g_ratio      = g_base_ratio;
-	g_phase      = 0.0;
-	g_have_prev  = false;
 	g_capacity   = capacity_frames;
+
+	build_kernel();
+	/* Start with a window's worth of silence so the first real sample is
+	 * filtered against something defined rather than against whatever the last
+	 * game left behind. */
+	memset(g_buf, 0, sizeof g_buf);
+	g_have = TAPS;
+	g_pos  = HALF;
 	g_integral   = 0.0;
 	g_dropped    = 0;
 	g_peak       = 0;
@@ -213,75 +249,113 @@ double diatom_audio_ratio_drift(void)
 	return g_base_ratio > 0.0 ? (g_ratio / g_base_ratio) - 1.0 : 0.0;
 }
 
-/* Read frame k of the virtual stream: index 0 is the frame carried over from the
- * previous block, 1..frames are this block. That carry is what lets phase run
- * continuously across calls instead of restarting each time. */
-static void tap(const int16_t *in, size_t frames, int k, double *l, double *r)
+static double sinc(double x)
 {
-	const int16_t *p;
-	if (k <= 0)                 p = g_prev;
-	else if ((size_t)k > frames) p = &in[(frames - 1) * 2];
-	else                         p = &in[(k - 1) * 2];
-	*l = p[0];
-	*r = p[1];
+	if (fabs(x) < 1e-12) return 1.0;
+	x *= M_PI;
+	return sin(x) / x;
+}
+
+/* Built once per session from the NOMINAL ratio. Rate control moves the real
+ * ratio by at most 0.5%, which shifts the cutoff by less than a semitone's
+ * worth of bandwidth at 22 kHz - inaudible, and not worth rebuilding a table
+ * every frame to chase. */
+static void build_kernel(void)
+{
+	int p, t;
+
+	/* Downsampling has to lowpass at the DESTINATION Nyquist or the content
+	 * above it folds back as aliasing; upsampling only has to reject the
+	 * images above the SOURCE Nyquist. One expression covers both. */
+	double fc = 0.5 * ROLLOFF;
+	if (g_base_ratio > 1.0) fc /= g_base_ratio;
+
+	for (p = 0; p < PHASES; p++) {
+		double frac = (double)p / PHASES;
+		double sum = 0.0;
+
+		for (t = 0; t < TAPS; t++) {
+			double x = (double)(t - HALF + 1) - frac;
+			double u = (x + HALF) / (double)TAPS;      /* 0..1 across the window */
+			double w = 0.42 - 0.50 * cos(2.0 * M_PI * u)
+			                + 0.08 * cos(4.0 * M_PI * u);
+			double v = 2.0 * fc * sinc(2.0 * fc * x) * w;
+
+			g_kern[p][t] = (float)v;
+			sum += v;
+		}
+		/* Normalise every phase to unity DC gain independently. Skipping this
+		 * leaves each phase with a slightly different gain, and since the phase
+		 * cycles at the resampling rate the difference becomes amplitude
+		 * modulation - a tone at the beat frequency, which is exactly the kind
+		 * of artefact this filter exists to remove. */
+		if (sum != 0.0)
+			for (t = 0; t < TAPS; t++) g_kern[p][t] /= (float)sum;
+	}
+}
+
+static int16_t clip(double v)
+{
+	/* A windowed sinc has negative lobes, so the tap sum exceeds unity on a
+	 * transient even though its DC gain is exactly one. Linear interpolation
+	 * could never overshoot its inputs; this can, and unclamped it would wrap. */
+	if (v >  32767.0) return  32767;
+	if (v < -32768.0) return -32768;
+	return (int16_t)(v > 0 ? v + 0.5 : v - 0.5);
 }
 
 size_t diatom_audio_push(const int16_t *in, size_t frames)
 {
 	int16_t out[OUT_CHUNK * 2];
 	size_t produced = 0, total = 0;
+	size_t keep;
 
 	if (!in || !frames) return 0;
 
-	/* Pass-through when the rates already match - a core answering
-	 * GET_TARGET_SAMPLE_RATE lands here, which is the point of implementing it.
-	 * Rate control is skipped too; there is nothing to nudge. */
-	if (g_ratio > 0.9999 && g_ratio < 1.0001) {
-		push(in, frames);
-		/* Carry the last frame even though nothing interpolated it.
-		 *
-		 * `tap()` blends the previous block's final sample with this block's
-		 * first, so `g_prev` must track EVERY block, not only the ones this
-		 * path skips. Returning early without it meant the first interpolated
-		 * frame after any pass-through run blended against a sample from
-		 * whenever interpolation last happened - seconds earlier, at an
-		 * unrelated amplitude. A guaranteed click on every transition.
-		 *
-		 * NES is the only system that meets it: FCEUmm reports 48000 into a
-		 * 48000 device, so the nominal ratio is 1.0 and rate control walks it
-		 * back and forth across this window continuously. Measured 2026-08-25
-		 * on Contra - 18% of 50ms windows left the resampler with MORE energy
-		 * above 10kHz than they arrived with, which a lowpass cannot do. */
-		g_prev[0] = in[(frames - 1) * 2];
-		g_prev[1] = in[(frames - 1) * 2 + 1];
-		g_have_prev = true;
-		return frames;
+	/* Larger blocks than the buffer holds are split rather than truncated.
+	 * Nothing observed emits more than ~1100 frames at once - mGBA's 65536 Hz
+	 * over one frame is the worst - but a core is free to. */
+	while (frames > MAX_IN) {
+		total += diatom_audio_push(in, MAX_IN);
+		in    += MAX_IN * 2;
+		frames -= MAX_IN;
 	}
 
-	if (!g_have_prev) {
-		g_prev[0] = in[0];
-		g_prev[1] = in[1];
-		g_have_prev = true;
-	}
+	memcpy(&g_buf[g_have][0], in, frames * 2 * sizeof(int16_t));
+	g_have += frames;
 
-	/* g_phase is the read position in the virtual stream and PERSISTS across
-	 * calls. The previous implementation broke out when the block ran dry and
-	 * dropped the pending output frame - about one per call, ~60/second against
-	 * 48000, a 0.125% leak. Small enough to look like clock drift and big enough
-	 * to drain the buffer to empty in twenty seconds, with rate control pinned at
-	 * its limit the whole way. */
-	while (g_phase < (double)frames) {
-		int idx = (int)g_phase;
-		double t = g_phase - idx;
-		double al, ar, bl, br;
+	/* There is NO pass-through path any more, and its absence is the point.
+	 *
+	 * A FIR delays by half its length; a straight copy does not. Switching
+	 * between them mid-stream jumps the output by 16 samples, which is a click.
+	 * FCEUmm reports 48000 into a 48000 device, so its nominal ratio is exactly
+	 * 1.0 and rate control walks the real one back and forth across that
+	 * boundary continuously - it would have clicked constantly. The old code
+	 * had a narrower version of this bug and patched it by carrying one sample
+	 * across the seam; removing the seam removes the class.
+	 *
+	 * What it costs at ratio 1.0 is a lowpass at ~22 kHz and 64 multiplies per
+	 * frame. Neither is worth a mode switch.
+	 *
+	 * Produce only where the whole window fits. `g_pos` persists across calls:
+	 * an earlier version restarted it each block and dropped the pending output
+	 * frame, about one per call - a 0.125% leak, small enough to look like
+	 * clock drift and large enough to drain the buffer in twenty seconds. */
+	while ((size_t)((int)g_pos + HALF) < g_have) {
+		int centre = (int)g_pos;
+		const float *k = g_kern[(int)((g_pos - centre) * PHASES)];
+		double al = 0.0, ar = 0.0;
+		int t;
 
-		tap(in, frames, idx,     &al, &ar);
-		tap(in, frames, idx + 1, &bl, &br);
-
-		out[produced * 2]     = (int16_t)(al + (bl - al) * t);
-		out[produced * 2 + 1] = (int16_t)(ar + (br - ar) * t);
+		for (t = 0; t < TAPS; t++) {
+			const int16_t *sp = &g_buf[centre + t - HALF + 1][0];
+			al += sp[0] * (double)k[t];
+			ar += sp[1] * (double)k[t];
+		}
+		out[produced * 2]     = clip(al);
+		out[produced * 2 + 1] = clip(ar);
 		produced++;
-		g_phase += g_ratio;
+		g_pos += g_ratio;
 
 		if (produced == OUT_CHUNK) {
 			push(out, produced);
@@ -290,9 +364,15 @@ size_t diatom_audio_push(const int16_t *in, size_t frames)
 		}
 	}
 
-	g_phase -= (double)frames;          /* carry the remainder forward */
-	g_prev[0] = in[(frames - 1) * 2];
-	g_prev[1] = in[(frames - 1) * 2 + 1];
+	/* Slide the window down, keeping the history the next call's leftmost tap
+	 * will reach for. */
+	keep = (size_t)((int)g_pos - HALF + 1);
+	if ((int)g_pos - HALF + 1 > 0 && keep <= g_have) {
+		memmove(&g_buf[0][0], &g_buf[keep][0],
+		        (g_have - keep) * 2 * sizeof(int16_t));
+		g_have -= keep;
+		g_pos  -= (double)keep;
+	}
 
 	if (produced) { push(out, produced); total += produced; }
 	return total;

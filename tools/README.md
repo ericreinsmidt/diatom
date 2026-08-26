@@ -331,3 +331,51 @@ freed.** The claim was "nothing per frame"; the answer is very nearly nothing at
 all. Driven by `tools/conform-device.sh`, which also asserts the 24 MB budget -
 and both assertions were run to failure on purpose, with the ceiling forced below
 the measured figure, before either was trusted.
+
+---
+
+## resampleprobe.c + spurs.py - what does the resampler do to a signal?
+
+A game is a bad test bench for a filter, because nobody knows its spectrum
+exactly. A tone is a good one: the input has one component, so everything else
+in the output was manufactured by the filter and there is nothing to argue
+about.
+
+`resampleprobe` links `src/audio.c` itself rather than a copy that could drift,
+stubs the two port calls it makes, and pushes a sine at a chosen ratio. It
+reports a steady half-full queue so rate control sits still and the measurement
+is of the filter rather than of the controller chasing a level.
+
+    build/desktop/tools/resampleprobe 32040 48000 8000 3 /tmp/t.raw
+    python3 tools/spurs.py /tmp/t.raw 48000 8000
+
+This is what replaced linear interpolation, measured 2026-08-26 - SFDR, worst
+spur relative to the tone, bigger is better:
+
+| source → dest | tone | linear | windowed sinc |
+|---|---|---|---|
+| 32040 → 48000 | 8 kHz | **21.7 dB** | **68.0 dB** |
+| 32768 → 48000 | 5 kHz | 32.6 dB | 72.3 dB |
+| 65536 → 48000 | 8 kHz | 36.2 dB | 74.4 dB |
+| 48000 → 48000 | 3 kHz | 92.5 dB | 92.5 dB |
+
+The last row is the control: at a ratio of exactly 1.0 there is nothing to
+resample, both hit the 16-bit quantisation floor, and neither filter can be
+blamed for what is left.
+
+## hfprobe.py - and why it is not enough on its own
+
+`hfprobe` compares energy above 10 kHz on the two sides of `--tap-audio`. A
+lowpass cannot add high frequencies, so a window that leaves with more than it
+arrived with is producing something. That is a real detector and it found the
+imaging in linear interpolation: 17.5% of 50 ms windows on Contra.
+
+**It cannot rank two filters, and it was believed when it tried.** Pointed at
+the replacement it reported 25% - apparently worse. The spectra said otherwise:
+linear interpolation is **2.5 dB down at 15-20 kHz** and was scoring well by
+discarding the treble that belonged there.
+
+*Losing signal and not adding artefacts look identical to a single band ratio.*
+Use `hfprobe` to ask whether something is wrong on real content, and
+`resampleprobe`/`spurs.py` to ask which of two filters is better. That distinction
+cost an hour and is the most portable thing in this file.

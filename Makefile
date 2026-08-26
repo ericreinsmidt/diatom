@@ -66,7 +66,7 @@ all: $(BIN)
 # it, and deliberately not built by `all`. Cores and ROMs are supplied locally;
 # see tools/README.md.
 TOOLS_DIR := $(BUILD)/tools
-TOOLS     := $(TOOLS_DIR)/envlog $(TOOLS_DIR)/rssprobe
+TOOLS     := $(TOOLS_DIR)/envlog $(TOOLS_DIR)/rssprobe $(TOOLS_DIR)/resampleprobe
 TOOL_CFLAGS := -std=gnu11 -Wall -Wextra -Wno-unused-parameter -O1 -Isrc -I$(TOOLS_DIR)
 
 tools: $(TOOLS)
@@ -78,6 +78,10 @@ $(TOOLS_DIR)/env_names.h: src/libretro.h tools/gen_env_names.py
 $(TOOLS_DIR)/envlog: tools/envlog.c $(TOOLS_DIR)/env_names.h
 	@mkdir -p $(TOOLS_DIR)
 	$(CC) $(TOOL_CFLAGS) -o $@ $< $(TOOL_LDFLAGS)
+
+$(TOOLS_DIR)/resampleprobe: tools/resampleprobe.c src/audio.c
+	@mkdir -p $(TOOLS_DIR)
+	$(CC) $(TOOL_CFLAGS) -Iinclude -o $@ $^ -lm $(TOOL_LDFLAGS)
 
 $(TOOLS_DIR)/rssprobe: tools/rssprobe.c
 	@mkdir -p $(TOOLS_DIR)
