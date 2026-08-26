@@ -163,19 +163,40 @@ struct dm_ctl_elem_value {
  * to get wrong - validated against the running kernel by tools/dispprobe.c
  * before it was written here.
  *
- * Not inverted, unlike the mixer: 0 is dark, BRIGHT_RAW_MAX is full. */
+ * Not inverted, unlike the mixer: 0 is dark, 255 is full. */
 #define DISP_LCD_SET_BRIGHTNESS 0x102
 #define DISP_LCD_GET_BRIGHTNESS 0x103
-#define BRIGHT_RAW_MAX 255
-#define BRIGHT_RAW_MIN 8        /* never fully dark - a black screen looks broken */
+
+/* Brightness is perceived proportionally, not linearly. Measured 2026-08-26:
+ * eight successive halvings of duty were all still visible, so equal *ratios*
+ * are what read as equal steps. The 20-step linear ramp this replaces put nine
+ * of its twenty steps above raw 128, where consecutive ones cannot be told
+ * apart, and left raw 1-12 unreachable at any setting.
+ *
+ * The rungs are the launcher's own, read off PlayOS's brightness keys, with two
+ * added below. Matching them is not deference: every value here except the
+ * bottom two is one the launcher also has a level for, so a brightness set in a
+ * game means the same thing on the other side of the exit instead of snapping
+ * to whatever is nearest. The step COUNT is launcher policy and belongs in the
+ * protocol eventually; this is the standalone default.
+ *
+ * The first rung is the panel's measured floor - 0 and 1 are black, and the
+ * driver clamps neither. PlayOS's own bottom level is raw 1 and is deliberately
+ * not copied. This table is also the only clamp there is: no arithmetic here
+ * can produce a value off its ends. See docs/spikes/2026-08-26-backlight-floor.md */
+static const unsigned char bright_ladder[] = {
+	2, 4, 8, 16, 32, 48, 72, 96, 128, 160, 192, 255
+};
+#define BRIGHT_LEVELS ((int)(sizeof bright_ladder / sizeof bright_ladder[0]) - 1)
 
 static int g_disp_fd = -1;
-static int g_bright = -1;       /* 0..GAIN_LEVELS, shares the level scale */
+static int g_bright = -1;       /* index into bright_ladder, or -1 unread */
 
 static int g_mixer_fd = -1;
 static int g_level = -1;        /* 0..GAIN_LEVELS, or -1 before first read */
 static uint64_t g_osd_until;    /* show the bar until this time */
 static int      g_osd_level;    /* what the bar shows - volume OR brightness */
+static int      g_osd_max = GAIN_LEVELS;   /* out of what: the two differ now */
 
 /* The port thinks in percent and converts; the inverted register never leaves
  * this file. Rounded both ways so a read-back lands on the level it came from. */
@@ -234,30 +255,37 @@ static void gain_nudge(int dir)
 	 * while a game runs, so nothing else can show this. 1.5s from the last
 	 * press, so holding a key keeps the bar up. */
 	g_osd_level = g_level;
+	g_osd_max   = GAIN_LEVELS;
 	g_osd_until = diatom_port_now_us() + 1500000ull;
 }
 
 static void bright_nudge(int dir)
 {
 	unsigned long a[4] = { 0, 0, 0, 0 };
-	int raw;
+	int raw, i;
 
 	if (g_disp_fd < 0) return;
 	if (g_bright < 0) {
 		raw = ioctl(g_disp_fd, DISP_LCD_GET_BRIGHTNESS, a);
 		if (raw < 0) return;
-		g_bright = (raw * GAIN_LEVELS + BRIGHT_RAW_MAX / 2) / BRIGHT_RAW_MAX;
+		/* Nearest rung, so the first press moves one step from where the
+		 * launcher left the panel rather than jumping. Exact for every level
+		 * the launcher can set except its black one. */
+		g_bright = 0;
+		for (i = 1; i <= BRIGHT_LEVELS; i++)
+			if (abs(bright_ladder[i] - raw) <
+			    abs(bright_ladder[g_bright] - raw))
+				g_bright = i;
 	}
 	g_bright += dir;
-	if (g_bright < 0)           g_bright = 0;
-	if (g_bright > GAIN_LEVELS) g_bright = GAIN_LEVELS;
+	if (g_bright < 0)             g_bright = 0;
+	if (g_bright > BRIGHT_LEVELS) g_bright = BRIGHT_LEVELS;
 
-	raw = (g_bright * BRIGHT_RAW_MAX + GAIN_LEVELS / 2) / GAIN_LEVELS;
-	if (raw < BRIGHT_RAW_MIN) raw = BRIGHT_RAW_MIN;
-	a[1] = (unsigned long)raw;
+	a[1] = bright_ladder[g_bright];
 	if (ioctl(g_disp_fd, DISP_LCD_SET_BRIGHTNESS, a) < 0) return;
 
 	g_osd_level = g_bright;
+	g_osd_max   = BRIGHT_LEVELS;
 	g_osd_until = diatom_port_now_us() + 1500000ull;
 }
 
@@ -273,7 +301,8 @@ static void draw_gain_bar(uint8_t *base)
 	const unsigned bo = g_vinfo.blue.offset;
 	const int pad = 3, bar = 6;
 	const int W = (int)g_vinfo.xres;
-	int fill = g_osd_level < 0 ? 0 : (W * g_osd_level) / GAIN_LEVELS;
+	int fill = g_osd_level < 0 || g_osd_max <= 0 ? 0
+	         : (W * g_osd_level) / g_osd_max;
 	int y, x;
 
 	for (y = 0; y < pad * 2 + bar; y++) {

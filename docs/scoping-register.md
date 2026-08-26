@@ -735,17 +735,35 @@ deliberate target**, not an edge case - Probotector is PAL-only Contra. Pacing
       not silence. Feedback is a 6px bar matching the device UI. Verified on
       hardware: silent at zero, no pop returning.
       [analysis](discussion/2026-08-25-volume-ownership.md).
-- [ ] **[LB]** **Volume and brightness set in-game do not survive the exit.**
-      Observed 2026-08-25: the launcher re-applies its own stored levels the
-      moment its UI resumes, so both are silently discarded. The two sides hold
-      separate notions of each and neither is told about the other. Protocol-
-      shaped, not port-shaped, and belongs with ADR-0019's remap message: either
-      the port reports levels upward, or the launcher supplies them at startup.
+- [ ] **[LB]** **Volume and brightness set in-game do not survive the exit, and
+      brightness cannot even be expressed to the launcher.** Observed
+      2026-08-25: the launcher re-applies its own stored levels the moment its
+      UI resumes, so both are silently discarded. Measured 2026-08-26: it is
+      worse than discarding. PlayOS's brightness ladder is eleven geometric
+      levels (`1 8 16 32 48 72 96 128 160 192 255`); Diatom's is twenty linear
+      steps, and almost none of its values exist on that ladder - so on resume
+      brightness snaps to the launcher's nearest level, and Diatom's own first
+      press divides a raw value by a scale the launcher never used. The two
+      sides do not disagree about a number; they disagree about what the
+      numbers are. Protocol-shaped, not port-shaped, and belongs with
+      ADR-0019's remap message: either the port reports levels upward, or the
+      launcher supplies its ladder at startup.
+      [measurement](spikes/2026-08-26-backlight-floor.md).
 - [x] **[OPEN]** **Brightness works during a game** too - front keys
       (`BTN_THUMBL`/`THUMBR`, SDL 9/10), 20 steps sharing volume's scale, via
       `DISP_LCD_SET_BRIGHTNESS` on `/dev/disp` (no `/sys/class/backlight` on
-      this device). Floored at 8/255: a black screen looks like a crash and
-      hides the bar you would need to recover. Same bar as volume, verified.
+      this device). Same bar as volume, verified.
+- [x] **[OPEN]** **The panel's floor is raw 2**, measured 2026-08-26 - 0 and 1
+      read as black. The disp2 driver clamps nothing and accepts a true 0, so
+      the port's clamp is load-bearing. `BRIGHT_RAW_MIN 8` was chosen rather
+      than measured and landed on PlayOS's level 1 by luck.
+      [measurement](spikes/2026-08-26-backlight-floor.md)
+- [x] **[OPEN]** **Brightness is a geometric ladder, not a linear ramp** -
+      `2 4 8 16 32 48 72 96 128 160 192 255`, twelve rungs, the launcher's own
+      spacing extended down to the measured floor. Verified even on hardware
+      in Contra 2026-08-26. Ten of the twelve are values the launcher also has
+      a level for. Step count remains launcher policy.
+      [measurement](spikes/2026-08-26-backlight-floor.md)
 - [x] **[LB]** Analog sticks: **no analog support at all** →
       **[ADR-0003](decisions/0003-digital-only-input.md)** *(Accepted)*
 - [x] **[OPEN]** Button count is **not** a constraint. Six is the maximum any
