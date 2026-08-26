@@ -138,8 +138,28 @@ ticks before, 573 and 570 after**. About +0.16 ms per frame against 16.6 ms, or
 1% of the budget, for a mean 28.5 dB. Peak RSS 8.4 → 9.0 MB, still a third of
 the 24 MB budget.
 
+## The listening test, and what it did and did not settle
+
+Contra, on the device, through its own speaker, 2026-08-26: **"sounds fine"**.
+Not better, not worse - fine.
+
+That is the expected outcome and it is worth writing down as a result rather
+than as a disappointment. NES at 32040 Hz through a small handheld speaker is
+the least demanding case in the matrix: the speaker rolls off long before the
+frequencies where the two filters differ most. No headphones were available to
+try the case that would actually discriminate.
+
+So the position is: **changed on measurement, not on complaint.** The filter was
+documented by its own header as unshippable, is now 27.6 dB better on a signal
+whose spectrum is known exactly, costs 1% of a frame, and adds no dependency.
+Whether anyone can hear it on this hardware is genuinely unsettled, and pretending
+the listening test confirmed anything would be inventing evidence.
+
 ## Revisit if
 
+- Anything is heard on headphones, which is the test this could not run. The
+  old filter was 3.5 dB down at 11 kHz, so if a difference exists anywhere it is
+  there.
 - A core appears whose rate makes the transition band audible. 32 taps roll off
   from about 0.9 of the source Nyquist; more taps buy a narrower transition at
   linear cost, and the table is already generated rather than written out.
