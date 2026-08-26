@@ -714,6 +714,12 @@ deliberate target**, not an edge case - Probotector is PAL-only Contra. Pacing
       Two translations, never collapsed: the port owns physical→canonical and is
       never configurable, the host owns canonical→retropad as **data**, the
       launcher owns the config. MENU is unmappable by construction.
+- [x] **[LB]** **The physical switch is out of scope, reserved for the
+      launcher** (2026-08-25, judgement call). `gpio243`: unclaimed, no bounce,
+      `edge` present so it can be interrupt-driven, unreferenced by PlayOS. It
+      is **state, not events** - it has a value before Diatom starts and after
+      it exits. Diatom must not learn it exists; any per-game meaning arrives as
+      a protocol message, not a button.
 - [ ] **[OPEN]** `SET_INPUT_DESCRIPTORS` is accepted and discarded. It is the
       core telling us "B = Jump" for this game - the labels a remap screen needs
       to be usable. Free on every load. Capturing and exposing it over the
@@ -732,10 +738,15 @@ deliberate target**, not an edge case - Probotector is PAL-only Contra. Pacing
       [analysis](discussion/2026-08-25-volume-ownership.md).
 - [x] **[LB]** Analog sticks: **no analog support at all** →
       **[ADR-0003](decisions/0003-digital-only-input.md)** *(Accepted)*
-- [x] **[OPEN]** Button count is **not** a constraint. Both devices give 4 face
-      + 4 shoulder; six is the maximum any in-scope system asks (SNES, 6-button
-      Genesis, CPS2), covered by the standard 4+L1/R1 mapping - the same layout
-      SNES uses. An earlier claim that six-button games map "badly" was wrong.
+- [x] **[OPEN]** Button count is **not** a constraint. Six is the maximum any
+      in-scope system asks (SNES, 6-button Genesis, CPS2), covered by the
+      standard 4+L1/R1 mapping - the same layout SNES uses. An earlier claim
+      that six-button games map "badly" was wrong.
+- [ ] **[OPEN]** **What do L2/R2 report as on the Brick?** They exist
+      physically, but the kernel capability mask has no `BTN_TL2`/`BTN_TR2`, and
+      `BTN_THUMBL`/`THUMBR` are the front keys per PlayOS's own source. So they
+      report as something else - `KEY_F1`/`F2` are the unaccounted codes.
+      Unmapped until measured; absence from a mask is not absence of a button.
 - [x] **[OPEN]** Same curation on both devices? **Probably yes.** With no analog,
       the two devices are input-equivalent, so one test matrix rather than two.
       (Follows from ADR-0003; revisit if the class widens.)
