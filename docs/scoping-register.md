@@ -985,6 +985,40 @@ host decision and only means re-running the spike, which is cheap.
       hold full speed with 0 resyncs on `snes9x2010`. The A53 carries every
       coprocessor in the library, so ADR-0005's warning about them is retired.
 
+- [x] **[OPEN]** **Input held across the menu reached the core** - dismissing
+      the in-game menu with A put an A into the game, a stray jump on every
+      dismissal. Reported by the launcher 2026-08-27, fixed the same day.
+
+      `prev_buttons` was already re-read at resume, for exactly this reason and
+      with a human-measured comment saying so. It protects every *edge*-
+      triggered consumer - MENU cannot reopen, the chord does not re-fire - and
+      the core is the one consumer that reads the **level**, in
+      `cb_input_state`. So the one guard in place missed the one consumer that
+      mattered.
+
+      `menu_pause` blocks in `proto_poll` and never polls the pad, so the whole
+      menu session's events queue and land in a single drain at resume. Nothing
+      in that batch was aimed at the game.
+
+      Fixed with a latch, suppressed until genuine **release**. Narrowing it to
+      buttons that went down *while paused* is more precise-looking and has a
+      hole: release A during the menu, press it again to choose Continue, and it
+      was held before the menu too. The cost of the conservative reading is
+      holding a direction across a menu, which self-corrects on the next press.
+
+      **The fix had to move `diatom_env_suppress` to a single writer.**
+      `display_chord` set the mask absolutely every frame, `suppress(0)`
+      included, so any second reason to hide a button was cleared on the next
+      frame SELECT was not held. It now returns its mask and the loop composes
+      the two. Two masks with different lifetimes in one variable is the actual
+      defect; the stray A was a symptom of it.
+
+      **Not verified on hardware.** The reasoning is from source and the
+      mechanism it rests on was measured with a human on 2026-08-25, but the fix
+      itself has not been watched to work. Neither has the bug been watched to
+      happen. See §13 - this is the second fault found from outside in a region
+      no test can reach.
+
 **Genesis note:** launched 3-button in 1988; the 6-button pad arrived 1993 and
 most of the library predates it. Both fit 4 face + L1/R1. Requires
 `retro_set_controller_port_device` - some early games misbehave with a 6-button
@@ -1188,6 +1222,19 @@ operation never occurs.
       is a structural guarantee rather than an asserted one, which is why no
       test was invented to chase it. Revisit if anything else in that loop needs
       proving, since the reachability problem will be the same.
+
+      **Revisited the same day, and the answer changed.** A second bug in the
+      same unreachable region - input held across the menu reaching the core,
+      §8 - was also found from outside, by the launcher, hours later. Two
+      independent faults in one blind spot in one day is not a coincidence, it
+      is a measurement of the blind spot. The argument above ("the structural
+      fix is stronger than the test") was right about *that* bug and wrong as a
+      general policy: it justifies never testing the region at all.
+
+      Cost of the hook is one synthetic-input entry point on the desktop port,
+      test-only. §0's seam test is the thing to argue it against, and the
+      counter-argument is now two bugs rather than a hypothetical. **Do this
+      before the next change to `menu_pause`**, not after.
 - [ ] **[LATER]** CI.
 
 ---

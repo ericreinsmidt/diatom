@@ -498,38 +498,45 @@ static bool menu_pause(const diatom_session *sn)
  * leaks, because the core reads input inside retro_run before this runs.
  * Harmless here and not worth a pre-run poll to fix.
  *
- * Returns 1 if anything changed. */
-static int display_chord(uint32_t buttons, uint32_t prev)
+ * Returns what the core must not see this frame, and no longer sets it. There
+ * are two reasons to hide a button and they have different lifetimes: this one
+ * is recomputed from the pad every frame, the resume hold-off below is latched
+ * until release. They shared one variable and this function is the one that
+ * runs every frame, so `suppress(0)` on the first frame SELECT was not held
+ * silently cleared the other. Composing them is now the caller's job, which is
+ * also the only place that can see both. */
+static uint32_t display_chord(uint32_t buttons, uint32_t prev)
 {
 	static const uint32_t chord = DIATOM_BIT(DIATOM_BTN_SELECT);
 	uint32_t pressed = buttons & ~prev;
+	uint32_t mask;
 
-	if (!(buttons & chord)) {
-		diatom_env_suppress(0);
-		return 0;
-	}
-	diatom_env_suppress(chord | DIATOM_BIT(DIATOM_BTN_L1)
-	                          | DIATOM_BIT(DIATOM_BTN_R1)
-	                          | DIATOM_BIT(DIATOM_BTN_A));
+	if (!(buttons & chord)) return 0;
 
+	mask = chord | DIATOM_BIT(DIATOM_BTN_L1)
+	             | DIATOM_BIT(DIATOM_BTN_R1)
+	             | DIATOM_BIT(DIATOM_BTN_A);
+
+	/* Each of these returns rather than falling through, so one press cannot
+	 * perform two actions in a frame. */
 	if (pressed & DIATOM_BIT(DIATOM_BTN_R1)) {
 		report_slot(g_mode, g_filter);
 		apply_display((g_mode + 1) % diatom_mode_count, g_filter);
-		return 1;
+		return mask;
 	}
 	if (pressed & DIATOM_BIT(DIATOM_BTN_L1)) {
 		report_slot(g_mode, g_filter);
 		apply_display((g_mode + diatom_mode_count - 1) % diatom_mode_count,
 		              g_filter);
-		return 1;
+		return mask;
 	}
 	if (pressed & DIATOM_BIT(DIATOM_BTN_A)) {
 		report_slot(g_mode, g_filter);
 		apply_display(g_mode, g_filter == DIATOM_FILTER_SHARP
 		                    ? DIATOM_FILTER_NEAREST : DIATOM_FILTER_SHARP);
-		return 1;
+		return mask;
 	}
-	return 0;
+	return mask;
 }
 
 /* One game, start to finish. Extracted so the protocol loop (ADR-0009) can run
@@ -671,7 +678,7 @@ static int run_session_inner(const diatom_session *sn)
 	struct retro_system_info si;
 	double   frame_us, next_us;
 	uint64_t t_start;
-	uint32_t buttons = 0, prev_buttons = 0;
+	uint32_t buttons = 0, prev_buttons = 0, held_at_resume = 0;
 	long     locked_at = 0;     /* frame the current rect was computed on */
 
 	/* Every game starts from identity and from an unknown level, so a launcher
@@ -970,7 +977,17 @@ static int run_session_inner(const diatom_session *sn)
 		levels_tick();
 
 		buttons = diatom_port_input_state();
-		display_chord(buttons, prev_buttons);
+
+		/* Latched at resume, narrowed here: a button the player has genuinely
+		 * let go of becomes the game's again on its next real press. Tested
+		 * against the raw pad state, so a button that is suppressed but still
+		 * physically down stays latched. */
+		held_at_resume &= buttons;
+
+		/* The single writer. Both reasons to hide a button end up here, so
+		 * neither can clear the other. */
+		diatom_env_suppress(display_chord(buttons, prev_buttons)
+		                    | held_at_resume);
 
 		/* MENU is Diatom's own key and the ports no longer act on it, because
 		 * what it means is host policy: standalone it ends the session, under
@@ -997,6 +1014,30 @@ static int run_session_inner(const diatom_session *sn)
 				 * - one press produced two menus. */
 				diatom_port_input_poll();
 				prev_buttons = diatom_port_input_state();
+
+				/* prev_buttons covers everything edge-triggered, which is
+				 * every consumer except the one that matters: the core reads
+				 * the LEVEL, in cb_input_state. So choosing Continue with A
+				 * put an A into the game - a stray jump on every dismissal.
+				 *
+				 * menu_pause blocks in proto_poll and never polls the pad, so
+				 * the whole menu session's events queue up and land in one
+				 * drain here. Nothing in that batch was aimed at the game.
+				 *
+				 * Suppressed until RELEASE rather than until the next press,
+				 * and deliberately not narrowed to buttons that went down
+				 * while paused. That narrowing looks more precise and has a
+				 * hole: release A during the menu, press it again to choose
+				 * Continue, and it was held before the menu too, so it would
+				 * not be caught. Holding a direction across a menu is the cost,
+				 * and it self-corrects on the next press.
+				 *
+				 * Set here as well as at the top of the loop because `continue`
+				 * goes straight to retro_run - recording the latch without
+				 * applying it would leak the button on exactly the frame this
+				 * exists to protect. */
+				held_at_resume = prev_buttons;
+				diatom_env_suppress(held_at_resume);
 				continue;
 			}
 		}
