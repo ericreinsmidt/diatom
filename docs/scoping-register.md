@@ -649,6 +649,31 @@ Two levers the spike discovered:
       not a speaker level: raising it routes to the jack and mutes the speakers,
       which is why PlayOS zeroes it. Volume is firmware's job (§8), so Diatom
       sets neither; `DIATOM_GAIN` in `brick-run.sh` is for testing only.
+
+      **The curve measured, 2026-08-28.** `tools/micprobe.sh` playing a 440 Hz
+      tone at -1.4 dBFS, captured on the device's own mic, room baseline ~40:
+
+      | `digital volume` | rms | vs room | modelled |
+      |---|---|---|---|
+      | 0 | 10034 | 201x | 0 dB |
+      | 16 | 1485 | 30x | -18.6 dB |
+      | 31 | 114 | 2.3x | -36 dB |
+      | 47 | 34 | 0.7x, silent | -55 dB |
+
+      **The inversion is confirmed rather than assumed** - 0 really is loudest,
+      and the measured points track the 1.16 dB/step model closely (predicted
+      10034/1174/158/19). A claim of the *opposite* was raised on 2026-08-28
+      from a user report and was wrong; the report had been mis-sequenced
+      against the mixer state. Recorded because the earlier "proof" of the
+      inversion was circular - it diffed PlayOS's own writes across a volume-up
+      press, which shows what PlayOS does and not what the codec does. This is
+      the non-circular version.
+
+      **The consequence is PlayOS's, not Diatom's.** `apply_volume` spreads 21
+      positions linearly across the whole 73 dB register, 3.65 dB per press, so
+      60% of the shelf's scale is -29 dB and 25% is inaudible. That is the
+      loudness complaint Eric actually raised. Handed over in
+      `PlayOS/docs/2026-08-28-volume-curve.md`.
 - [ ] **[OPEN]** `SET_AUDIO_BUFFER_STATUS_CALLBACK` (cmd 62, offered by 3 of 6
       cores) is **not implemented** - the core-side half of DRC, letting a core
       throttle itself on buffer occupancy. Host-side DRC works without it, so
@@ -668,23 +693,33 @@ Two levers the spike discovered:
       mGBA given **Game Boy** content, which reports **131072 Hz** - 2.73:1, and
       still holds. Detail and the correction that found it:
       [brick port log](discussion/2026-08-24-brick-port.md).
-- [ ] **[OPEN]** **Loudness differs by system**, reported 2026-08-27 from
-      ordinary play. Nothing measured yet - the first job is a number, not a
-      fix: same panel volume, one representative title per core, peak and
-      RMS off the mixer input rather than by ear.
+- [x] **[OPEN]** **Loudness differs by system - measured 2026-08-28, and the
+      framing was wrong.** Nine runs, five cores, 1200 frames each, `audio IN`
+      RMS off the mixer input:
 
-      Expect it to be real. Cores emit whatever amplitude their machine did and
-      libretro has no normalisation convention, so a quiet system is a quiet
-      system all the way through. Diatom applies no gain today, deliberately:
-      §8 gives volume to firmware, and `DIATOM_GAIN` in `brick-run.sh` is
-      testing-only for exactly that reason.
+      | run | IN rms | run | IN rms |
+      |---|---|---|---|
+      | nes-advisl | 4279 | nes-1943 | 2036 |
+      | snes-starfox | 3628 | pce-aero | 1646 |
+      | gba-advwars | 3313 | pce-airzonk | 1398 |
+      | gen-psiv | 2629 | snes-parodius | 954 |
 
-      **So this collides with a standing decision and cannot be fixed casually.**
-      Per-core gain is per-core knowledge, which §12 says Diatom does not keep -
-      the same wall the FCEUmm core-option-defaults item above ran into. If a
-      trim is warranted the honest places are the launcher's config or a single
-      global gain, not a table in the frontend. Settle *whether* to normalise
-      before *where*.
+      A 4.5x spread, about 13 dB, so the complaint is real. **But the spread
+      WITHIN a system is as large as the spread between them** - NES 2036-4279,
+      SNES 954-3628. Parodius is the quietest thing measured and has nearly the
+      highest peak, so it is dynamic range, not level.
+
+      **That rules out the fix anyone would reach for first.** A per-system gain
+      table would be wrong for half of each system's library, and it was already
+      the one shape §12 forbids. Nothing static works here.
+
+      Recommendation on record: **do not build normalisation.** Dynamic AGC is
+      the only thing that would work, it would pump on exactly the content that
+      motivated it, and it changes what the core produced. If it is ever
+      revisited it wants an ADR, not a patch.
+
+      **The loudness Eric actually noticed was not this.** It was PlayOS's
+      volume curve - see the gain-curve item below.
 - [ ] **[OPEN]** **Audio stuttering on GBA, possibly SNES**, reported 2026-08-27
       from ordinary play. Unmeasured. **Do not assume it is audio**: a frame
       overrun and an underrun sound alike from the couch, and the two have
@@ -1102,8 +1137,10 @@ host decision and only means re-running the spike, which is cheap.
       project is built around - warm launch to `RUNNING` is ~6 ms. Suppression
       costs nothing and starts immediately.
 
-      **Not verified on hardware.** Reported by a human, diagnosed from source,
-      conformance unchanged. Nobody has watched it.
+      **Verified on hardware 2026-08-28**, behaviourally, on `9ff8324`
+      (`/proc/6596/exe` md5 `021a0b114372d9ea2991bca480fed2a2`). Launching with
+      A puts nothing in the game, and the conservative latch strands nothing.
+      Not instrumented, for the same reason as the resume fix above.
 
 **Genesis note:** launched 3-button in 1988; the 6-button pad arrived 1993 and
 most of the library predates it. Both fit 4 face + L1/R1. Requires
@@ -1343,6 +1380,25 @@ operation never occurs.
       times, which is a fact about how these were found and not about whether a
       test could have found them. Both remain true - build the hook, and keep
       the outside reader.
+- [x] **[OPEN]** **`micprobe --tone` measured room noise for its whole life.**
+      The tone was three seconds against a `sleep 5` before the capture, so it
+      had ended two seconds before `arecord` started. Every `--tone` reading was
+      the room.
+
+      It never looked broken because it returned plausible numbers. It was found
+      on 2026-08-28 only because a gain sweep came back **non-monotonic** -
+      silence at both ends of the scale and sound in the middle - which is not a
+      shape any real attenuator can produce. The tone now covers the whole
+      window, and the fixed instrument reproduces a hand-rolled measurement to
+      within 3% at both ends.
+
+      **The reference figures in its own header came from the broken path** and
+      are marked unverified rather than deleted, since the game path was never
+      affected.
+
+      The general lesson is the one this project keeps relearning: a number that
+      looks reasonable is not evidence that the thing producing it works. The
+      check that caught it was internal consistency, not plausibility.
 - [ ] **[LATER]** CI.
 
 ---

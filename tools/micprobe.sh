@@ -33,9 +33,18 @@ GAIN=${DIATOM_GAIN:-15}
 adb get-state >/dev/null 2>&1 || { echo "micprobe: no device over adb" >&2; exit 2; }
 
 if [ "${1:-}" = "--tone" ]; then
-    python3 - "$ROOT" <<'PY'
+    # Long enough to still be playing when the capture below runs. It was three
+    # seconds against a `sleep 5`, so the tone had ENDED two seconds before
+    # arecord started and every --tone reading was room noise. It reported
+    # plausible-looking numbers the whole time, which is why it survived: the
+    # gain curve it was used to measure on 2026-08-28 came back non-monotonic
+    # (silence at both ends, loud in the middle) and that is the only reason
+    # anyone looked. The reference figures in the header above came from this
+    # path and should be treated as unverified until re-measured.
+    python3 - "$ROOT" "$SECS" <<'PY'
 import struct, math, sys
-sr, n = 48000, 48000 * 3
+sr = 48000
+n  = sr * (5 + int(sys.argv[2]) + 5)   # sleep + capture + margin
 d = b''.join(struct.pack('<hh', int(28000*math.sin(2*math.pi*440*i/sr)),
                                 int(28000*math.sin(2*math.pi*440*i/sr))) for i in range(n))
 hdr = (b'RIFF' + struct.pack('<I', 36+len(d)) + b'WAVEfmt ' +
