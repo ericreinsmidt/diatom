@@ -3,6 +3,10 @@
 Written 2026-08-27, mid-investigation, because the session that holds this
 context is nearly full. **The bug is NOT fixed.** This is the state of it.
 
+> **RESOLVED later the same day, in PlayOS.** See *The answer* at the end. The
+> body below is left exactly as written, wrong guesses included, because the
+> prediction it ends on turned out to be right and that is the useful part.
+
 ## Symptom
 
 Quitting a game flashes: a visible discontinuity between the in-game menu and
@@ -118,3 +122,44 @@ frame, or a black gap during that 215ms.
 
 Do not add another park variant to Diatom without evidence that Diatom pans at
 the moment of the flash. It does not, currently.
+
+---
+
+## The answer, 2026-08-27
+
+**It was PlayOS, and it was a double present.** `anim_return` called `render()`,
+which ends in `SDL_RenderPresent`, and then presented again after drawing its
+fade overlay. Two presents per frame for the length of the fade, so the panel
+alternated bright and dim throughout it. Found and fixed on the launcher side.
+
+**The conclusion this document ends on was correct**, and it was correct
+*before* anyone knew the cause: with Diatom performing zero pans through the
+quit, the flash had to lie between the launcher's own frames. Everything
+downstream of that measurement held up. What the four Diatom changes cost was
+real, but the reasoning that ruled Diatom out was sound and it is what pointed
+at the right file in the end.
+
+**Two things this got right that are worth keeping:**
+
+- **Measuring pans rather than arguing about parking.** Three of the four
+  changes asked *what to park* when the answerable question was *whether Diatom
+  moved the panel at all*. Once that was instrumented the search space
+  collapsed. The lesson is the one already in the register: an unfalsifiable
+  claim costs more than a slow measurement.
+- **Not adding a fifth park variant.** This session declined to guess again
+  without evidence that Diatom pans during the flash. That evidence never
+  arrived, because there was none to find.
+
+**One thing it got wrong.** The 150 ms black seizure removed by `fba030f` was
+introduced by an earlier fix in this same hunt. While it was present, every
+"still flashes" report was measuring two faults stacked, and the reports could
+not distinguish them. Fixing forward on a symptom that several people are
+observing at once needs the intermediate states labelled, or the feedback is
+noise.
+
+**The unfollowed lead was a red herring.** The 215 ms gap with no pan changes
+was the launcher holding a frame during its own fade, which is exactly what the
+double present was doing. It pointed the right way and was never followed here.
+
+All four Diatom changes stand. Each fixed a real defect at the handover, none
+of them was this, and none of them is reverted.

@@ -464,13 +464,6 @@ static bool menu_pause(const diatom_session *sn)
 			                  ? "OPTSET\tkey=%s" : "ERROR\tcode=bad_option\tmsg=%s",
 			                  m.key);
 			break;
-		case DIATOM_MSG_INPUTS:
-		case DIATOM_MSG_MAP:
-		case DIATOM_MSG_SETMAP:
-		case DIATOM_MSG_LEVELS:
-		case DIATOM_MSG_SETLEVEL:
-			state_plane_msg(&m);
-			break;
 		case DIATOM_MSG_HANGUP:
 			/* The launcher died while holding the menu open. Resuming is the
 			 * kinder failure: the alternative strands the player in a paused
@@ -478,7 +471,22 @@ static bool menu_pause(const diatom_session *sn)
 			diatom_port_log(DIATOM_LOG_WARN,
 			                "launcher vanished during menu; resuming the game");
 			return true;
+		/* The whole state plane, by falling through rather than by a list.
+		 * This enumerated five of the seven, so DISPLAY and SETDISPLAY sent
+		 * from an open menu parsed correctly, reached here, and were dropped
+		 * with no reply and no log line - silence indistinguishable from the
+		 * launcher never having sent them. Display mode was then the one
+		 * state-plane setting unreachable at the one moment a launcher has a
+		 * menu open to reach it from, which is what ADR-0020 and ADR-0022 say
+		 * it must not be.
+		 *
+		 * The running loop always dispatched this way and so could not go
+		 * stale; a hand-kept list here would go stale again the next time
+		 * something joins the plane. state_plane_msg returns false for
+		 * anything it does not own, so this discards exactly what the old
+		 * default discarded. */
 		default:
+			state_plane_msg(&m);
 			break;
 		}
 	}

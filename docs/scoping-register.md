@@ -1128,6 +1128,24 @@ operation never occurs.
       budget, and the allocation count. Not in `make check`: it needs a build
       and runs in real time, ~20s. Both assertions were run to failure on
       purpose before being trusted.
+- [ ] **[OPEN]** **The paused loop has no test coverage**, and that is what let
+      a real bug live. `test/stateplane.py` exercises DISPLAY and SETDISPLAY
+      while running, and pause separately, but never crosses them - so a paused
+      loop that enumerated five of the seven state-plane messages and silently
+      dropped the other two passed the suite. Found from outside, by the
+      launcher, 2026-08-27.
+
+      The gap is structural: pause is entered by a MENU keypress, so a headless
+      driver cannot reach `menu_pause` at all. Reaching it would mean an input
+      hook in the runtime that exists only for tests, which §0's seam test does
+      not obviously justify.
+
+      Closed as a *class* for now instead: the paused loop dispatches through
+      `default: state_plane_msg(&m)` exactly as the running loop always has, so
+      the next message to join the plane cannot be missed by a stale list. That
+      is a structural guarantee rather than an asserted one, which is why no
+      test was invented to chase it. Revisit if anything else in that loop needs
+      proving, since the reachability problem will be the same.
 - [ ] **[LATER]** CI.
 
 ---
