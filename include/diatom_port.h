@@ -112,11 +112,29 @@ void diatom_port_present(const void *src, int w, int h, size_t pitch,
  * Measured from the launcher side as a boundary sweeping down the panel
  * across several frames: a tear, not a composite.
  *
- * Deliberately does NOT choose which page is left on glass. Being quiescent is
- * the contract; what the user should see next is the launcher's decision, not
- * the port's. Nor is it diatom_port_shutdown - that joins the flip thread, and
- * the thread has to survive to serve the next game. */
-void diatom_port_present_stop(void);
+ * `park` says what to LEAVE on glass, because the port cannot know and the
+ * answer differs by handover:
+ *
+ *   KEEP  - the last frame. Right for a pause, where the launcher draws its
+ *           menu over the frame the player stopped on and wants continuity.
+ *   BLANK - opaque black. Right for an exit, where the launcher's first act
+ *           is to fade the shelf up from black, so black is the state it is
+ *           about to assume anyway.
+ *
+ * Getting that backwards is visible. Parking KEEP at exit replaces whatever
+ * was on screen - the launcher's own menu, if the player quit from it - with
+ * a bare game frame for the few tens of milliseconds before the fade starts,
+ * which reads as a flash. It is not a tear: it is the wrong picture, shown
+ * cleanly.
+ *
+ * Not diatom_port_shutdown - that joins the flip thread, and the thread has
+ * to survive to serve the next game. */
+typedef enum {
+	DIATOM_PARK_KEEP,
+	DIATOM_PARK_BLANK
+} diatom_park;
+
+void diatom_port_present_stop(diatom_park park);
 
 /* Interleaved stereo S16 at caps.audio_rate. NEVER blocks; drops on overflow.
  * A blocking write is a legitimate sync strategy but is incompatible with

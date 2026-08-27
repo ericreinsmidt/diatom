@@ -413,8 +413,12 @@ static bool menu_pause(const diatom_session *sn)
 	 * before the launcher starts drawing. This was a 20ms sleep, which is a
 	 * guess at how long a pan takes rather than a wait for one - right often
 	 * enough to look correct and wrong whenever the panel or the load
-	 * disagreed. */
-	diatom_port_present_stop();
+	 * disagreed.
+	 *
+	 * KEEP, because the launcher is about to draw its menu over the frame the
+	 * player stopped on. Parking the same picture that is already showing is
+	 * invisible, which is why this handover never flashed. */
+	diatom_port_present_stop(DIATOM_PARK_KEEP);
 
 	/* Symmetrical with RUNNING: the launcher may draw from here. */
 	diatom_proto_send("PAUSED");
@@ -1084,8 +1088,17 @@ static int run_session_inner(const diatom_session *sn)
 	 * have a pan in flight - two processes driving one framebuffer, which
 	 * measured from the launcher side as a boundary sweeping down the panel
 	 * over several frames. Not a wedge, because the window is milliseconds,
-	 * but the contract below is only true once this has returned. */
-	diatom_port_present_stop();
+	 * but the contract below is only true once this has returned.
+	 *
+	 * BLANK, and the asymmetry with the pause above is the whole point. This
+	 * park replaces whatever is on glass, and at an exit that is often the
+	 * launcher's own in-game menu - the player quit from it. Parking the last
+	 * frame there showed a bare game frame, without the menu, for the few tens
+	 * of milliseconds before the shelf faded up: a flash on quit and never on
+	 * opening the menu, which is exactly the asymmetry that identified it. The
+	 * launcher fades up from black, so black is the state it is about to
+	 * assume anyway. */
+	diatom_port_present_stop(DIATOM_PARK_BLANK);
 
 	/* The game ran and stopped, which is EXIT rather than ERROR whatever the
 	 * reason. The launcher may take the display back now.

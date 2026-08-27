@@ -281,4 +281,4 @@ void diatom_port_level_invalidate(void) { }
  * so there is never a flip in flight to wait for. The definition exists
  * because the seam is part of the port interface, and a port that silently
  * lacked it would fail at link time on the day someone needed it. */
-void diatom_port_present_stop(void) { }
+void diatom_port_present_stop(diatom_park park) { (void)park; }

@@ -380,7 +380,7 @@ static uint8_t *page_base(int page)
 
 static void clear_pages(void);
 
-void diatom_port_present_stop(void)
+void diatom_port_present_stop(diatom_park park_mode)
 {
 	int front, park;
 	struct fb_var_screeninfo v;
@@ -412,10 +412,20 @@ void diatom_port_present_stop(void)
 	 * one. */
 	if (g_pages < 2 || g_fb_fd < 0) return;
 	park = g_pages - 1;
-	if (front == park) return;
 
-	memcpy(page_base(park), page_base(front),
-	       (size_t)g_vinfo.yres * g_finfo.line_length);
+	if (park_mode == DIATOM_PARK_BLANK) {
+		/* Opaque black, never a memset to zero: a zero alpha byte makes the
+		 * pixel invisible on this panel rather than black, which is the trap
+		 * documented at g_opaque and cost a day in 2026-08-24. */
+		uint32_t *q = (uint32_t *)page_base(park);
+		size_t n = (size_t)g_vinfo.yres * g_finfo.line_length / sizeof *q, i;
+
+		for (i = 0; i < n; i++) q[i] = g_opaque;
+	} else {
+		if (front == park) return;
+		memcpy(page_base(park), page_base(front),
+		       (size_t)g_vinfo.yres * g_finfo.line_length);
+	}
 
 	v = g_vinfo;
 	v.yoffset  = (uint32_t)park * v.yres;
