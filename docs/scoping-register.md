@@ -1013,11 +1013,23 @@ host decision and only means re-running the spike, which is cheap.
       the two. Two masks with different lifetimes in one variable is the actual
       defect; the stray A was a symptom of it.
 
-      **Not verified on hardware.** The reasoning is from source and the
-      mechanism it rests on was measured with a human on 2026-08-25, but the fix
-      itself has not been watched to work. Neither has the bug been watched to
-      happen. See §13 - this is the second fault found from outside in a region
-      no test can reach.
+      **Verified on hardware 2026-08-27, behaviourally.** `edf083f` confirmed
+      *running* rather than merely deployed - `/proc/5611/exe` md5
+      `5b02f1e1d9ef04e91eb9ad6ba9ec2b5d`, against launcher `905fd7e5` - and
+      driven by a human on a real game. Two checks: dismissing the menu with A
+      puts no stray input in the game, and a direction held across the menu
+      still works on its next press rather than being stranded suppressed. The
+      second one is the one that mattered, because the conservative latch is
+      what could have broken it.
+
+      **Not instrumented, and the distinction is kept on purpose.** Nobody
+      watched the resume frame with `DIATOM_INPUT_DEBUG` on. What is established
+      is that the symptom is gone and the fix strands nothing - not that the
+      core saw no A on that specific frame. Deliberate: the behavioural checks
+      answer the question a player has and cost ten seconds, against taking over
+      the resident in a foreground adb session while someone is using the
+      device. Frame-level evidence can still be had if anything here is ever
+      doubted.
 
 **Genesis note:** launched 3-button in 1988; the 6-button pad arrived 1993 and
 most of the library predates it. Both fit 4 face + L1/R1. Requires
@@ -1235,6 +1247,16 @@ operation never occurs.
       test-only. §0's seam test is the thing to argue it against, and the
       counter-argument is now two bugs rather than a hypothetical. **Do this
       before the next change to `menu_pause`**, not after.
+
+      **One argument against, and why it does not hold.** The launcher offered
+      that neither bug is the kind a test finds - both were "a true statement
+      nobody could check", the sort a second reader trips over. Half right. The
+      *discovery* was a second reader both times, and that is worth keeping. But
+      both faults were trivially testable had the region been reachable: send
+      SETDISPLAY while paused and expect the DISPLAY reply; resume with a button
+      held and expect `cb_input_state` to return zero for it. Neither needs
+      cleverness, only a way in. So this is not evidence that tests are the
+      wrong tool here - it is the reason the hook is the whole fix.
 - [ ] **[LATER]** CI.
 
 ---
