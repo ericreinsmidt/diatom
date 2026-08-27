@@ -373,18 +373,62 @@ static int flip_drain(void)
 	return front;
 }
 
-void diatom_port_present_stop(void)
-{
-	if (!g_fb) return;
-	flip_drain();
-}
-
 static uint8_t *page_base(int page)
 {
 	return g_fb + (size_t)page * g_vinfo.yres * g_finfo.line_length;
 }
 
 static void clear_pages(void);
+
+void diatom_port_present_stop(void)
+{
+	int front, park;
+	struct fb_var_screeninfo v;
+
+	if (!g_fb) return;
+	front = flip_drain();
+
+	/* Quiescent is necessary and not sufficient.
+	 *
+	 * The launcher renders into the SAME framebuffer - measured from its side,
+	 * the shelf lands in fb0 with every pixel opaque, so there is one buffer
+	 * and not two composited layers. This port uses three pages; a launcher
+	 * double-buffering through GL uses two, from yoffset 0 upward. Those
+	 * overlap. So a handover that stops on page 0 or 1 leaves the panel
+	 * scanning out a page the launcher is about to draw its shelf into, and
+	 * the result is interleaved bands of game and shelf - which is what the
+	 * 240fps capture showed, rather than the single sweeping boundary two
+	 * panners would make.
+	 *
+	 * Park on the TOP page, which a two-page consumer does not reach. This is
+	 * a mitigation with a stated assumption, not a guarantee: nothing here can
+	 * stop another process rendering into whatever page it likes. What it does
+	 * is make the common case - a fresh consumer taking the low pages - safe,
+	 * for the cost of one pan.
+	 *
+	 * The content parked is up to two frames old in a three-page rotation. At
+	 * a handover the last frames are a paused or ending game, so that is
+	 * imperceptible, and a stale frame for 30ms is a better trade than a torn
+	 * one. */
+	if (g_pages < 2 || g_fb_fd < 0) return;
+	park = g_pages - 1;
+	if (front == park) return;
+
+	memcpy(page_base(park), page_base(front),
+	       (size_t)g_vinfo.yres * g_finfo.line_length);
+
+	v = g_vinfo;
+	v.yoffset  = (uint32_t)park * v.yres;
+	v.activate = FB_ACTIVATE_VBL;
+	if (ioctl(g_fb_fd, FBIOPAN_DISPLAY, &v) != 0) {
+		diatom_port_log(DIATOM_LOG_WARN, "pan to park page failed");
+		return;
+	}
+	pthread_mutex_lock(&g_flip_mx);
+	g_front = park;
+	pthread_mutex_unlock(&g_flip_mx);
+}
+
 
 static void *flip_worker(void *arg)
 {
