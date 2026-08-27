@@ -677,7 +677,7 @@ static int run_session_inner(const diatom_session *sn)
 	struct retro_system_av_info av;
 	struct retro_system_info si;
 	double   frame_us, next_us;
-	uint64_t t_start;
+	uint64_t t_start, paused_us = 0;   /* menu time, excluded from the rate */
 	uint32_t buttons = 0, prev_buttons = 0, held_at_resume = 0;
 	long     locked_at = 0;     /* frame the current rect was computed on */
 
@@ -996,49 +996,62 @@ static int run_session_inner(const diatom_session *sn)
 		if ((buttons & ~prev_buttons) & DIATOM_BIT(DIATOM_BTN_MENU)) {
 			if (!diatom_proto_active()) {
 				stop = true;
-			} else if (!menu_pause(sn)) {
-				stop = true;
 			} else {
-				/* The clock ran on while the menu was open. Without this the
-				 * loop believes it is thousands of frames late and spends the
-				 * next second catching up. */
-				next_us = (double)diatom_port_now_us();
+				uint64_t pause_t0 = diatom_port_now_us();
+				bool resumed = menu_pause(sn);
 
-				/* Re-read input and treat it as already-seen, so MENU must be
-				 * RELEASED before it can open the menu again.
-				 *
-				 * Clearing prev_buttons instead looks equivalent and is not:
-				 * the pause happens the instant the key goes down, so a finger
-				 * is still on it when the launcher resumes, and the next frame
-				 * reads that as a fresh press. Measured with a human 2026-08-25
-				 * - one press produced two menus. */
-				diatom_port_input_poll();
-				prev_buttons = diatom_port_input_state();
+				/* The summary line divides frames by wall clock, and an open
+				 * menu produces no frames, so without this a long menu reads
+				 * as the core having run slow. Measured on device: "364
+				 * frames in 25.20s = 14.44 fps" was six seconds of play and
+				 * nineteen of menu. Pacing already rebases next_us below for
+				 * the same reason; the summary was simply never told. */
+				paused_us += diatom_port_now_us() - pause_t0;
 
-				/* prev_buttons covers everything edge-triggered, which is
-				 * every consumer except the one that matters: the core reads
-				 * the LEVEL, in cb_input_state. So choosing Continue with A
-				 * put an A into the game - a stray jump on every dismissal.
-				 *
-				 * menu_pause blocks in proto_poll and never polls the pad, so
-				 * the whole menu session's events queue up and land in one
-				 * drain here. Nothing in that batch was aimed at the game.
-				 *
-				 * Suppressed until RELEASE rather than until the next press,
-				 * and deliberately not narrowed to buttons that went down
-				 * while paused. That narrowing looks more precise and has a
-				 * hole: release A during the menu, press it again to choose
-				 * Continue, and it was held before the menu too, so it would
-				 * not be caught. Holding a direction across a menu is the cost,
-				 * and it self-corrects on the next press.
-				 *
-				 * Set here as well as at the top of the loop because `continue`
-				 * goes straight to retro_run - recording the latch without
-				 * applying it would leak the button on exactly the frame this
-				 * exists to protect. */
-				held_at_resume = prev_buttons;
-				diatom_env_suppress(held_at_resume);
-				continue;
+				if (!resumed) {
+					stop = true;
+				} else {
+					/* The clock ran on while the menu was open. Without this the
+					 * loop believes it is thousands of frames late and spends the
+					 * next second catching up. */
+					next_us = (double)diatom_port_now_us();
+
+					/* Re-read input and treat it as already-seen, so MENU must be
+					 * RELEASED before it can open the menu again.
+					 *
+					 * Clearing prev_buttons instead looks equivalent and is not:
+					 * the pause happens the instant the key goes down, so a finger
+					 * is still on it when the launcher resumes, and the next frame
+					 * reads that as a fresh press. Measured with a human 2026-08-25
+					 * - one press produced two menus. */
+					diatom_port_input_poll();
+					prev_buttons = diatom_port_input_state();
+
+					/* prev_buttons covers everything edge-triggered, which is
+					 * every consumer except the one that matters: the core reads
+					 * the LEVEL, in cb_input_state. So choosing Continue with A
+					 * put an A into the game - a stray jump on every dismissal.
+					 *
+					 * menu_pause blocks in proto_poll and never polls the pad, so
+					 * the whole menu session's events queue up and land in one
+					 * drain here. Nothing in that batch was aimed at the game.
+					 *
+					 * Suppressed until RELEASE rather than until the next press,
+					 * and deliberately not narrowed to buttons that went down
+					 * while paused. That narrowing looks more precise and has a
+					 * hole: release A during the menu, press it again to choose
+					 * Continue, and it was held before the menu too, so it would
+					 * not be caught. Holding a direction across a menu is the cost,
+					 * and it self-corrects on the next press.
+					 *
+					 * Set here as well as at the top of the loop because `continue`
+					 * goes straight to retro_run - recording the latch without
+					 * applying it would leak the button on exactly the frame this
+					 * exists to protect. */
+					held_at_resume = prev_buttons;
+					diatom_env_suppress(held_at_resume);
+					continue;
+				}
 			}
 		}
 		prev_buttons = buttons;
@@ -1099,9 +1112,16 @@ static int run_session_inner(const diatom_session *sn)
 			printf("diatom: capture %s: %s\n", sn->shot,
 			       diatom_port_capture(sn->shot) ? "ok" : "FAILED");
 
-		double secs = (t_end - t_start) / 1000000.0;
+		uint64_t span = t_end - t_start;
+		double secs = (span > paused_us ? span - paused_us : 0) / 1000000.0;
+
 		printf("diatom: %ld frames in %.2fs = %.2f fps (target %.4f)\n",
 		       frames, secs, secs > 0 ? frames / secs : 0.0, av.timing.fps);
+		/* Stated rather than silently subtracted, so the line cannot be read
+		 * as wall clock by anyone who does not know it is not. */
+		if (paused_us)
+			printf("diatom: %.2fs paused, excluded from the rate above\n",
+			       paused_us / 1000000.0);
 		printf("diatom: %ld geometry change(s), last rect %dx%d at %d,%d\n",
 		       geom_changes, g_dst.w, g_dst.h, g_dst.x, g_dst.y);
 		printf("diatom: %ld resync(s)\n", resyncs);

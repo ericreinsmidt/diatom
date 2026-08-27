@@ -711,6 +711,13 @@ Two levers the spike discovered:
       artifacts". If this turns into a filter question, judge it on SFDR with
       `resampleprobe`, not by listening.
 
+      **Ignore the end-of-session fps line in any log written before
+      2026-08-27.** It counted menu time as slow frames, so device logs from the
+      menu testing show 14-38 fps against a 60 target with nothing wrong. Fixed
+      in §7, but old logs are still on the device and are exactly the kind of
+      corroborating evidence this investigation would seize on. Use the
+      per-display-mode line, which is per-frame and was never affected.
+
 ---
 
 ## 7. Timing and pacing
@@ -741,6 +748,24 @@ deliberate target**, not an edge case - Probotector is PAL-only Contra. Pacing
       flip runs on its own thread behind a latest-wins mailbox rather than
       blocking the frame loop. On desktop it is deliberately **off**, per the
       1.4% deficit above. No tearing observed on the panel.
+- [x] **[OPEN]** **The end-of-session fps line counted menu time as slow
+      frames.** `t_start` was set once at load and never rebased, so the rate
+      was frames over wall clock. Pacing already rebased `next_us` on resume for
+      exactly this reason; the summary was simply never told.
+
+      Found by the launcher 2026-08-27 in its own device logs, where a session
+      read **"364 frames in 25.20s = 14.44 fps"** against a 60.0998 target. That
+      was six seconds of play and nineteen of menu, and it felt fine to play.
+
+      Menu time is now accumulated and excluded, and the amount is **printed
+      rather than silently subtracted** so the line cannot be misread as wall
+      clock by someone who does not know it is not.
+
+      **This mattered more than a cosmetic log fix.** §6 has an open item on
+      stuttering, raised the same day. A rate line reading less than half its
+      target is a compelling trail, and it was pointing at nothing. The clean
+      instrument already existed - the per-display-mode line below it is
+      per-frame and was never affected.
 
 ---
 
@@ -1248,15 +1273,20 @@ operation never occurs.
       counter-argument is now two bugs rather than a hypothetical. **Do this
       before the next change to `menu_pause`**, not after.
 
-      **One argument against, and why it does not hold.** The launcher offered
+      **One argument against, raised and then withdrawn.** The launcher offered
       that neither bug is the kind a test finds - both were "a true statement
-      nobody could check", the sort a second reader trips over. Half right. The
-      *discovery* was a second reader both times, and that is worth keeping. But
-      both faults were trivially testable had the region been reachable: send
-      SETDISPLAY while paused and expect the DISPLAY reply; resume with a button
-      held and expect `cb_input_state` to return zero for it. Neither needs
-      cleverness, only a way in. So this is not evidence that tests are the
-      wrong tool here - it is the reason the hook is the whole fix.
+      nobody could check", the sort a second reader trips over. It withdrew that
+      on the grounds that reachability was the only obstacle: both faults were
+      trivially testable had the region been reachable. Send SETDISPLAY while
+      paused and expect the DISPLAY reply; resume with a button held and expect
+      `cb_input_state` to return zero for it. Neither needs cleverness, only a
+      way in.
+
+      Kept here as raised-and-withdrawn rather than deleted, because the half
+      that survives is worth keeping: the *discovery* was a second reader both
+      times, which is a fact about how these were found and not about whether a
+      test could have found them. Both remain true - build the hook, and keep
+      the outside reader.
 - [ ] **[LATER]** CI.
 
 ---
