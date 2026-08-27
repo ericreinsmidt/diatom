@@ -720,75 +720,17 @@ Two levers the spike discovered:
 
       **The loudness Eric actually noticed was not this.** It was PlayOS's
       volume curve - see the gain-curve item below.
-- [ ] **[OPEN]** **Audio stuttering on GBA, possibly SNES**, reported 2026-08-27
-      from ordinary play. Unmeasured. **Do not assume it is audio**: a frame
-      overrun and an underrun sound alike from the couch, and the two have
-      opposite fixes.
-
-      Split them first, with instruments that already exist. Every run reports
-      queue min/max/final against 4096/2048 and counts refusals, and §7's drop-
-      debt path logs when the frame loop falls four frames behind. An audio
-      fault moves the queue numbers; a video fault moves the frame numbers.
-
-      There is a specific reason to suspect **video** on GBA. It has the least
-      headroom in the matrix: mGBA on Boktai is 4.2 ms of core plus 8.4 ms of
-      blit, 12.6 ms of a 16.6 ms budget, leaving 4.0 ms - against 6.5 ms on NES.
-      Anything intermittent lands there first, and the disp2 hardware scaler
-      already flagged in §5 is what would buy the margin back.
-
-      The reason to suspect **audio** is that these two are the awkward ratios:
-      GBA is 65536 Hz into 48000 (1.37:1 down) and SNES 32040 Hz (0.67:1 up),
-      per [core-facts](reference/core-facts.md). Note SNES is the only
-      *upsampling* case in the matrix, which is a different path through the
-      resampler than everything already conformance-tested.
-
-      Watch for the trap in the resampler spike: absent treble reads as "no
-      artifacts". If this turns into a filter question, judge it on SFDR with
-      `resampleprobe`, not by listening.
-
-      **Distrust the end-of-session fps line, and know how to tell the two
-      formats apart.** Before the §7 fix it counted menu time as slow frames, so
-      logs from the menu testing show 14-38 fps against a 60 target with nothing
-      wrong. That is exactly the corroboration this investigation would seize
-      on.
-
-      "Before today" is not a usable rule, because `launch.sh` rotates
-      `playos.log` only at boot and not on a launcher restart: tonight's
-      contaminated lines are in the **live** log, not in `.1`, so both formats
-      sit in one file with no divider.
-
-      The discriminator is the `Ns paused, excluded from the rate above` line
-      that now follows the rate whenever a menu was opened:
-
-      - rate line **followed by** a paused line - new format, menu time already
-        excluded, trustworthy
-      - rate line **not followed** by one - ambiguous. Either old format, or new
-        format in a session where no menu was opened. Do not guess.
-
-      So trust a rate line only when the paused line is under it. Otherwise use
-      the per-display-mode line, which is per-frame and was never affected by
-      any of this.
-
----
-
-## 7. Timing and pacing
-
-**This is now the most interesting open problem in the project.** Measured
-2026-08-23: five distinct core frame rates, and **PAL at 50.0070 Hz is a
-deliberate target**, not an edge case - Probotector is PAL-only Contra. Pacing
-50 Hz content on a 60 Hz panel is the *normal* case for part of the library.
-
-- [x] **[LB]** Pace to the **core's** rate, on an absolute floating-point
-      schedule against a monotonic clock. Measured spread: 50.0070 · 59.7275 ·
-      59.8200 · 60.0000, and only PicoDrive matches a 60 Hz panel. Blocking on
-      vblank while holding 59.7275 measured a consistent **1.4% deficit**; audio
-      drift goes to rate control instead.
-- [x] **[OPEN]** Frame drop/duplicate policy → keep the debt and repay it with a
-      short sleep, except past **four frames behind**, where the debt is dropped
-      and a resync counted. Catching up would run fast for a while, which looks
-      worse than dropping it; counting it matters because a loop that resyncs
-      often is a loop lying about its frame rate. Dupes are the core's call -
-      `GET_CAN_DUPE` is answered true and a `NULL` frame repeats the last.
+- [x] **[OPEN]** **The GBA stutter was a log file**, not audio. mGBA logs every
+      DMA at INFO and `core_log` had no level filter, so under the launcher it
+      wrote thousands of lines a second to the SD card - 43.18 fps against
+      59.7275, 68 resyncs, and a queue minimum of 0, which is a real underrun.
+      Fixed by dropping core DEBUG/INFO once a game starts.
+      [what it cost to find](discussion/2026-08-28-gba-stutter.md)
+- [ ] **[OPEN]** **The SNES half was never reproduced.** Parodius and Star Fox
+      measured clean, and the chatty core above is mGBA specifically - nothing
+      in the log came from `snes9x2010`. Either a different fault, or the same
+      one seen through a different game. Needs a report against a named title
+      before it is worth chasing.
 - [ ] **[NOT PLANNED]** Miniloong's 120Hz panel is a clean 2× - does that
       change the answer per device, and does the port get a say? Parked with
       the Miniloong port itself (§4); unanswerable without the hardware in the
@@ -1428,6 +1370,31 @@ operation never occurs.
 
 ## 15. Build and consumption
 
+- [ ] **[OPEN]** **Three of the five cores on the device are not the pinned
+      binaries.** Checked 2026-08-28 against `CORES.md`: `fceumm`,
+      `mednafen_pce_fast` and `mgba` all differ; `genesis_plus_gx` and
+      `snes9x2010` match.
+
+      **`make check-corefacts` cannot catch this** and never could. It compares
+      CORES.md against core-facts.md, both files in this repository, so it
+      proves the two agree with each other and says nothing about the binary
+      that actually runs. The one instrument that would catch it,
+      `tools/corefacts.sh --check`, needs the device and is not part of `make
+      check`.
+
+      Everything in core-facts.md therefore describes binaries the device is not
+      running, for three of five systems. That includes the sample-rate column,
+      which `make check-rates` then enforces across the whole register - so a
+      wrong number is propagated with the authority of a passing check.
+
+      This is the third time core identity has produced a wrong conclusion here:
+      the 2026-08-25 rate correction, its own correction, and the GBA ratio
+      claim on 2026-08-28
+      ([log](discussion/2026-08-28-gba-stutter.md)). The pattern is always the
+      same and the warning being written down did not prevent the repeat.
+
+      Wants a device-side hash check that runs before any measurement is
+      believed, not a note telling people to be careful.
 - [x] **[OPEN]** C standard and toolchain →
       **[ADR-0012](decisions/0012-independent-toolchain.md)** *(Accepted)*.
       `gnu11`, and Diatom builds its own pinned cross-toolchain rather than

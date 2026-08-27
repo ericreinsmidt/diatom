@@ -872,6 +872,13 @@ static int run_session_inner(const diatom_session *sn)
 	held_at_entry = prev_buttons;
 	diatom_env_suppress(held_at_entry);
 
+	/* From here the core's DEBUG/INFO goes nowhere. Load-time chatter was worth
+	 * keeping - it is where a core states its version - but per-frame chatter is
+	 * not, and under the launcher it is written to the SD card. The measurement
+	 * is in env.c; the short version is that mGBA's per-DMA logging cost 16 fps
+	 * and put a real hole in the audio. */
+	diatom_env_core_log_quiet(true);
+
 	{
 		uint64_t w0 = diatom_port_now_us();
 		int w;

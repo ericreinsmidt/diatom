@@ -10,6 +10,7 @@
  */
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "diatom.h"
@@ -49,6 +50,37 @@ bool diatom_env_new_geometry(int *w, int *h, double *aspect)
 	return true;
 }
 
+/* Raised once the game is running. Cores are free to be as chatty as they like
+ * at DEBUG/INFO and some are extravagant: mGBA logs EVERY DMA transfer at info,
+ * measured at 5.2 lines per frame on Ninja Five-0.
+ *
+ * That is not a tidiness problem. Under the launcher the host's stdout is a
+ * file on the SD card, and the cost of writing it wrecks the frame budget.
+ * Measured 2026-08-28, same ROM, same display mode, only the destination
+ * changed:
+ *
+ *   output discarded    59.73 fps    0 resyncs   0 dropped   queue min 445
+ *   output to the card  43.18 fps   68 resyncs  24 dropped   queue min   0
+ *
+ * A queue minimum of zero is a real underrun, which is an audible gap, and it
+ * was reported as the game and its audio stuttering badly. Standalone testing
+ * never saw it because a pipe is cheap and an SD card is not.
+ *
+ * Load-time INFO is kept - that is where a core announces its version, which is
+ * worth having in a log. Only the per-frame flood is dropped, and
+ * DIATOM_CORE_LOG=1 keeps everything for anyone debugging a core. */
+static bool g_core_log_quiet;
+
+void diatom_env_core_log_quiet(bool quiet)
+{
+	static int forced = -1;
+	if (forced < 0) {
+		const char *e = getenv("DIATOM_CORE_LOG");
+		forced = (e && *e && *e != '0') ? 1 : 0;
+	}
+	g_core_log_quiet = forced ? false : quiet;
+}
+
 static void core_log(enum retro_log_level level, const char *fmt, ...)
 {
 	char buf[512];
@@ -56,6 +88,8 @@ static void core_log(enum retro_log_level level, const char *fmt, ...)
 	diatom_log_level l = level >= RETRO_LOG_ERROR ? DIATOM_LOG_ERROR
 	                   : level >= RETRO_LOG_WARN  ? DIATOM_LOG_WARN
 	                   : DIATOM_LOG_INFO;
+
+	if (g_core_log_quiet && level < RETRO_LOG_WARN) return;
 
 	va_start(ap, fmt);
 	vsnprintf(buf, sizeof buf, fmt, ap);

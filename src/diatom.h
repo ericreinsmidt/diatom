@@ -86,6 +86,10 @@ bool diatom_env_new_geometry(int *w, int *h, double *aspect);   /* consumes the 
  * chord. */
 void diatom_env_suppress(uint32_t mask);
 
+/* Silence a core's DEBUG/INFO chatter once a game is running. See core_log in
+ * env.c for the measurement that made this necessary. */
+void diatom_env_core_log_quiet(bool quiet);
+
 /* options.c - what a core can be configured with, and what it currently is.
  *
  * Diatom holds the definitions and the values; the LAUNCHER decides what the
