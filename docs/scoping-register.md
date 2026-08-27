@@ -711,12 +711,28 @@ Two levers the spike discovered:
       artifacts". If this turns into a filter question, judge it on SFDR with
       `resampleprobe`, not by listening.
 
-      **Ignore the end-of-session fps line in any log written before
-      2026-08-27.** It counted menu time as slow frames, so device logs from the
-      menu testing show 14-38 fps against a 60 target with nothing wrong. Fixed
-      in §7, but old logs are still on the device and are exactly the kind of
-      corroborating evidence this investigation would seize on. Use the
-      per-display-mode line, which is per-frame and was never affected.
+      **Distrust the end-of-session fps line, and know how to tell the two
+      formats apart.** Before the §7 fix it counted menu time as slow frames, so
+      logs from the menu testing show 14-38 fps against a 60 target with nothing
+      wrong. That is exactly the corroboration this investigation would seize
+      on.
+
+      "Before today" is not a usable rule, because `launch.sh` rotates
+      `playos.log` only at boot and not on a launcher restart: tonight's
+      contaminated lines are in the **live** log, not in `.1`, so both formats
+      sit in one file with no divider.
+
+      The discriminator is the `Ns paused, excluded from the rate above` line
+      that now follows the rate whenever a menu was opened:
+
+      - rate line **followed by** a paused line - new format, menu time already
+        excluded, trustworthy
+      - rate line **not followed** by one - ambiguous. Either old format, or new
+        format in a session where no menu was opened. Do not guess.
+
+      So trust a rate line only when the paused line is under it. Otherwise use
+      the per-display-mode line, which is per-frame and was never affected by
+      any of this.
 
 ---
 
