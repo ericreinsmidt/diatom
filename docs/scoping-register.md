@@ -1071,6 +1071,39 @@ host decision and only means re-running the spike, which is cheap.
       the resident in a foreground adb session while someone is using the
       device. Frame-level evidence can still be had if anything here is ever
       doubted.
+- [x] **[OPEN]** **The same leak at game start**, reported 2026-08-27, hours
+      after the fix above. Pressing A on the shelf to launch fired a weapon in
+      the game. Fixed the same night; the entry point above covered menu resume
+      and this is its sibling.
+
+      `run_session_inner` went from the warmup straight into the loop with
+      `prev_buttons` still 0 and no mask set, so a button held at launch read as
+      a fresh edge *and* as a level. The resume site did all three things -
+      poll, seed `prev_buttons`, set the mask - and the start site did none.
+
+      **The mask has to be set before the warmup, not after.** The warmup calls
+      `retro_run` three times and the core polls the pad from inside it, via
+      `cb_input_poll`, so the core reads the pad on the very first warmup frame.
+      A mask set after the warmup would leak on exactly the frames it exists to
+      protect. The launcher raised this as a question it could not answer from
+      outside and it was the right question.
+
+      **It also closes a stale-mask bug nobody had reported.** `g_suppress` is
+      static and the resident process never reset it between games, so quitting
+      with SELECT held carried that suppression into the next game's warmup.
+      Found while placing this fix rather than by anyone hitting it.
+
+      The latch is named `held_at_entry` rather than `held_at_resume` now, since
+      it covers both doors.
+
+      **Diatom's, not the launcher's**, and the launcher made the argument
+      against its own alternative: holding RUN until release would put a
+      human-scale delay on the launch path, which is the one number this
+      project is built around - warm launch to `RUNNING` is ~6 ms. Suppression
+      costs nothing and starts immediately.
+
+      **Not verified on hardware.** Reported by a human, diagnosed from source,
+      conformance unchanged. Nobody has watched it.
 
 **Genesis note:** launched 3-button in 1988; the 6-button pad arrived 1993 and
 most of the library predates it. Both fit 4 face + L1/R1. Requires
@@ -1286,8 +1319,15 @@ operation never occurs.
 
       Cost of the hook is one synthetic-input entry point on the desktop port,
       test-only. §0's seam test is the thing to argue it against, and the
-      counter-argument is now two bugs rather than a hypothetical. **Do this
-      before the next change to `menu_pause`**, not after.
+      counter-argument is now **three** bugs rather than a hypothetical - the
+      third arriving the same night, at game start, in the same class as the
+      second. **Do this before the next change to the session lifecycle**, not
+      after.
+
+      Note the scope that third bug sets: the hook must be able to hold a button
+      down *across* `RUN`, the warmup and the first frames, not only across a
+      pause. Both leaks were at an entry into game frames, and there are exactly
+      two of those.
 
       **One argument against, raised and then withdrawn.** The launcher offered
       that neither bug is the kind a test finds - both were "a true statement

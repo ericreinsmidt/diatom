@@ -678,7 +678,7 @@ static int run_session_inner(const diatom_session *sn)
 	struct retro_system_info si;
 	double   frame_us, next_us;
 	uint64_t t_start, paused_us = 0;   /* menu time, excluded from the rate */
-	uint32_t buttons = 0, prev_buttons = 0, held_at_resume = 0;
+	uint32_t buttons = 0, prev_buttons = 0, held_at_entry = 0;
 	long     locked_at = 0;     /* frame the current rect was computed on */
 
 	/* Every game starts from identity and from an unknown level, so a launcher
@@ -848,6 +848,30 @@ static int run_session_inner(const diatom_session *sn)
 	 * time, flat. It is not cold-start overhead that residency has already
 	 * paid; it is three real frames of emulation and blitting at ~8 ms each.
 	 * Skipping it would save frames, not overhead. */
+	/* Input already held when the game begins is not the game's. Pressing A on
+	 * the shelf to launch otherwise fires a weapon in the game: the launcher's
+	 * A is still down when the first frame runs, `prev_buttons` starts at 0 so
+	 * it reads as a fresh edge, and `cb_input_state` returns the level.
+	 *
+	 * Same fault as the menu resume below, at the sibling entry point that fix
+	 * did not cover, and its reasoning transfers word for word - including
+	 * suppressing until genuine RELEASE rather than narrowing to what went down
+	 * recently, since the player may well have released A on the shelf and
+	 * pressed it again to launch.
+	 *
+	 * BEFORE the warmup rather than after it. The warmup calls `retro_run`
+	 * three times and the core polls the pad from inside it, so a mask set
+	 * after would leak on exactly the frames it exists to protect.
+	 *
+	 * This is also the only thing that clears a mask left over from the
+	 * previous game. `g_suppress` is static and the resident process never
+	 * resets it, so quitting with SELECT held used to carry that suppression
+	 * into the next game's warmup frames. */
+	diatom_port_input_poll();
+	prev_buttons  = diatom_port_input_state();
+	held_at_entry = prev_buttons;
+	diatom_env_suppress(held_at_entry);
+
 	{
 		uint64_t w0 = diatom_port_now_us();
 		int w;
@@ -978,16 +1002,17 @@ static int run_session_inner(const diatom_session *sn)
 
 		buttons = diatom_port_input_state();
 
-		/* Latched at resume, narrowed here: a button the player has genuinely
+		/* Latched at whichever entry point began these frames - game start or
+		 * menu resume - and narrowed here: a button the player has genuinely
 		 * let go of becomes the game's again on its next real press. Tested
 		 * against the raw pad state, so a button that is suppressed but still
 		 * physically down stays latched. */
-		held_at_resume &= buttons;
+		held_at_entry &= buttons;
 
 		/* The single writer. Both reasons to hide a button end up here, so
 		 * neither can clear the other. */
 		diatom_env_suppress(display_chord(buttons, prev_buttons)
-		                    | held_at_resume);
+		                    | held_at_entry);
 
 		/* MENU is Diatom's own key and the ports no longer act on it, because
 		 * what it means is host policy: standalone it ends the session, under
@@ -1048,8 +1073,8 @@ static int run_session_inner(const diatom_session *sn)
 					 * goes straight to retro_run - recording the latch without
 					 * applying it would leak the button on exactly the frame this
 					 * exists to protect. */
-					held_at_resume = prev_buttons;
-					diatom_env_suppress(held_at_resume);
+					held_at_entry = prev_buttons;
+					diatom_env_suppress(held_at_entry);
 					continue;
 				}
 			}
