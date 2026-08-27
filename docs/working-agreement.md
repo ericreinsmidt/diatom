@@ -201,6 +201,49 @@ live here rather than in an ADR (see [the ADR bar](decisions/README.md)).*
 
 ---
 
+## Working on Diatom and PlayOS in one session
+
+**Decided 2026-08-28.** The two projects were worked in separate sessions to
+keep them separate. That is now one session, deliberately, and the reason is
+that the separation was cutting through the wrong place.
+
+Everything expensive on 2026-08-27 and 28 lived **at the seam**: the exit flash
+(PlayOS's, chased from the Diatom side for a day), the paused loop dropping half
+the state plane, input leaking to the core at menu resume, the same leak at game
+start, and the volume curve - a Diatom measurement whose fix is one line of
+PlayOS. Every one cost a handoff, and handoffs lost information; one arrived
+restating context because the session it was addressed to no longer existed.
+
+**What protects the abstraction is rules and checks, not ignorance.**
+`make check-seam` forbids the port from including `libretro.h`. ADR-0009 defines
+the protocol. §12 says Diatom keeps no core list. ADR-0007 defines the port
+interface. None of that weakens because one session can see both trees.
+
+**The discipline that replaces the split:** decide which side owns a defect
+*before* writing any code, and write down why. The model is the input leak - the
+launcher argued that Diatom should own it, because holding `RUN` until release
+would put a human-scale delay on the launch path, and warm launch to `RUNNING`
+is the number the project is built around. That reasoning is the artifact worth
+keeping; the patch is the easy part.
+
+**What is genuinely lost, and what pays for it.** Three real Diatom defects in
+two days were found by the *other* session reading this code without its
+author's assumptions - all three "true statements nobody could check", the kind
+a second reader trips over and the writer cannot. One session means one set of
+blind spots, and those blind spots are measured rather than hypothetical.
+
+So this decision **raises** the priority of §13's synthetic-input hook rather
+than lowering it. The mechanical check is now the substitute for the second
+reader, not a supplement to it. If it keeps being deferred, revisit this
+arrangement rather than absorbing the risk quietly.
+
+Two things do not change: never `git add -A` in the PlayOS tree, which is shared
+and has already had one session's work swept into another's commit; and say what
+is about to happen to the hardware before it happens, because the device is
+shared too.
+
+---
+
 ## Terminology hazard
 
 **"Core" is overloaded and will cause confusion if left alone.**
