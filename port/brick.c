@@ -80,6 +80,10 @@ static int              g_pending  = -1;
 static bool             g_flip_stop;
 static bool             g_flip_running;
 
+/* Has anything been presented since the last present_stop? A handover only
+ * gets to choose what is on glass if it is the one putting it there. */
+static bool             g_presented;
+
 static SDL_AudioDeviceID g_audio;
 static SDL_Joystick     *g_joy;
 static bool              g_quit;
@@ -384,9 +388,25 @@ void diatom_port_present_stop(diatom_park park_mode)
 {
 	int front, park;
 	struct fb_var_screeninfo v;
+	bool was_presenting;
 
 	if (!g_fb) return;
 	front = flip_drain();
+
+	was_presenting = g_presented;
+	g_presented = false;
+
+	/* Nothing presented since the last stop means somebody else has the
+	 * display, and parking would TAKE it - which is what happens when a
+	 * player quits from the launcher's in-game menu. Diatom paused at MENU,
+	 * the launcher has been drawing its menu ever since, and a park here
+	 * seized the panel to show a black page for 150ms before the launcher
+	 * got it back. Measured: a pan to the park page landing between two of
+	 * the launcher's own, with nothing of Diatom's on screen either side.
+	 *
+	 * Draining still matters - it is cheap and it costs nothing to be sure
+	 * the flip thread is idle - but the pan does not happen. */
+	if (!was_presenting) return;
 
 	/* Quiescent is necessary and not sufficient.
 	 *
@@ -914,6 +934,7 @@ void diatom_port_present(const void *src, int w, int h, size_t pitch,
 	if (diatom_port_now_us() < g_osd_until) draw_gain_bar(page_base(page));
 
 	pthread_mutex_lock(&g_flip_mx);
+	g_presented = true;
 	g_pending = page;
 	pthread_cond_signal(&g_flip_cv);
 	pthread_mutex_unlock(&g_flip_mx);
