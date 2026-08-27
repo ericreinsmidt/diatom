@@ -668,6 +668,48 @@ Two levers the spike discovered:
       mGBA given **Game Boy** content, which reports **131072 Hz** - 2.73:1, and
       still holds. Detail and the correction that found it:
       [brick port log](discussion/2026-08-24-brick-port.md).
+- [ ] **[OPEN]** **Loudness differs by system**, reported 2026-08-27 from
+      ordinary play. Nothing measured yet - the first job is a number, not a
+      fix: same panel volume, one representative title per core, peak and
+      RMS off the mixer input rather than by ear.
+
+      Expect it to be real. Cores emit whatever amplitude their machine did and
+      libretro has no normalisation convention, so a quiet system is a quiet
+      system all the way through. Diatom applies no gain today, deliberately:
+      §8 gives volume to firmware, and `DIATOM_GAIN` in `brick-run.sh` is
+      testing-only for exactly that reason.
+
+      **So this collides with a standing decision and cannot be fixed casually.**
+      Per-core gain is per-core knowledge, which §12 says Diatom does not keep -
+      the same wall the FCEUmm core-option-defaults item above ran into. If a
+      trim is warranted the honest places are the launcher's config or a single
+      global gain, not a table in the frontend. Settle *whether* to normalise
+      before *where*.
+- [ ] **[OPEN]** **Audio stuttering on GBA, possibly SNES**, reported 2026-08-27
+      from ordinary play. Unmeasured. **Do not assume it is audio**: a frame
+      overrun and an underrun sound alike from the couch, and the two have
+      opposite fixes.
+
+      Split them first, with instruments that already exist. Every run reports
+      queue min/max/final against 4096/2048 and counts refusals, and §7's drop-
+      debt path logs when the frame loop falls four frames behind. An audio
+      fault moves the queue numbers; a video fault moves the frame numbers.
+
+      There is a specific reason to suspect **video** on GBA. It has the least
+      headroom in the matrix: mGBA on Boktai is 4.2 ms of core plus 8.4 ms of
+      blit, 12.6 ms of a 16.6 ms budget, leaving 4.0 ms - against 6.5 ms on NES.
+      Anything intermittent lands there first, and the disp2 hardware scaler
+      already flagged in §5 is what would buy the margin back.
+
+      The reason to suspect **audio** is that these two are the awkward ratios:
+      GBA is 65536 Hz into 48000 (1.37:1 down) and SNES 32040 Hz (0.67:1 up),
+      per [core-facts](reference/core-facts.md). Note SNES is the only
+      *upsampling* case in the matrix, which is a different path through the
+      resampler than everything already conformance-tested.
+
+      Watch for the trap in the resampler spike: absent treble reads as "no
+      artifacts". If this turns into a filter question, judge it on SFDR with
+      `resampleprobe`, not by listening.
 
 ---
 
