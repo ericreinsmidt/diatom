@@ -351,6 +351,34 @@ static void draw_gain_bar(uint8_t *base)
 	}
 }
 
+/* Wait until the mailbox is empty and no pan is in flight, and report the page
+ * left on glass. The flip thread keeps running - callers want quiescence, not
+ * teardown.
+ *
+ * Two callers, for the same underlying reason. A capture must read the page
+ * that is actually displayed rather than whichever one the thread last got to,
+ * or the same run at the same frame count yields different images. And a
+ * handover must leave nothing in flight before another process starts panning
+ * the same framebuffer, or the display switches between their page and ours
+ * mid-refresh. */
+static int flip_drain(void)
+{
+	int front;
+
+	pthread_mutex_lock(&g_flip_mx);
+	while (g_flip_running && (g_pending >= 0 || g_inflight >= 0))
+		pthread_cond_wait(&g_flip_idle, &g_flip_mx);
+	front = g_front;
+	pthread_mutex_unlock(&g_flip_mx);
+	return front;
+}
+
+void diatom_port_present_stop(void)
+{
+	if (!g_fb) return;
+	flip_drain();
+}
+
 static uint8_t *page_base(int page)
 {
 	return g_fb + (size_t)page * g_vinfo.yres * g_finfo.line_length;
@@ -1102,11 +1130,7 @@ bool diatom_port_capture(const char *path)
 	 * produced captures differing in one 24-row band, and only at some frame
 	 * counts, which is a blinking sprite one frame apart rather than a blit
 	 * defect. An instrument that is not deterministic cannot verify anything. */
-	pthread_mutex_lock(&g_flip_mx);
-	while (g_flip_running && (g_pending >= 0 || g_inflight >= 0))
-		pthread_cond_wait(&g_flip_idle, &g_flip_mx);
-	front = g_front;
-	pthread_mutex_unlock(&g_flip_mx);
+	front = flip_drain();
 
 	/* Read back the page on glass. Masks come from the driver's reported
 	 * channel offsets, same as the blit writes. */

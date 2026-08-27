@@ -275,3 +275,10 @@ bool diatom_port_level_set(diatom_level_kind kind, int index, int count)
 }
 
 void diatom_port_level_invalidate(void) { }
+
+/* Nothing to drain: this port presents synchronously inside
+ * diatom_port_present - SDL_RenderPresent has returned by the time it does,
+ * so there is never a flip in flight to wait for. The definition exists
+ * because the seam is part of the port interface, and a port that silently
+ * lacked it would fail at link time on the day someone needed it. */
+void diatom_port_present_stop(void) { }

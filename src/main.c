@@ -164,6 +164,11 @@ static const struct {
 	{ SIGABRT, "EXIT\treason=crash\tsignal=SIGABRT\n", "ERROR\tcode=crash\tmsg=SIGABRT\n" },
 };
 
+/* Deliberately no diatom_port_present_stop() below. It waits on a condition
+ * variable, which is not async-signal-safe, and a crashed game that tears on
+ * its way out is a far better outcome than one that deadlocks in a signal
+ * handler with the display held. The tear is milliseconds; the deadlock would
+ * be a power cycle. */
 static void on_crash(int sig)
 {
 	size_t i;
@@ -404,15 +409,12 @@ static bool menu_pause(const diatom_session *sn)
 	if (sn->preview && write_preview(sn->preview))
 		diatom_proto_send("PREVIEW\tpath=%s", sn->preview);
 
-	/* One frame's settle before the handover. The last pan can still be in
-	 * flight on the flip thread, and the launcher starts drawing through GL
-	 * the moment it reads PAUSED - the handoff spike's invariant is one
-	 * presenter at a time, and 20ms is what guarantees the fbdev side has
-	 * gone quiet before the other side begins. */
-	{
-		struct timespec settle = { 0, 20 * 1000 * 1000 };
-		nanosleep(&settle, NULL);
-	}
+	/* The same handover as EXIT, and the same requirement: nothing in flight
+	 * before the launcher starts drawing. This was a 20ms sleep, which is a
+	 * guess at how long a pan takes rather than a wait for one - right often
+	 * enough to look correct and wrong whenever the panel or the load
+	 * disagreed. */
+	diatom_port_present_stop();
 
 	/* Symmetrical with RUNNING: the launcher may draw from here. */
 	diatom_proto_send("PAUSED");
@@ -1076,6 +1078,14 @@ static int run_session_inner(const diatom_session *sn)
 
 	diatom_core_stop(g_core);
 	/* No dlclose. Ever. ADR-0006. */
+
+	/* Stop presenting BEFORE saying so. The launcher begins drawing the moment
+	 * it reads EXIT, and until this call returned the flip thread could still
+	 * have a pan in flight - two processes driving one framebuffer, which
+	 * measured from the launcher side as a boundary sweeping down the panel
+	 * over several frames. Not a wedge, because the window is milliseconds,
+	 * but the contract below is only true once this has returned. */
+	diatom_port_present_stop();
 
 	/* The game ran and stopped, which is EXIT rather than ERROR whatever the
 	 * reason. The launcher may take the display back now.

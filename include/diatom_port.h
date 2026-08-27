@@ -98,6 +98,26 @@ void diatom_port_present(const void *src, int w, int h, size_t pitch,
                          diatom_pixfmt fmt, diatom_rect dst,
                          diatom_filter filter);
 
+/* Stop presenting, without tearing down. Returns when nothing is pending and
+ * nothing is in flight, so a SECOND presenter may take the display safely.
+ * The port stays initialised and must serve the next diatom_port_present.
+ *
+ * This exists because presenting lifetime and process lifetime came apart.
+ * init/shutdown bracket the process and present() is per frame; nothing
+ * bracketed one GAME's presenting, which was fine while a frontend ran one
+ * game and exited. ADR-0008 made the process long-lived and ADR-0016 handed
+ * the display to the launcher per game, and the seam was never grown to
+ * match - so `EXIT` and `PAUSED` were sent while this port was still panning,
+ * and for a few milliseconds two processes drove the same framebuffer.
+ * Measured from the launcher side as a boundary sweeping down the panel
+ * across several frames: a tear, not a composite.
+ *
+ * Deliberately does NOT choose which page is left on glass. Being quiescent is
+ * the contract; what the user should see next is the launcher's decision, not
+ * the port's. Nor is it diatom_port_shutdown - that joins the flip thread, and
+ * the thread has to survive to serve the next game. */
+void diatom_port_present_stop(void);
+
 /* Interleaved stereo S16 at caps.audio_rate. NEVER blocks; drops on overflow.
  * A blocking write is a legitimate sync strategy but is incompatible with
  * dynamic rate control, which the measured spread of core rates makes
