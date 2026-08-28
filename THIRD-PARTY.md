@@ -8,11 +8,11 @@ that matters - escaping GPL inheritance is a founding goal of the project).
 The libretro API header, vendored so the build is self-contained.
 
 - **Copyright (C) 2010-2024 The RetroArch team**
-- **MIT-style permissive licence**, and the header states that its licence
+- **MIT-style permissive license**, and the header states that its license
   statement *"only applies to this libretro API header (libretro.h)"*.
 
 That scoping is deliberate on libretro's part and is what makes the whole
-arrangement work: any-licence frontends may host any-licence cores, because the
+arrangement work: any-license frontends may host any-license cores, because the
 interface between them carries no copyleft.
 
 Full text is at the top of the file.

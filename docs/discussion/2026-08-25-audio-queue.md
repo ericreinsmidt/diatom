@@ -129,7 +129,7 @@ that did not survive contact:
   constant, so startup only.
 - **Sample-to-sample jump counting.** IN had *more* jumps than OUT (266/s vs
   162/s), because NES square waves are discontinuous by construction and the
-  detector could not tell an edge from an artefact.
+  detector could not tell an edge from an artifact.
 
 One real bug was found and fixed on the way - `g_prev` was not carried through
 the pass-through path - but measurement showed it was not the reported symptom,
@@ -139,7 +139,7 @@ and the commit says so.
 each boundary and play the captures back. `--tap-audio` writes both sides of the
 resampler; converting them to WAV and playing them through `aplay` answered in
 one listen what an evening of metrics could not. Attribution beats analysis when
-the question is "whose artefact is this".
+the question is "whose artifact is this".
 
 ## What it turned up that is not a bug
 

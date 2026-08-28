@@ -36,7 +36,7 @@ Taken at face value it says the windowed sinc is the inferior filter.
 
 Linear interpolation has a sinc-squared response: it **droops**. It was scoring
 well on "fraction of energy above 10 kHz" by throwing away the treble that
-belonged there. Losing signal and not adding artefacts look identical to a
+belonged there. Losing signal and not adding artifacts look identical to a
 single band ratio, and this one could not tell them apart.
 
 The lesson is not about audio. **A metric that cannot separate "did less harm"
@@ -67,7 +67,7 @@ being measured.
 | **131072 → 48000 (Game Boy)** | 15 kHz | 37.3 | 74.8 | +37.5 |
 | 48000 → 48000 (NES, exact) | 3 kHz | 92.5 | 92.5 | 0.0 |
 
-**21.7 dB is not a subtle defect.** It puts the loudest artefact 8% below the
+**21.7 dB is not a subtle defect.** It puts the loudest artifact 8% below the
 tone it came from. The register's "no audible problem has been measured" was
 true only in the sense that nobody had looked.
 
@@ -107,7 +107,7 @@ dulling, present on every system whose rate is not the device's.
 ## What was built
 
 32 taps, 512 phases, Blackman window, cutoff at 0.92 of the lower Nyquist.
-Hand-rolled rather than libsamplerate: the licence is compatible since 0.1.9,
+Hand-rolled rather than libsamplerate: the license is compatible since 0.1.9,
 but the Brick sysroot carries SDL2 and nothing else, so it would have meant
 cross-building a dependency to replace eighty lines.
 
@@ -165,5 +165,5 @@ the listening test confirmed anything would be inventing evidence.
   linear cost, and the table is already generated rather than written out.
 - Anyone hears the 2 dB dip at 14 kHz on NES content. That is the `ROLLOFF`
   constant, and trading it against stopband depth is a one-line change - but it
-  is a judgement about listening, and this project has been wrong before by
+  is a judgment about listening, and this project has been wrong before by
   settling those from a table.

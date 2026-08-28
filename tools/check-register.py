@@ -238,7 +238,7 @@ def check_working_tree():
 
     # 6. Suspected fossils: an open item whose subject is already covered by a
     #    ticked one somewhere else. WARN, not FAIL - "is this the same
-    #    question?" is a judgement, and a check that guesses wrong loudly is a
+    #    question?" is a judgment, and a check that guesses wrong loudly is a
     #    check people stop reading.
     ticked = []
     for num, letter, title, start, end in secs:

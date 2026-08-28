@@ -16,7 +16,7 @@
  * The sweep exists for a narrower question than the other two: port/brick.c
  * floors brightness at 8/255, and 8 was CHOSEN, not measured. If the driver
  * clamps low values itself then the floor is a hardware fact and belongs in
- * the port; if it stores whatever it is given, the floor is a judgement about
+ * the port; if it stores whatever it is given, the floor is a judgment about
  * what a person can still see and needs eyes rather than an ioctl. Find out
  * which before spending anyone's attention on it.
  *

@@ -98,7 +98,7 @@ The disp2 engine composites the fb layer in per-pixel alpha mode
 (transp at 24+8), and the blit was writing zero alpha: every pixel fully
 transparent, composited over black. Capture reads memory; the panel reads
 alpha. The port now fills the format's transparency channel opaque, read
-from the driver like the colour offsets, and the pattern showed on glass.
+from the driver like the color offsets, and the pattern showed on glass.
 
 The general lesson joins the register's themes: each stage of today's
 pipeline validated the previous one and something orthogonal still failed -

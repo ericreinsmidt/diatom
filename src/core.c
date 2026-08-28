@@ -139,7 +139,7 @@ bool diatom_core_start(diatom_core *c, const char *rom_path)
 	memset(&si, 0, sizeof si);
 	c->get_system_info(&si);
 
-	if (!c->initialised) { c->init(); c->initialised = true; }
+	if (!c->initialized) { c->init(); c->initialized = true; }
 
 	/* A core that declared SET_SUPPORT_NO_GAME expects NULL, not a path. */
 	if (!rom_path) {
@@ -215,7 +215,7 @@ bool diatom_core_start(diatom_core *c, const char *rom_path)
 	return true;
 }
 
-/* Stops the GAME, not the core. The core stays initialised and stays mapped -
+/* Stops the GAME, not the core. The core stays initialized and stays mapped -
  * that is the whole of ADR-0006. */
 void diatom_core_stop(diatom_core *c)
 {

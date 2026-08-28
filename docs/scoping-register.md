@@ -12,7 +12,7 @@ beside it, and section numbers never change, because ADRs are immutable and
 several of them cite these numbers.
 
 **Say what settled it.** A ticked item should point at the ADR, spike or log
-that settled it - or say plainly that it is a **judgement call** made here and
+that settled it - or say plainly that it is a **judgment call** made here and
 now. Both are legitimate; conflating them is not. On 2026-08-25 a sweep that was
 clearing fossils - items *evidence* had already settled - also closed a genuinely
 open question by argument, in the same batch and the same `- [x]`. It inherited
@@ -53,7 +53,7 @@ downgraded; a register where everything is load-bearing guides nothing.
 
 Three questions for whether a question is even ready to answer:
 1. **What kind of claim is it?** Spec-derivable → read the spec. Runtime
-   behaviour → measure. Taste → just decide.
+   behavior → measure. Taste → just decide.
 2. **What does being wrong cost?** Cheap to reverse → decide fast and move on.
 3. **Is anything blocked on it?** If not, deferring is a legitimate answer, and
    this register exists so deferral doesn't mean forgetting.
@@ -141,7 +141,7 @@ verified rather than assumed.
       MIT is GPL-compatible, so even the strictest reading yields no conflict,
       and Diatom ships no cores. **GPL was the easy half**: two of five pinned
       cores are *non-commercial*, covering four of nine systems, which the
-      question never contemplated. Licences now recorded by `fetch-cores.sh`.
+      question never contemplated. Licenses now recorded by `fetch-cores.sh`.
 - [x] **[LB]** Standalone repository → **[ADR-0002](decisions/0002-separate-repository.md)** *(Accepted)*
 - [x] **[LB]** Decision-recording practice: ADRs → **[ADR-0001](decisions/0001-record-architecture-decisions.md)** *(Accepted)*
 - [x] **[OPEN]** **A real launcher drives Diatom in production.** PlayOS
@@ -521,7 +521,7 @@ Two amendments ADR-0007 makes to the table above:
       the glibc it was linked against, which is the coupling it was supposed to
       escape. ADR-0012 already solves portability by building against the oldest
       glibc in scope.
-- [x] **[LB] [OPEN]** **ADR-0011 locked the rect from a boot artefact** →
+- [x] **[LB] [OPEN]** **ADR-0011 locked the rect from a boot artifact** →
       **[ADR-0021](decisions/0021-settle-the-rect-before-locking.md)**
       *(Accepted)*. genesis_plus_gx's load-time 256x192 lasts 1-29 frames of
       3600, so `integer` scaled Herzog Zwei by 3.20x/3.43x; relocking when the
@@ -713,7 +713,7 @@ Two levers the spike discovered:
       table would be wrong for half of each system's library, and it was already
       the one shape §12 forbids. Nothing static works here.
 
-      Recommendation on record: **do not build normalisation.** Dynamic AGC is
+      Recommendation on record: **do not build normalization.** Dynamic AGC is
       the only thing that would work, it would pump on exactly the content that
       motivated it, and it changes what the core produced. If it is ever
       revisited it wants an ADR, not a patch.
@@ -776,7 +776,7 @@ Two levers the spike discovered:
       physical→canonical and is never configurable, the host owns
       canonical→retropad as **data**, the launcher owns the config.
 - [x] **[LB]** **The physical switch is out of scope, reserved for the
-      launcher** (2026-08-25, judgement call). `gpio243`: unclaimed, no bounce,
+      launcher** (2026-08-25, judgment call). `gpio243`: unclaimed, no bounce,
       `edge` present so it can be interrupt-driven, unreferenced by PlayOS. It
       is **state, not events** - it has a value before Diatom starts and after
       it exits. Diatom must not learn it exists; any per-game meaning arrives as
@@ -954,7 +954,7 @@ being declined, and carrying on. Multi-disc is a fifth-generation problem -
 Super CD-ROM discs held ~540 MB and PCE CD content ran 200-400 MB.
 
 **Confirmed against Redump** (libretro-database, 2026-08-25): the PC Engine CD
-catalogue is **502 entries with zero disc-numbered titles**. No multi-disc PCE CD
+catalog is **502 entries with zero disc-numbered titles**. No multi-disc PCE CD
 game was ever released. The convention is demonstrably in use in the same
 dataset - PlayStation has 7,186 disc-numbered entries of 13,592 - so this is a
 real null rather than missing metadata.
@@ -1347,7 +1347,7 @@ operation never occurs.
 
 ## 14. Failure handling
 
-- [x] **[OPEN]** Core crash behaviour (interacts with §3) → a crash while
+- [x] **[OPEN]** Core crash behavior (interacts with §3) → a crash while
       loading is `ERROR code=crash` and the launcher keeps the display; a crash
       mid-game is `EXIT reason=crash`. Six modes driven on hardware, and
       `SA_ONSTACK` A/B'd as the difference between reporting a stack overflow

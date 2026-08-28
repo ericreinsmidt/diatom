@@ -48,7 +48,7 @@ mode was the one state-plane setting unreachable at the one moment a launcher
 has a menu open to reach it from. Levels, input mapping and core options all
 worked there. This did not.
 
-The two accepted ADRs described behaviour the code did not have, and nothing
+The two accepted ADRs described behavior the code did not have, and nothing
 caught it.
 
 ## Fix

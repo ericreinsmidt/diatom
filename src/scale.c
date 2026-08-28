@@ -53,7 +53,7 @@ static double target_aspect(int src_w, int src_h, double aspect)
 	return (double)src_w / (double)src_h;
 }
 
-static diatom_rect centred(int w, int h, int surf_w, int surf_h)
+static diatom_rect centered(int w, int h, int surf_w, int surf_h)
 {
 	diatom_rect r;
 	r.w = w;
@@ -78,7 +78,7 @@ diatom_rect diatom_scale_rect(diatom_scale_mode mode, int src_w, int src_h,
 
 	switch (mode) {
 	case DIATOM_SCALE_NATIVE:
-		return centred(src_w, src_h, surf_w, surf_h);
+		return centered(src_w, src_h, surf_w, surf_h);
 
 	case DIATOM_SCALE_INTEGER:
 		fx = surf_w / src_w;
@@ -88,7 +88,7 @@ diatom_rect diatom_scale_rect(diatom_scale_mode mode, int src_w, int src_h,
 		 * it 1:1 and let the port clip rather than refusing the frame outright.
 		 * Reachable today: SNES hires is 512x448, and 2x would need 1024x896. */
 		if (f < 1) f = 1;
-		return centred(src_w * f, src_h * f, surf_w, surf_h);
+		return centered(src_w * f, src_h * f, surf_w, surf_h);
 
 	case DIATOM_SCALE_INTEGER_VERT:
 		/* Whole factor vertically, shape-correct horizontally.
@@ -112,7 +112,7 @@ diatom_rect diatom_scale_rect(diatom_scale_mode mode, int src_w, int src_h,
 			if (w <= surf_w) break;
 		}
 		if (f < 1) f = 1;
-		return centred((int)((double)(src_h * f) * a + 0.5), src_h * f,
+		return centered((int)((double)(src_h * f) * a + 0.5), src_h * f,
 		               surf_w, surf_h);
 
 	case DIATOM_SCALE_INTEGER_OVER:
@@ -125,27 +125,27 @@ diatom_rect diatom_scale_rect(diatom_scale_mode mode, int src_w, int src_h,
 		fy = (surf_h + src_h - 1) / src_h;
 		f  = fx > fy ? fx : fy;
 		if (f < 1) f = 1;
-		return centred(src_w * f, src_h * f, surf_w, surf_h);
+		return centered(src_w * f, src_h * f, surf_w, surf_h);
 
 	case DIATOM_SCALE_ASPECT_FIT:
 		a = target_aspect(src_w, src_h, aspect);
 		if ((double)surf_w / a <= (double)surf_h)
-			return centred(surf_w, (int)((double)surf_w / a + 0.5),
+			return centered(surf_w, (int)((double)surf_w / a + 0.5),
 			               surf_w, surf_h);
-		return centred((int)((double)surf_h * a + 0.5), surf_h,
+		return centered((int)((double)surf_h * a + 0.5), surf_h,
 		               surf_w, surf_h);
 
 	case DIATOM_SCALE_ASPECT_FILL:
 		a = target_aspect(src_w, src_h, aspect);
 		if ((double)surf_w / a >= (double)surf_h)
-			return centred(surf_w, (int)((double)surf_w / a + 0.5),
+			return centered(surf_w, (int)((double)surf_w / a + 0.5),
 			               surf_w, surf_h);
-		return centred((int)((double)surf_h * a + 0.5), surf_h,
+		return centered((int)((double)surf_h * a + 0.5), surf_h,
 		               surf_w, surf_h);
 
 	case DIATOM_SCALE_STRETCH:
-		return centred(surf_w, surf_h, surf_w, surf_h);
+		return centered(surf_w, surf_h, surf_w, surf_h);
 	}
 
-	return centred(src_w, src_h, surf_w, surf_h);
+	return centered(src_w, src_h, surf_w, surf_h);
 }

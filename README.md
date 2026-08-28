@@ -5,7 +5,7 @@ intended as a permissively licensed replacement for the GPL minarch that PlayOS
 currently patches and rebuilds, and as a reusable base for future firmware.
 
 **MIT licensed.** Diatom loads whatever core it is handed and ships none of
-them, so a permissive frontend can host cores under any licence - which is
+them, so a permissive frontend can host cores under any license - which is
 what `libretro.h` is permissive for.
 
 **Status: running on hardware.** Nine systems across five cores, verified on a
@@ -73,7 +73,7 @@ are now assertions rather than sentences.
 Two goals, and the second is not secondary:
 
 1. Build a frontend worth using.
-2. Practise running a project sustainably - decisions recorded with their
+2. Practice running a project sustainably - decisions recorded with their
    reasoning, questions tracked rather than forgotten, claims measured rather
    than argued, and scaffolding removed the day it stops earning its place.
 

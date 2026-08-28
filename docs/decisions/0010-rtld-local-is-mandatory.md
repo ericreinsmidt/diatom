@@ -84,12 +84,12 @@ decision on merit rather than on build hygiene.
 
 **Harder:** Every symbol must be resolved with `dlsym` on a specific handle.
 There is no process-wide fallback, so a core whose *undefined* references expect
-a global definition would fail to load - which is the correct behaviour, loudly
+a global definition would fail to load - which is the correct behavior, loudly
 rather than silently.
 
 **The failure mode this prevents is silent.** With `RTLD_GLOBAL`, a second core's
 `retro_run` can resolve to the first core's, and `crc32` can resolve to a
-statically-linked copy with different behaviour. Neither produces an error. Both
+statically-linked copy with different behavior. Neither produces an error. Both
 present as inexplicable emulation bugs. That is why this is written down rather
 than left to a code review.
 

@@ -10,11 +10,11 @@ them. The binaries themselves are gitignored.
 Source: `https://buildbot.libretro.com/nightly/linux/aarch64/latest` - libretro's own buildbot. The path is **unpinned**;
 these hashes are the pin.
 
-Licences are fetched with the binaries rather than remembered. The set is
+Licenses are fetched with the binaries rather than remembered. The set is
 **not uniformly GPL** and the differences matter to anyone shipping an
 image - see [ADR-0023](docs/decisions/0023-core-licensing.md).
 
-| Core | Licence | Bytes | sha256 |
+| Core | License | Bytes | sha256 |
 |---|---|---|---|
 | `fceumm` | GPLv2 | 4451672 | `1b13b00d4680394dad8000d5175f97be727107e0945bc9b412da91d70c07b267` |
 | `snes9x2010` | Non-commercial | 2859704 | `3933890f520abb9dbb0e5276460785b20ce54d25f552b369cafeca270b9dd44c` |

@@ -9,9 +9,9 @@
 
 [ADR-0007](0007-port-interface.md) recorded the handling of frames that do not
 integer-scale as a **default, not a decision**, with the note that *"whether that
-looks acceptable is a judgement to make on hardware, not in a document."*
+looks acceptable is a judgment to make on hardware, not in a document."*
 
-That judgement is now possible. The first working build reproduced the case on
+That judgment is now possible. The first working build reproduced the case on
 its first run.
 
 Cores announce hires by calling `SET_GEOMETRY` mid-run with a larger
@@ -76,7 +76,7 @@ moiré visibly. On real content the likely victim is text in a hires menu - whic
 is, unhelpfully, exactly what hires modes are usually *for*.
 
 The trade is therefore: a constant, correctly-proportioned picture with an
-artefact on fine detail, versus an integer-clean picture that changes size by 5x
+artifact on fine detail, versus an integer-clean picture that changes size by 5x
 mid-game. Having looked at both, the first is clearly better - but it is a
 trade, not a free win.
 

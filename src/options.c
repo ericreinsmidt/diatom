@@ -88,7 +88,7 @@ static diatom_option *find(const char *key)
 	return NULL;
 }
 
-/* A value the caller asked for is only honoured if the core offers it. A core
+/* A value the caller asked for is only honored if the core offers it. A core
  * handed a value outside its own list is entitled to do anything at all. */
 static bool offered(const diatom_option *o, const char *value)
 {
@@ -197,8 +197,24 @@ bool diatom_options_set(const char *key, const char *value)
 
 	if (!key || !value) return false;
 
-	/* Before the core has declared anything, remember it for later. */
+	/* Before the core has declared anything, remember it for later.
+	 *
+	 * Keyed, not appended. Pending entries are applied when a core declares
+	 * that key and then deliberately KEPT, because the next core to load needs
+	 * them too - a launcher's preference for mGBA has to survive a game of NES
+	 * in between. An append-only list makes that correct behavior leak: a
+	 * launcher that states its preferences before every launch adds an entry
+	 * each time, and on the 33rd this starts returning false and the option is
+	 * quietly refused. Found 2026-08-28 before wiring PlayOS to do exactly
+	 * that. */
 	if (!o) {
+		int i;
+		for (i = 0; i < g_npending; i++)
+			if (!strcmp(g_pending[i].key, key)) {
+				snprintf(g_pending[i].value, sizeof g_pending[0].value,
+				         "%s", value);
+				return true;
+			}
 		if (g_npending >= MAX_PENDING) return false;
 		snprintf(g_pending[g_npending].key,   sizeof g_pending[0].key,   "%s", key);
 		snprintf(g_pending[g_npending].value, sizeof g_pending[0].value, "%s", value);

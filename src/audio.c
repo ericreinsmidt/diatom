@@ -285,11 +285,11 @@ static void build_kernel(void)
 			g_kern[p][t] = (float)v;
 			sum += v;
 		}
-		/* Normalise every phase to unity DC gain independently. Skipping this
+		/* Normalize every phase to unity DC gain independently. Skipping this
 		 * leaves each phase with a slightly different gain, and since the phase
 		 * cycles at the resampling rate the difference becomes amplitude
 		 * modulation - a tone at the beat frequency, which is exactly the kind
-		 * of artefact this filter exists to remove. */
+		 * of artifact this filter exists to remove. */
 		if (sum != 0.0)
 			for (t = 0; t < TAPS; t++) g_kern[p][t] /= (float)sum;
 	}
@@ -343,13 +343,13 @@ size_t diatom_audio_push(const int16_t *in, size_t frames)
 	 * frame, about one per call - a 0.125% leak, small enough to look like
 	 * clock drift and large enough to drain the buffer in twenty seconds. */
 	while ((size_t)((int)g_pos + HALF) < g_have) {
-		int centre = (int)g_pos;
-		const float *k = g_kern[(int)((g_pos - centre) * PHASES)];
+		int center = (int)g_pos;
+		const float *k = g_kern[(int)((g_pos - center) * PHASES)];
 		double al = 0.0, ar = 0.0;
 		int t;
 
 		for (t = 0; t < TAPS; t++) {
-			const int16_t *sp = &g_buf[centre + t - HALF + 1][0];
+			const int16_t *sp = &g_buf[center + t - HALF + 1][0];
 			al += sp[0] * (double)k[t];
 			ar += sp[1] * (double)k[t];
 		}

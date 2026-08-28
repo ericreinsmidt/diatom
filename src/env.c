@@ -123,7 +123,7 @@ static bool env_cb(unsigned cmd, void *data)
 		 * mid-run change is a hires excursion. Measured 2026-08-26, that is
 		 * false for Genesis: genesis_plus_gx reports 256x192 at load and
 		 * switches to 320x224 at frame 1 (Phantasy Star IV) or 29 (Herzog
-		 * Zwei), then stays there. The load-time value is a boot artefact and
+		 * Zwei), then stays there. The load-time value is a boot artifact and
 		 * the caller cannot tell without seeing what replaced it. */
 		const struct retro_game_geometry *g = data;
 

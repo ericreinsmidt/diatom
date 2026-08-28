@@ -3,7 +3,7 @@
  * Game audio is a bad test bench. `hfprobe` measured "energy above 10 kHz" on
  * Contra and scored LINEAR INTERPOLATION as the better filter - because linear
  * interpolation has 2.5 dB of droop up there, and losing treble looks identical
- * to not adding artefacts when all you have is one band ratio. A resampler has
+ * to not adding artifacts when all you have is one band ratio. A resampler has
  * to be judged on a signal whose spectrum is known exactly.
  *
  * So: push a pure tone through the real `src/audio.c` at a chosen rate ratio,

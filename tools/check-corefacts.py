@@ -48,7 +48,7 @@ MANIFEST = os.path.join(ROOT, "CORES.md")
 DOCS = os.path.join(ROOT, "docs")
 
 # Name and hash, with whatever columns CORES.md carries between them. An earlier
-# version pinned the byte count's position and broke the day a licence column was
+# version pinned the byte count's position and broke the day a license column was
 # added - reporting that every core had been "unpinned", which is alarming and
 # false. Match the two things that identify a core, not the table's shape.
 PIN = re.compile(r"`([a-z0-9_]+)`\s*\|.*?\|\s*`([a-f0-9]{64})`")

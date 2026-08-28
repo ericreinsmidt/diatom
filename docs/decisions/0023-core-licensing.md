@@ -23,7 +23,7 @@ left it there for three days.
 **What the cores actually are**, fetched from libretro's core-info repo on
 2026-08-26 and now recorded by `tools/fetch-cores.sh` with the binaries:
 
-| Core | Systems | Licence |
+| Core | Systems | License |
 |---|---|---|
 | `fceumm` | NES | **GPLv2** |
 | `mednafen_pce_fast` | PC Engine | **GPLv2** |
@@ -35,8 +35,8 @@ left it there for three days.
 
 ## The question, asked the right way round
 
-"Are the cores covered if we use MIT" inverts it. A licence attaches to the work
-it is on; Diatom's MIT licence governs Diatom's code and cannot reach a core.
+"Are the cores covered if we use MIT" inverts it. A license attaches to the work
+it is on; Diatom's MIT license governs Diatom's code and cannot reach a core.
 The question that matters is the reverse: **does loading a GPL core place
 obligations on Diatom?**
 
@@ -50,7 +50,7 @@ convenience.
 
 **`libretro.h` is MIT and says so in a scoped notice**: *"The following license
 statement only applies to this libretro API header."* The interface is
-deliberately permissive so that any-licence frontends can host any-licence
+deliberately permissive so that any-license frontends can host any-license
 cores. That is the enabling fact the register named.
 
 **MIT is GPL-compatible, and this is what actually settles it.** Take the
@@ -77,7 +77,7 @@ Three rules follow, and the third is the one with teeth:
    gitignored directory for testing only.
 2. **`libretro.h` keeps its own scoped notice**, and `LICENSE` names it
    separately. It already does.
-3. **Core licences are recorded by the tool that fetches the cores**, not by
+3. **Core licenses are recorded by the tool that fetches the cores**, not by
    anyone's memory. `fetch-cores.sh` now reads the `license` field from
    libretro's core-info repo and writes it into `CORES.md` beside the hash. The
    question this ADR answers sat open for days while the answer was three
@@ -106,7 +106,7 @@ launcher author can see at a glance which cores restrict what.
 
 **Harder.** Rule 1 forecloses a convenience: Diatom can never ship a "batteries
 included" bundle without reopening all of this. That is a real cost and it is
-accepted deliberately, because the alternative is a licence question in the
+accepted deliberately, because the alternative is a license question in the
 build system rather than in a document.
 
 **Foreclosed.** Nothing about the code. This constrains distribution, not
@@ -116,7 +116,7 @@ design.
 
 - Diatom is ever proposed to ship, bundle or auto-download a core, which
   converts this from a settled question into an open one on the same day.
-- A core's licence changes, or the pinned set gains one whose licence is neither
+- A core's license changes, or the pinned set gains one whose license is neither
   permissive, GPL-compatible, nor merely non-commercial - a no-derivatives or
   no-redistribution core would break the "ships no cores" reasoning by making
   even the user's own copy questionable.

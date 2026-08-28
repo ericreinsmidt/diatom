@@ -36,7 +36,7 @@ recording every distinct frame size and the frame it first appeared on:
 | `mednafen_pce_fast` | three games | 256x243, stable |
 
 **The geometry ADR-0011 locks from lasts between one and twenty-nine frames out
-of 3600 on Genesis.** It is not a mode, it is a boot artefact. Master System and
+of 3600 on Genesis.** It is not a mode, it is a boot artifact. Master System and
 Game Gear through the *same core* are stable, so this is a property of the
 system, not of the core.
 
@@ -57,7 +57,7 @@ reason it is rejected here: SNES base 256x224 against max 1024x478 would display
 at 1x and waste most of the panel permanently.
 
 **Relock on any geometry change.** ADR-0011's Option A. This is exactly the
-5x-resize-mid-game behaviour that ADR-0011 was written to prevent, and nothing
+5x-resize-mid-game behavior that ADR-0011 was written to prevent, and nothing
 in the new measurement makes it less bad.
 
 **Discriminate on what changed** - width-only is hires, height too is a mode
@@ -81,7 +81,7 @@ person reaches by opening a menu.
 really held.** That is the question ADR-0011 was actually asking and answered by
 assumption. A boot mode corrects itself within half a second, during the logo. A
 hires menu opened minutes into a game does not qualify, the rect stays put, and
-ADR-0011's behaviour is preserved exactly where it was right.
+ADR-0011's behavior is preserved exactly where it was right.
 
 It is also self-correcting: a core that changes geometry several times while
 booting relocks each time until one persists.

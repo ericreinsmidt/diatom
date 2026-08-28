@@ -908,7 +908,7 @@ static int run_session_inner(const diatom_session *sn)
 		/* ADR-0011 locked the rect and never moved it. That is right when the
 		 * load-time geometry is the mode the game runs in and the change is an
 		 * excursion - SNES and PC Engine hires - and wrong when the load-time
-		 * value is a boot artefact.
+		 * value is a boot artifact.
 		 *
 		 * Measured 2026-08-26 with tools/envlog.c over 3600 frames:
 		 *
@@ -923,7 +923,7 @@ static int run_session_inner(const diatom_session *sn)
 		 * displaying turned out to be transient. Genesis corrects itself
 		 * within half a second, during the boot logo. A hires menu opened
 		 * minutes in does not qualify and the rect stays put, which is the
-		 * behaviour ADR-0011 exists to protect. */
+		 * behavior ADR-0011 exists to protect. */
 		if (diatom_env_geometry_changed()) {
 			int nw, nh;
 			double na;
@@ -982,7 +982,7 @@ static int run_session_inner(const diatom_session *sn)
 				                  ? "OPTSET\tkey=%s"
 				                  : "ERROR\tcode=bad_option\tmsg=%s", m.key);
 				break;
-			/* Also honoured while running, not only from the menu. ADR-0016
+			/* Also honored while running, not only from the menu. ADR-0016
 			 * puts slot CHOICE in the launcher's menu, but nothing about that
 			 * requires the game to be paused to write a state. */
 			case DIATOM_MSG_SAVE:

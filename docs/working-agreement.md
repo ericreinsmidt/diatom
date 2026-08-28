@@ -59,7 +59,7 @@ quietly skipping them.
 ## Practices
 
 1. **Discussion is not decision.** Nothing is decided until an ADR exists and
-   says `Accepted`. Never summarise an open question as though it were settled,
+   says `Accepted`. Never summarize an open question as though it were settled,
    and never let an unstated assumption harden into a premise.
 2. **Every `[LB]` decision gets an ADR** before anything depends on it.
 3. **Push back rather than validate.** If an idea is weak, say which part and

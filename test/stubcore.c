@@ -103,7 +103,7 @@ void retro_set_controller_port_device(unsigned port, unsigned device)
 { (void)port; (void)device; }
 
 /* Deliberate faults. `volatile` throughout and no inlining, because -O2 is
- * entitled to assume undefined behaviour never happens: an unguarded null store
+ * entitled to assume undefined behavior never happens: an unguarded null store
  * can be deleted outright, and a self-call with no side effect can be turned
  * into a loop that never grows the stack. Both were observed while writing
  * this - the segv mode compiled to nothing at all. */

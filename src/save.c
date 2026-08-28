@@ -310,7 +310,7 @@ bool diatom_state_load(diatom_core *c, const char *path)
 	/* A state is only meaningful to the exact core that wrote it. Refusing is
 	 * the whole point of the header: the caller falls back to starting the
 	 * game normally, which is right, where handing a core a foreign state is
-	 * undefined behaviour. */
+	 * undefined behavior. */
 	c->get_system_info(&si);
 	if (strcmp(h.core_name, si.library_name ? si.library_name : "?") != 0 ||
 	    strcmp(h.core_version, si.library_version ? si.library_version : "?") != 0) {

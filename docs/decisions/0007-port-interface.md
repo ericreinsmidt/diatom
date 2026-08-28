@@ -126,7 +126,7 @@ without superseding this ADR.
   recompute the largest integer factor that fits and accept the size change. Log
   it. This is mostly SNES - base 256×224 gives a clean 3×, but hires 512×448 only
   fits at 1×, and games toggle hires for menus. Whether that looks acceptable is
-  a judgement to make on hardware, not in a document.
+  a judgment to make on hardware, not in a document.
 
 ## Consequences
 

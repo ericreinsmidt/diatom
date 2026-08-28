@@ -35,7 +35,7 @@ with nothing breaking.
 *What does holding every core resident cost in RSS, and what does `dlopen` cost
 on this CPU?*
 
-Maps N cores `RTLD_NOW | RTLD_LOCAL`, timing each, initialises exactly one, loads
+Maps N cores `RTLD_NOW | RTLD_LOCAL`, timing each, initializes exactly one, loads
 a game, runs 720 frames, and reports resident memory at every step.
 
 Produced [the RSS and dlopen measurements](../docs/spikes/2026-08-23-rss-and-dlopen.md)
@@ -189,7 +189,7 @@ it. Nothing ever failed when the register drifted, so it drifted.
 
 **WARN** - suspected fossils, an open item whose vocabulary is already covered
 by a ticked one elsewhere. Never fails a build, because "is this the same
-question?" is a judgement. The first version scored these on raw shared-word
+question?" is a judgment. The first version scored these on raw shared-word
 count and produced **40 warnings, nearly all noise** - `**[OPEN]**` was leaking
 into the comparison so every open item matched every other. Tags are stripped
 first now, and overlap is measured against the *shorter* item rather than the
@@ -285,7 +285,7 @@ It exists because "the audio sounds wrong" needs to be attributable. Present in
 IN means the core or the game; present only in OUT means us; present in neither
 means downstream of us. That three-way split is what identified the resampler as
 the source of the chirps on 2026-08-25, after a mic capture could not separate
-the artefact from Contra's own gunfire.
+the artifact from Contra's own gunfire.
 
 The measurement that did it, on 15s of Contra:
 
@@ -380,7 +380,7 @@ the replacement it reported 25% - apparently worse. The spectra said otherwise:
 linear interpolation is **2.5 dB down at 15-20 kHz** and was scoring well by
 discarding the treble that belonged there.
 
-*Losing signal and not adding artefacts look identical to a single band ratio.*
+*Losing signal and not adding artifacts look identical to a single band ratio.*
 Use `hfprobe` to ask whether something is wrong on real content, and
 `resampleprobe`/`spurs.py` to ask which of two filters is better. That distinction
 cost an hour and is the most portable thing in this file.

@@ -56,7 +56,7 @@ Fills the panel with perfectly uniform 4x4 pixels and no filtering cost. The
 crop is the problem: 192 of 960 lines, 24 source lines, enough to take a HUD.
 
 ### Option C - aspect-fit
-Honours the shape the core asks for. Leaves 44px bars either side, and is the
+Honors the shape the core asks for. Leaves 44px bars either side, and is the
 one combination that dropped frames when filtered.
 
 ### Option D - stretch
@@ -78,7 +78,7 @@ beat both the letterbox and the crop when judged in motion on the real panel.
 where it is not free, and is the only thing that has ever made this frontend
 miss a frame.
 
-**Scope of the judgement, stated plainly:** this was decided on a 4:3 panel
+**Scope of the judgment, stated plainly:** this was decided on a 4:3 panel
 showing near-4:3 content, where stretch distorts by 9.4%. The same rule on a
 16:9 panel would distort by 78%. The default is a constant, not a computation,
 and it is correct for the devices in scope today and not obviously correct

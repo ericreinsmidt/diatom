@@ -231,7 +231,7 @@ int main(int argc, char **argv)
 				/* Elapsed time matters: two PAUSED events milliseconds apart
 				 * are one press re-triggering, seconds apart are two presses.
 				 * Without this the log cannot tell them apart, and a real bug
-				 * on 2026-08-25 was read as correct behaviour because of it. */
+				 * on 2026-08-25 was read as correct behavior because of it. */
 				uint64_t now = us();
 				menus++;
 				printf("  <- PAUSED   (menu %d, +%.2fs since last event)\n",

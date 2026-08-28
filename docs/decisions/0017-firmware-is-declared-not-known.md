@@ -128,7 +128,7 @@ because validating means knowing what the file should be, which is option A
 again. The launcher can, and is better placed to - it already named the file, so
 it can hash it too.
 
-**A launcher that says nothing keeps the old behaviour**, which is deliberate.
+**A launcher that says nothing keeps the old behavior**, which is deliberate.
 Not sending `firmware=` yields `rom_unreadable` exactly as before. The failure
 is vaguer, never wrong.
 

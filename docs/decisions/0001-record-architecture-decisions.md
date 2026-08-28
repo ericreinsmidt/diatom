@@ -8,7 +8,7 @@
 
 ## Context
 
-This project has two goals: build a libretro frontend, and practise running a
+This project has two goals: build a libretro frontend, and practice running a
 project sustainably. The stated problem being corrected is a habit of starting
 projects and not managing them cleanly over time.
 

@@ -16,7 +16,7 @@ field rather than from whatever happened to be on disk.
 | `[community]` | Forums, guides, wikis - cited inline | **Opinion.** Widely-held opinion is still opinion. |
 | `[unverified]` | - | No evidence for Cortex-A53 / 1 GB. Must be measured on the Brick. |
 
-**Neither catalogue is complete, and they disagree.** `Geargrafx`, `Gearsystem`
+**Neither catalog is complete, and they disagree.** `Geargrafx`, `Gearsystem`
 and `ClownMDEmu` appear in `[docs]` but are **not** repos in the libretro org -
 they are their authors' own projects. Treating either source as authoritative
 would miss cores.
@@ -114,7 +114,7 @@ consequences:
    band.** The six cores measured so far are all mid-tier. Verifying against a
    heavy core (`bsnes-mercury Accuracy`, `Mesen`) *and* a light one
    (`Snes9x 2002`, `Supafaust`) would prove nothing in Diatom is tuned to one
-   band's behaviour. That is register §12's open item.
+   band's behavior. That is register §12's open item.
 2. **Multi-system cores shrink the matrix.** `[measured]` PicoDrive covers
    Sega 8- and 16-bit; mGBA covers GB/GBC and GBA; Beetle PCE Fast covers both
    PC Engine media. Genesis Plus GX reportedly covers five Sega systems.

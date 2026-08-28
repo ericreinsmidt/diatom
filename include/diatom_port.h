@@ -100,7 +100,7 @@ void diatom_port_present(const void *src, int w, int h, size_t pitch,
 
 /* Stop presenting, without tearing down. Returns when nothing is pending and
  * nothing is in flight, so a SECOND presenter may take the display safely.
- * The port stays initialised and must serve the next diatom_port_present.
+ * The port stays initialized and must serve the next diatom_port_present.
  *
  * This exists because presenting lifetime and process lifetime came apart.
  * init/shutdown bracket the process and present() is per frame; nothing

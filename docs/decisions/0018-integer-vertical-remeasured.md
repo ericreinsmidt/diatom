@@ -101,7 +101,7 @@ never actually chosen - it fell out of the arithmetic. The others are clamping
 the width, which abandons shape correctness at exactly the point the mode exists
 to protect it, and cropping horizontally, which the port already supports since
 rects may extend past the surface. **Cropping looks better than losing 60% of
-the panel on Genesis**, but that is a judgement about how it looks, and this
+the panel on Genesis**, but that is a judgment about how it looks, and this
 project has been wrong before by settling those from a table.
 
 ## Revisit if

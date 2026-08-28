@@ -86,7 +86,7 @@ must itself stop presenting first.
 ## Consequences
 
 **Easier:** The frame loop is identical to desktop - same clock, same rate
-control, same numbers to compare. The port honours `present_blocks = false`
+control, same numbers to compare. The port honors `present_blocks = false`
 truthfully. No dependency on the firmware's video stack beyond the kernel's
 own fbdev ABI.
 

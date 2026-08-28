@@ -166,7 +166,7 @@ Both produced plausible-looking wrong answers before being caught:
    command fall through to "declined". Mask both sides.
 2. **Cores use `SET_CORE_OPTIONS_V2_INTL`, not `SET_CORE_OPTIONS_V2`.** Handling
    only the non-INTL variant reported *zero* core options for every core - a
-   believable-looking result that was entirely an artefact.
+   believable-looking result that was entirely an artifact.
 
 ## Correction, 2026-08-24
 

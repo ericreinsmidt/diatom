@@ -53,7 +53,7 @@ on-screen overlay was deleted and there is no text rendering. **That is wrong.**
 PlayOS's indicator has no text in it. `PLAYOS_drawSettingLine` is a scrim and
 two filled rectangles:
 
-| Element | Geometry | Colour |
+| Element | Geometry | Color |
 |---|---|---|
 | scrim | full width, `line_h + 2*pad` tall, at the very top | black, alpha 128 |
 | track | full width, `line_h` | RGB(60, 62, 72) |

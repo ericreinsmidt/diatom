@@ -1,6 +1,6 @@
 /* Diatom internals.
  *
- * One module organised by file, not by layer. An earlier proposal split "core
+ * One module organized by file, not by layer. An earlier proposal split "core
  * host" (ABI conformance) from "session" (lifecycle, policy) as separate
  * layers; that seam had one implementation and almost nothing a core asks via
  * RETRO_ENVIRONMENT_* can be answered from ABI knowledge alone. See register §2.
@@ -35,7 +35,7 @@ typedef struct {
 typedef struct {
 	void       *handle;          /* dlopen'd RTLD_NOW|RTLD_LOCAL - ADR-0010 */
 	const char *path;
-	bool        initialised;     /* retro_init has run */
+	bool        initialized;     /* retro_init has run */
 	bool        game_loaded;
 
 	void   (*set_environment)(retro_environment_t);
@@ -196,7 +196,7 @@ bool diatom_state_load(diatom_core *c, const char *path);
  * Which mode should be default is OPEN (register §5). The set exists so the
  * question can be answered by looking at a panel rather than by argument. */
 typedef enum {
-	DIATOM_SCALE_NATIVE,         /* 1x, centred                               */
+	DIATOM_SCALE_NATIVE,         /* 1x, centered                               */
 	DIATOM_SCALE_INTEGER,        /* largest whole factor that fits, boxed     */
 	DIATOM_SCALE_INTEGER_VERT,   /* whole factor down, shape-correct across   */
 	DIATOM_SCALE_INTEGER_OVER,   /* smallest whole factor that covers, cropped*/

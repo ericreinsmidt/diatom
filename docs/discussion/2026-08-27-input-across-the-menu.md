@@ -49,7 +49,7 @@ the defect; the stray A is a symptom.
 both and calls `diatom_env_suppress` once. A third reason to hide a button adds
 a term instead of a race.
 
-## Two judgement calls
+## Two judgment calls
 
 **Suppress until release, not until the next press.** Narrowing the latch to
 buttons that went down *while paused* is more precise-looking and has a hole:

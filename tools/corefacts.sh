@@ -112,7 +112,7 @@ script=$(mktemp)
         # for Genesis that is 29 frames of boot mode: 256x192 at 1.5238, where
         # the game actually runs 320x224 at 1.3061. Diatom reprints the line in
         # the same format once the geometry settles, so the last one is the mode
-        # that holds. Taking the first is what put a boot artefact in this file
+        # that holds. Taking the first is what put a boot artifact in this file
         # and, from there, into ADR-0018's display table.
         echo "  | grep -E '^diatom: [0-9]+x[0-9]+' | tail -1"
     done

@@ -13,7 +13,7 @@ cross-toolchain, and the obvious shortcut is the one PlayOS already uses:
 
 Three reasons that is the wrong default:
 
-1. **It is a NextUI artefact.** The working agreement states Diatom is not a
+1. **It is a NextUI artifact.** The working agreement states Diatom is not a
    minarch fork, a NextUI component or a MinUI derivative. Taking their
    toolchain re-establishes exactly the dependency the project exists to remove,
    in the one place that is hardest to notice later: the build.
@@ -66,7 +66,7 @@ sibling port, not an ambiguity.
 ## Options considered
 
 ### Option A - use `ghcr.io/loveretro/tg5040-toolchain`
-Zero setup, SDL2 prebuilt for the device. Rejected: it is a NextUI artefact, it
+Zero setup, SDL2 prebuilt for the device. Rejected: it is a NextUI artifact, it
 is unpinned, and its SDL2 provenance is theirs rather than the platform's.
 
 ### Option B - use TrimUI's SDK

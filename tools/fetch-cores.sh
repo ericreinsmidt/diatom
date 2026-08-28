@@ -24,7 +24,7 @@ set -eu
 
 ARCH=${ARCH:-linux/aarch64}
 BASE="https://buildbot.libretro.com/nightly/$ARCH/latest"
-# Licences come from libretro's own core-info repo, which is where the `license`
+# Licenses come from libretro's own core-info repo, which is where the `license`
 # field a frontend would display is maintained. Recorded here rather than looked
 # up when someone wonders: the question "which of these are GPL" sat open in the
 # register for days, and the answer was three commands away the whole time.
@@ -64,11 +64,11 @@ trap 'rm -rf "$tmp"' EXIT
 	echo "Source: \`$BASE\` - libretro's own buildbot. The path is **unpinned**;"
 	echo "these hashes are the pin."
 	echo
-	echo "Licences are fetched with the binaries rather than remembered. The set is"
+	echo "Licenses are fetched with the binaries rather than remembered. The set is"
 	echo "**not uniformly GPL** and the differences matter to anyone shipping an"
 	echo "image - see [ADR-0023](docs/decisions/0023-core-licensing.md)."
 	echo
-	echo "| Core | Licence | Bytes | sha256 |"
+	echo "| Core | License | Bytes | sha256 |"
 	echo "|---|---|---|---|"
 } > "$MANIFEST"
 
