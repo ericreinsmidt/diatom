@@ -25,9 +25,9 @@ SOFTWARE.
 Third-party code in this repository:
 
   src/libretro.h   Copyright (C) 2010-2024 The RetroArch team, MIT.
-                   Carries its own licence statement, scoped to that file.
+                   Carries its own license statement, scoped to that file.
                    It is permissive by design so that a frontend under any
-                   licence can host a core under any licence.
+                   license can host a core under any license.
 
 Nothing else in this repository is third-party. The cores Diatom loads are
 not part of it and are not distributed with it - Diatom loads whatever core

@@ -10,7 +10,7 @@ records what was *chosen*, on what evidence.
 named here is a **test-matrix entry** - the set Diatom has been verified
 against, so its geometry, pacing and memory claims have evidence behind them.
 Which core covers which system is the **host application's** config decision;
-for PlayOS that is `systems.cfg`.
+for TortOS that is `systems.cfg`.
 
 So this document answers two different questions that are easy to conflate:
 

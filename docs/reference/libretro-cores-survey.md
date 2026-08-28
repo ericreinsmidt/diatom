@@ -10,7 +10,7 @@ field rather than from whatever happened to be on disk.
 
 | Tag | Source | What it actually proves |
 |---|---|---|
-| `[org]` | The `libretro` GitHub organisation's repositories - 280 repos, 276 active, enumerated via `gh api` 2026-08-23 | That a repo of that name exists in that org. **Not** a registry: a libretro core is any shared library implementing the API, and it need not live there. |
+| `[org]` | The `libretro` GitHub organization's repositories - 280 repos, 276 active, enumerated via `gh api` 2026-08-23 | That a repo of that name exists in that org. **Not** a registry: a libretro core is any shared library implementing the API, and it need not live there. |
 | `[docs]` | [docs.libretro.com/guides/core-list](https://docs.libretro.com/guides/core-list/) | That libretro documents it. A curated view, and curation lags. |
 | `[measured]` | The [env-inventory spike](../spikes/2026-08-23-env-inventory.md), run here | A fact about a specific binary I ran. |
 | `[community]` | Forums, guides, wikis - cited inline | **Opinion.** Widely-held opinion is still opinion. |

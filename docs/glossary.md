@@ -30,11 +30,25 @@ in NextUI and cloned unpinned at build time - one of the reproducibility
 problems motivating this project.
 
 **minarch** - MinUI's minimal libretro frontend, carried forward by NextUI.
-GPL-3.0. What PlayOS currently patches (nine override files) and rebuilds. The
-thing we may be replacing.
+GPL-3.0. What TortOS patched (nine override files) and rebuilt until
+2026-08-26, when it migrated to Diatom over a socket. The thing this project
+replaced.
 
 **MinUI → NextUI** - MinUI (MIT) is the original minimal handheld launcher;
-NextUI (GPL-3.0) is its continuation. PlayOS builds minarch from NextUI source.
+NextUI (GPL-3.0) is its continuation. TortOS built minarch from NextUI source
+until the migration; it carries nothing from either now.
+
+**TortOS** - the launcher that consumes Diatom over a socket, and Diatom's
+first consumer. 0BSD, separate repository, no code shared in either direction.
+
+Renamed from **PlayOS** on 2026-08-28; it is the same program throughout, and
+anywhere in this repository that says PlayOS means this. Documents written
+before that date were deliberately left as written: ADRs are immutable once
+Accepted, and `docs/discussion/` and `docs/spikes/` are dated records of what
+was measured and believed on the day. Editing them to read TortOS would put a
+name into 2026-08-22 that did not exist until the 28th. The living documents -
+this glossary, the register, the working agreement, the README and the code -
+were renamed.
 
 **RA** - ⚠ overloaded. In NextUI's source, `ra_*.c` means **RetroAchievements**,
 not RetroArch. Easy and costly misread.
@@ -47,7 +61,7 @@ audio, input, system services for one device). In libretro's input API, "port"
 also means a controller slot. Say "platform port" or "controller port".
 
 **residency** - Holding a core loaded in memory between games so the next launch
-skips `dlopen` and initialization. PlayOS's resident mode took launch from
+skips `dlopen` and initialization. TortOS's resident mode took launch from
 ~1100ms to ~200ms with three cores. The open question is whether it survives a
 larger core set on 1GB.
 

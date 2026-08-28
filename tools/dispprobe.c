@@ -1,6 +1,6 @@
 /* Can a port read and set the backlight with no vendor headers?
  *
- * PlayOS's libmsettings shows brightness going through /dev/disp rather than a
+ * TortOS's libmsettings shows brightness going through /dev/disp rather than a
  * sysfs backlight class - this device has no /sys/class/backlight at all. The
  * Allwinner disp2 driver takes plain command numbers with an unsigned long[4]
  * argument block, not _IOWR-encoded requests, so there is no struct size to get

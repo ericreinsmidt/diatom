@@ -105,7 +105,7 @@ static uint32_t g_opaque;
  * `w` is the weight of source pixel idx+1, in 1/256 units. Zero means the
  * destination pixel sits wholly inside one source pixel, which is the case for
  * every pixel at an integer factor and for most of them otherwise - so it is
- * the fast path, not an optimisation for a rare case. */
+ * the fast path, not an optimization for a rare case. */
 typedef struct { int idx; int w; } diatom_tap;
 typedef struct { int r, g, b; }    diatom_rgb;
 
@@ -177,7 +177,7 @@ struct dm_ctl_elem_value {
  * of its twenty steps above raw 128, where consecutive ones cannot be told
  * apart, and left raw 1-12 unreachable at any setting.
  *
- * The rungs are the launcher's own, read off PlayOS's brightness keys, with two
+ * The rungs are the launcher's own, read off TortOS's brightness keys, with two
  * added below. Matching them is not deference: every value here except the
  * bottom two is one the launcher also has a level for, so a brightness set in a
  * game means the same thing on the other side of the exit instead of snapping
@@ -185,7 +185,7 @@ struct dm_ctl_elem_value {
  * protocol eventually; this is the standalone default.
  *
  * The first rung is the panel's measured floor - 0 and 1 are black, and the
- * driver clamps neither. PlayOS's own bottom level is raw 1 and is deliberately
+ * driver clamps neither. TortOS's own bottom level is raw 1 and is deliberately
  * not copied. This table is also the only clamp there is: no arithmetic here
  * can produce a value off its ends. See docs/spikes/2026-08-26-backlight-floor.md */
 static const unsigned char bright_ladder[] = {
@@ -1201,7 +1201,7 @@ bool diatom_port_capture(const char *path)
 	 * Without this, a capture reads whichever page the flip thread last got to,
 	 * which depends on how long the blit took - so the same run captured at the
 	 * same frame count could yield the frame before. Found 2026-08-25 while
-	 * checking a blit optimisation for correctness: old and new binaries
+	 * checking a blit optimization for correctness: old and new binaries
 	 * produced captures differing in one 24-row band, and only at some frame
 	 * counts, which is a blinking sprite one frame apart rather than a blit
 	 * defect. An instrument that is not deterministic cannot verify anything. */

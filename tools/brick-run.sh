@@ -23,7 +23,7 @@
 # a sequence with two traps in it, both hit for real (see ADR-0013 and the
 # 2026-08-24 session log).
 #
-#   1. adbd runs UNDER the PlayOS launch chain. Sweeping the process group
+#   1. adbd runs UNDER the TortOS launch chain. Sweeping the process group
 #      kills ADB itself and needs a physical power cycle to recover.
 #   2. launch.sh is a supervisor: killing the UI processes alone just makes it
 #      respawn them, and two processes presenting at once wedges the PowerVR

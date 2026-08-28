@@ -4,20 +4,25 @@
 # tools/brick-run.sh on the development machine.
 #
 # The restore is in a trap because the failure mode is expensive: leaving the
-# PlayOS supervisor stopped looks like a bricked device, and leaving two
+# TortOS supervisor stopped looks like a bricked device, and leaving two
 # processes presenting at once wedges the GPU firmware until a power cycle.
 HERE=/mnt/SDCARD/diatom
 CORE=$HERE/fceumm_libretro.so
 ROM="$HERE/Contra (USA).nes"
 
-SUP=$(ps | grep 'PlayOS/launch.sh' | grep -v grep | awk '{print $1}')
+# Both names, deliberately. The card is mid-rename from PlayOS to TortOS, and
+# an empty SUP is not a harmless miss: the supervisor is never frozen, it
+# respawns the UI underneath Diatom, and two presenters wedge the display
+# engine until a power cycle. Matching a name that is not there costs nothing;
+# missing the one that is costs a reboot. Drop PlayOS once no card runs it.
+SUP=$(ps | grep -E 'TortOS/launch\.sh|PlayOS/launch\.sh' | grep -v grep | awk '{print $1}')
 
 # Refuse to start if something is already presenting.
 #
-# The guard above protects against the PlayOS UI and did so correctly. It did
+# The guard above protects against the TortOS UI and did so correctly. It did
 # nothing about a PREVIOUS Diatom, and on 2026-08-25 a second instance launched
 # on top of a live one. Two presenters is the one thing ADR-0013 says never to
-# do: it left playos.elf unkillable in fb_open holding the kernel framebuffer
+# do: it left tortos.elf unkillable in fb_open holding the kernel framebuffer
 # lock, and cost a power cycle.
 #
 # The cleanup that failed was `pkill -f ...`, and the reason is worth keeping:
@@ -32,7 +37,7 @@ if [ -n "$BUSY" ]; then
     exit 3
 fi
 
-# Output gain, opt-in via DIATOM_GAIN. PlayOS resets the mixer when its UI
+# Output gain, opt-in via DIATOM_GAIN. TortOS resets the mixer when its UI
 # resumes, so setting this from the host before the freeze is always pointless -
 # it has to happen here, inside it.
 #
@@ -45,14 +50,14 @@ fi
 #
 #   0  = loudest      15 = a normal listening level      63 = silent
 #
-# Proven by diffing tinymix across a volume-up press in PlayOS on 2026-08-25:
+# Proven by diffing tinymix across a volume-up press in TortOS on 2026-08-25:
 # the value went 37 -> 15 when the user turned it UP. The driver's own metadata
 # claims `dBscale-min=-74.24dB, step=+1.16dB`, i.e. that higher is louder. That
 # metadata is wrong, and trusting it cost two hours: every "louder" setting made
 # it quieter, and 63 - set as "maximum" - is silence.
 #
 # `Headphone Volume` stays 0 and is not a speaker level: raising it routes to
-# the headphone JACK and mutes the speakers. PlayOS zeroes it deliberately.
+# the headphone JACK and mutes the speakers. TortOS zeroes it deliberately.
 if [ -n "${DIATOM_GAIN:-}" ]; then
     amixer sset 'Headphone' 0            >/dev/null 2>&1
     amixer sset 'digital volume' "${DIATOM_GAIN}" >/dev/null 2>&1
@@ -68,7 +73,7 @@ trap 'restore 130' INT TERM HUP
 
 # Freeze the supervisor FIRST, or it respawns the UI underneath us.
 [ -n "$SUP" ] && kill -STOP "$SUP" 2>/dev/null
-killall -9 playos.elf minarch.elf 2>/dev/null
+killall -9 tortos.elf playos.elf minarch.elf 2>/dev/null   # see SUP above
 sleep 1
 
 # --exec runs an arbitrary command inside the same freeze, instead of diatom.

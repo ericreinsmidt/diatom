@@ -142,9 +142,9 @@ pixels and sound where the device wants them. That is the whole scope.
 handed. Any core or system named anywhere in this repository is a **test-matrix
 entry**, the set Diatom has been verified against, never a capability and never a
 dependency. Which core covers which system is the *host application's* config
-decision (in PlayOS's case, `systems.cfg`).
+decision (in TortOS's case, `systems.cfg`).
 
-**PlayOS is the first consumer, not the definition.** It is being built at the
+**TortOS is the first consumer, not the definition.** It is being built at the
 same time, so it adapts to Diatom rather than the reverse. Its current
 implementation, with a fifo protocol, a resume-slot temp file and a boot hook
 that powers the device off, is one firmware's state of play and not a constraint
@@ -201,17 +201,17 @@ live here rather than in an ADR (see [the ADR bar](decisions/README.md)).*
 
 ---
 
-## Working on Diatom and PlayOS in one session
+## Working on Diatom and TortOS in one session
 
 **Decided 2026-08-28.** The two projects were worked in separate sessions to
 keep them separate. That is now one session, deliberately, and the reason is
 that the separation was cutting through the wrong place.
 
 Everything expensive on 2026-08-27 and 28 lived **at the seam**: the exit flash
-(PlayOS's, chased from the Diatom side for a day), the paused loop dropping half
+(TortOS's, chased from the Diatom side for a day), the paused loop dropping half
 the state plane, input leaking to the core at menu resume, the same leak at game
 start, and the volume curve - a Diatom measurement whose fix is one line of
-PlayOS. Every one cost a handoff, and handoffs lost information; one arrived
+TortOS. Every one cost a handoff, and handoffs lost information; one arrived
 restating context because the session it was addressed to no longer existed.
 
 **What protects the abstraction is rules and checks, not ignorance.**
@@ -237,7 +237,7 @@ than lowering it. The mechanical check is now the substitute for the second
 reader, not a supplement to it. If it keeps being deferred, revisit this
 arrangement rather than absorbing the risk quietly.
 
-Two things do not change: never `git add -A` in the PlayOS tree, which is shared
+Two things do not change: never `git add -A` in the TortOS tree, which is shared
 and has already had one session's work swept into another's commit; and say what
 is about to happen to the hardware before it happens, because the device is
 shared too.

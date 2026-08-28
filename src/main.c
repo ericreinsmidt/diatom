@@ -54,7 +54,7 @@ static diatom_policy    g_policy;
  * it never contains the OSD bar or a menu, and it needs nothing from the port
  * - the host already holds the last frame for dupe handling. minarch's
  * previews are small for the same reason a launcher cares: it decodes one per
- * visible card, on a shelf of dozens. BMP because that is what PlayOS already
+ * visible card, on a shelf of dozens. BMP because that is what TortOS already
  * reads, top-down rows because that is what BMP wants for a positive height...
  * negative height, rather - top-down needs biHeight < 0, and getting that
  * wrong renders every card upside down. */

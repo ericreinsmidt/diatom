@@ -87,7 +87,7 @@ analog optional.
 
 Chain: **device class → what's possible (ceiling) · taste → what's chosen per
 firmware (subset) · chosen set → test matrix + memory envelope.** Devices
-constrain; they do not determine. PlayOS runs three systems by curation, not
+constrain; they do not determine. TortOS runs three systems by curation, not
 because the Brick is incapable of more.
 
 - [x] **[LB]** Class definition **ratified by use, 2026-08-25.**
@@ -144,7 +144,7 @@ verified rather than assumed.
       question never contemplated. Licenses now recorded by `fetch-cores.sh`.
 - [x] **[LB]** Standalone repository → **[ADR-0002](decisions/0002-separate-repository.md)** *(Accepted)*
 - [x] **[LB]** Decision-recording practice: ADRs → **[ADR-0001](decisions/0001-record-architecture-decisions.md)** *(Accepted)*
-- [x] **[OPEN]** **A real launcher drives Diatom in production.** PlayOS
+- [x] **[OPEN]** **A real launcher drives Diatom in production.** TortOS
       migrated 2026-08-26 (its `DIATOM-MIGRATION.md`, five phases, all
       verified on hardware): Diatom is its resident emulator, its one-shot
       fallback, and its only emulator - minarch is deleted. First contact
@@ -153,7 +153,7 @@ verified rather than assumed.
 - [ ] **[DEFERRED]** Consumption model - submodule, subtree, vendored copy, or
       prebuilt artifact. **Deliberately deferred 2026-08-23: nothing consumes
       Diatom yet.** Choosing an integration model before either side exists means
-      choosing without the information that makes it obvious. Decide when PlayOS
+      choosing without the information that makes it obvious. Decide when TortOS
       actually needs to embed it, by which point how often the two change
       together will be known.
 
@@ -166,7 +166,7 @@ verified rather than assumed.
         provenance instead of a README claiming it. `--squash` keeps the log
         clean. Better for co-development: edit in place, `subtree push` upstream.
       - **Manual vendoring** - what `minarch/overrides/` does today, and the
-        reason PlayOS's docs claim a `v6.11.2` baseline while the build actually
+        reason TortOS's docs claim a `v6.11.2` baseline while the build actually
         reads `v6.11.2-10-g96eeacd9`. The provenance lives in prose and drifts.
       - Weaker argument than it first appeared: the NextUI drift was a *third
         party* moving underneath. Diatom is Eric's - it only changes when he
@@ -217,7 +217,7 @@ bionic and JNI change everything.
 
 "Frontend" was doing two jobs and caused real confusion. Use:
 
-- **launcher** - the UI the user sees (PlayOS's shelf). Belongs to the firmware.
+- **launcher** - the UI the user sees (TortOS's shelf). Belongs to the firmware.
 - **host** - loads and runs a libretro core. **This project.**
 - **port** - the per-device platform backend.
 - **core** - the emulator plugin. libretro's word; never reused for our code.
@@ -225,7 +225,7 @@ bionic and JNI change everything.
 ### Structure
 
 ```
-firmware: PlayOS / EROS / future
+firmware: TortOS / EROS / future
 ├── launcher UI ....................... firmware's own, not ours
 └── HOST  ← this project
       ├── core loading + env callbacks + run loop   (one module)
@@ -309,9 +309,12 @@ answer is a live policy object, not a layer.
 
 ## 3. Process boundary
 
-PlayOS today runs `minarch.elf` as a child over a fifo, and the docs cite the
-GPL firewall as the reason. If the frontend becomes 0BSD, that reason
-evaporates - but two others remain:
+When this section was written the launcher ran `minarch.elf` as a child over a
+fifo, and its docs cited the GPL firewall as the reason. It does not any more:
+it migrated to Diatom over a socket on 2026-08-26. The section stays because
+the reasoning below is what settled the boundary, and that reasoning survived
+the migration. If the frontend becomes 0BSD the GPL reason evaporates, but two
+others remain:
 
 - Crash isolation: a bad core takes down the child, not the launcher.
 - Memory reclaim: on 1GB, process exit is the only *guaranteed* way to get
@@ -513,7 +516,7 @@ Two amendments ADR-0007 makes to the table above:
       against a stated 4096 capacity.
 
       Cost: ~250 lines of device-only code that cannot be tested on the
-      development machine, and a desktop port that becomes a weaker behavioural
+      development machine, and a desktop port that becomes a weaker behavioral
       proxy for the device.
 
       **Explicitly NOT a portability argument.** Static linking cannot deliver
@@ -647,13 +650,13 @@ Two levers the spike discovered:
       (0-63) is the speaker level and is **INVERTED** - lower is louder - while
       the driver advertises `step=+1.16dB`, the opposite. `Headphone Volume` is
       not a speaker level: raising it routes to the jack and mutes the speakers,
-      which is why PlayOS zeroes it. Volume is firmware's job (§8), so Diatom
+      which is why TortOS zeroes it. Volume is firmware's job (§8), so Diatom
       sets neither; `DIATOM_GAIN` in `brick-run.sh` is for testing only.
 
       **The curve measured, 2026-08-28.** `tools/micprobe.sh` playing a 440 Hz
       tone at -1.4 dBFS, captured on the device's own mic, room baseline ~40:
 
-      | `digital volume` | rms | vs room | modelled |
+      | `digital volume` | rms | vs room | modeled |
       |---|---|---|---|
       | 0 | 10034 | 201x | 0 dB |
       | 16 | 1485 | 30x | -18.6 dB |
@@ -665,15 +668,15 @@ Two levers the spike discovered:
       10034/1174/158/19). A claim of the *opposite* was raised on 2026-08-28
       from a user report and was wrong; the report had been mis-sequenced
       against the mixer state. Recorded because the earlier "proof" of the
-      inversion was circular - it diffed PlayOS's own writes across a volume-up
-      press, which shows what PlayOS does and not what the codec does. This is
+      inversion was circular - it diffed TortOS's own writes across a volume-up
+      press, which shows what TortOS does and not what the codec does. This is
       the non-circular version.
 
-      **The consequence is PlayOS's, not Diatom's.** `apply_volume` spreads 21
+      **The consequence is TortOS's, not Diatom's.** `apply_volume` spreads 21
       positions linearly across the whole 73 dB register, 3.65 dB per press, so
       60% of the shelf's scale is -29 dB and 25% is inaudible. That is the
       loudness complaint Eric actually raised. Handed over in
-      `PlayOS/docs/2026-08-28-volume-curve.md`.
+      `TortOS/VOLUME-CURVE.md`.
 - [ ] **[OPEN]** `SET_AUDIO_BUFFER_STATUS_CALLBACK` (cmd 62, offered by 3 of 6
       cores) is **not implemented** - the core-side half of DRC, letting a core
       throttle itself on buffer occupancy. Host-side DRC works without it, so
@@ -718,7 +721,7 @@ Two levers the spike discovered:
       motivated it, and it changes what the core produced. If it is ever
       revisited it wants an ADR, not a patch.
 
-      **The loudness Eric actually noticed was not this.** It was PlayOS's
+      **The loudness Eric actually noticed was not this.** It was TortOS's
       volume curve - see the gain-curve item below.
 - [x] **[OPEN]** **The GBA stutter was a log file**, not audio. mGBA logs every
       DMA at INFO and `core_log` had no level filter, so under the launcher it
@@ -777,7 +780,7 @@ Two levers the spike discovered:
       canonical→retropad as **data**, the launcher owns the config.
 - [x] **[LB]** **The physical switch is out of scope, reserved for the
       launcher** (2026-08-25, judgment call). `gpio243`: unclaimed, no bounce,
-      `edge` present so it can be interrupt-driven, unreferenced by PlayOS. It
+      `edge` present so it can be interrupt-driven, unreferenced by TortOS. It
       is **state, not events** - it has a value before Diatom starts and after
       it exits. Diatom must not learn it exists; any per-game meaning arrives as
       a protocol message, not a button.
@@ -799,7 +802,7 @@ Two levers the spike discovered:
       [analysis](discussion/2026-08-25-volume-ownership.md).
 - [x] **[LB]** **Levels survive the exit, from both sides** →
       **[ADR-0020](decisions/0020-shared-state-plane.md)**. A level is a
-      fraction (`index=` with `count=`), and PlayOS sends SETLEVEL at launch
+      fraction (`index=` with `count=`), and TortOS sends SETLEVEL at launch
       and lands LEVEL events in libmsettings when EXIT returns ownership -
       closed 2026-08-26 by its migration. History and the ladder mismatch:
       [measurement](spikes/2026-08-26-backlight-floor.md).
@@ -810,7 +813,7 @@ Two levers the spike discovered:
 - [x] **[OPEN]** **The panel's floor is raw 2**, measured 2026-08-26 - 0 and 1
       read as black. The disp2 driver clamps nothing and accepts a true 0, so
       the port's clamp is load-bearing. `BRIGHT_RAW_MIN 8` was chosen rather
-      than measured and landed on PlayOS's level 1 by luck.
+      than measured and landed on TortOS's level 1 by luck.
       [measurement](spikes/2026-08-26-backlight-floor.md)
 - [x] **[OPEN]** **Brightness is a geometric ladder, not a linear ramp** -
       `2 4 8 16 32 48 72 96 128 160 192 255`, twelve rungs, the launcher's own
@@ -849,7 +852,7 @@ Two levers the spike discovered:
 **Diatom has no core list and no system list.** It loads whatever core it is
 handed. The table below is the set Diatom is **verified against**, so its
 envelope and geometry assumptions have evidence behind them. Which core actually
-covers which system is the host application's config decision - for PlayOS,
+covers which system is the host application's config decision - for TortOS,
 `systems.cfg`. See `working-agreement.md`.
 
 Systems in scope by the criteria in
@@ -1031,7 +1034,7 @@ host decision and only means re-running the spike, which is cheap.
       the two. Two masks with different lifetimes in one variable is the actual
       defect; the stray A was a symptom of it.
 
-      **Verified on hardware 2026-08-27, behaviourally.** `edf083f` confirmed
+      **Verified on hardware 2026-08-27, behaviorally.** `edf083f` confirmed
       *running* rather than merely deployed - `/proc/5611/exe` md5
       `5b02f1e1d9ef04e91eb9ad6ba9ec2b5d`, against launcher `905fd7e5` - and
       driven by a human on a real game. Two checks: dismissing the menu with A
@@ -1043,7 +1046,7 @@ host decision and only means re-running the spike, which is cheap.
       **Not instrumented, and the distinction is kept on purpose.** Nobody
       watched the resume frame with `DIATOM_INPUT_DEBUG` on. What is established
       is that the symptom is gone and the fix strands nothing - not that the
-      core saw no A on that specific frame. Deliberate: the behavioural checks
+      core saw no A on that specific frame. Deliberate: the behavioral checks
       answer the question a player has and cost ten seconds, against taking over
       the resident in a foreground adb session while someone is using the
       device. Frame-level evidence can still be had if anything here is ever
@@ -1079,7 +1082,7 @@ host decision and only means re-running the spike, which is cheap.
       project is built around - warm launch to `RUNNING` is ~6 ms. Suppression
       costs nothing and starts immediately.
 
-      **Verified on hardware 2026-08-28**, behaviourally, on `9ff8324`
+      **Verified on hardware 2026-08-28**, behaviorally, on `9ff8324`
       (`/proc/6596/exe` md5 `021a0b114372d9ea2991bca480fed2a2`). Launching with
       A puts nothing in the game, and the conservative latch strands nothing.
       Not instrumented, for the same reason as the resume fix above.
@@ -1107,12 +1110,12 @@ pad attached, which is why the real pad has a Mode switch.
       RUN carries `resume=`/`exit_state=`/`preview=`; the preview is the core's
       frame (172 KB, not 2.3 MB of panel), written at pause and exit, announced
       before EXIT. Verified on hardware: two Contra sessions, the second
-      resuming the first's state, artifacts at PlayOS's exact paths.
+      resuming the first's state, artifacts at TortOS's exact paths.
 - [ ] **[LB]** Rewind: support or drop? Real RAM cost on a 1GB device.
 - [x] **[OPEN]** **Zipped content loads** - one ROM per archive, extracted by
       the host (largest entry, stored or deflate, zlib by dlopen so nothing
       links it); need_fullpath cores get it staged to tmpfs. Found by the
-      FIRST game a real launcher handed over: PlayOS's whole library is
+      FIRST game a real launcher handed over: TortOS's whole library is
       zipped, protodrive's never was - the stand-in failure §13 predicted,
       arriving in under a minute of first contact.
 - [x] **[OPEN]** CD support → done for PC Engine. **CHD needs nothing** - read
@@ -1166,7 +1169,7 @@ operation never occurs.
       confirmed.
 
       `dlopen`: **232 ms cold for all six, 35 ms warm.** Page-cache state changes
-      time, not RSS. Does **not** reproduce PlayOS's `~170 ms` per-core figure
+      time, not RSS. Does **not** reproduce TortOS's `~170 ms` per-core figure
       (worst cold case here is 70 ms) - recorded as a discrepancy, since the two
       measurements differ in context and I cannot say why from here.
 
@@ -1199,7 +1202,7 @@ operation never occurs.
       `-fvisibility=hidden` would be clean. No core's exports can be assumed.
       The check is retained as advisory.
 
-      fceumm 45, mednafen_pce_fast 53 and mgba 25 match PlayOS's earlier counts
+      fceumm 45, mednafen_pce_fast 53 and mgba 25 match TortOS's earlier counts
       exactly - independent corroboration.
 
 ---
@@ -1236,7 +1239,7 @@ operation never occurs.
       [log](discussion/2026-08-25-core-options.md).
 - [x] **[OPEN]** **What the launcher asks for is not what the core currently
       has**, and conflating them was two bugs at once. Found 2026-08-28 when
-      PlayOS began setting options per launch.
+      TortOS began setting options per launch.
 
       A core re-declares its options on every `retro_load_game` and
       `define_v2` rebuilds the table at its defaults. So a `SETOPT` for a key
@@ -1392,7 +1395,7 @@ operation never occurs.
       the filename instead of looking like a bad ROM (ADR-0017). **Presence, not
       validity** - 2 KB of random bytes named `syscard3.pce` was accepted and
       the game reported RUNNING.
-- [x] **[OPEN]** PlayOS's power-off failsafe - answered in §3: the launcher
+- [x] **[OPEN]** TortOS's power-off failsafe - answered in §3: the launcher
       stays alive as supervisor and `SIGUSR1` is retained as the escape hatch
       for a core wedged inside `retro_run`.
 
@@ -1428,7 +1431,7 @@ operation never occurs.
 - [x] **[OPEN]** C standard and toolchain →
       **[ADR-0012](decisions/0012-independent-toolchain.md)** *(Accepted)*.
       `gnu11`, and Diatom builds its own pinned cross-toolchain rather than
-      borrowing another firmware's. Reusing PlayOS's would have made Diatom
+      borrowing another firmware's. Reusing TortOS's would have made Diatom
       depend on a repository it is meant to be independent of.
 - [x] **[OPEN]** Cross-device build matrix → **two targets, both green.**
       `make` for desktop and `tools/brick-make.sh` for the Brick, the latter in

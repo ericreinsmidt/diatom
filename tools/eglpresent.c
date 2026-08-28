@@ -1,4 +1,4 @@
-/* SPIKE: stand-in for PlayOS. Presents through SDL2's mali/EGL driver, the
+/* SPIKE: stand-in for TortOS. Presents through SDL2's mali/EGL driver, the
  * same path the launcher uses, so a handoff can be exercised without killing
  * and respawning the real launcher.
  *

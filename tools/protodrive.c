@@ -3,7 +3,7 @@
  * Exists to measure the number the whole resident architecture rests on: how
  * long from sending RUN to receiving RUNNING, when the process is already up
  * and the core is already resident. That is what a player experiences as
- * "launch time" once PlayOS drives Diatom rather than spawning it.
+ * "launch time" once TortOS drives Diatom rather than spawning it.
  *
  * Also exercises the protocol itself - READY on connect, the RUNNING/EXIT
  * display handover, STOP mid-game - so a protocol regression fails here rather
@@ -282,7 +282,7 @@ int main(int argc, char **argv)
 					wline("INPUTS");   sleep(1);
 					wline("SETMAP\tmap=menu:b");  sleep(1);
 					wline("LEVELS");   sleep(1);
-					/* PlayOS's brightness ladder is 11 positions; the port's
+					/* TortOS's brightness ladder is 11 positions; the port's
 					 * is 12. Asking for its rung 1 must land on a rung the
 					 * port has, and come back described in the port's scale. */
 					wline("SETLEVEL\tkind=brightness\tindex=1\tcount=11");

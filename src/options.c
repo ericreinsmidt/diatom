@@ -198,7 +198,7 @@ const char *diatom_options_get(const char *key)
  * Without this they were permanent. A core re-declares its options on every
  * load and `define_v2` rebuilds the table at those defaults, so the only thing
  * carrying a value across launches was this list - and it carried it to every
- * core that ever declared the same key. Measured 2026-08-28: PlayOS pins
+ * core that ever declared the same key. Measured 2026-08-28: TortOS pins
  * mgba_gb_model=Game Boy for its Game Boy folder, and Game Boy COLOR titles
  * launched afterwards came up in DMG green, because the same mgba serves both
  * and the pending value outlived the game it was for. Dragon Warrior III is a

@@ -133,11 +133,11 @@ The cross build for the TrimUI Brick (TG3040), per
 - `brick-run.sh` - builds nothing; pushes the current build and runs it on the
   device with exclusive use of the display. Arguments pass through to diatom.
 - `brick-device-run.sh` - the on-device half, staged as
-  `/mnt/SDCARD/diatom/run.sh`. Freezes the PlayOS supervisor, kills the UI,
+  `/mnt/SDCARD/diatom/run.sh`. Freezes the TortOS supervisor, kills the UI,
   runs, and restores in a trap.
 
 Taking the display on this device has two traps in it, both hit for real
-(ADR-0013 and the 2026-08-24 session log): adbd runs under the PlayOS launch
+(ADR-0013 and the 2026-08-24 session log): adbd runs under the TortOS launch
 chain, so sweeping that process group severs ADB; and `launch.sh` is a
 supervisor that respawns the UI, so killing the UI alone leaves two processes
 presenting and wedges the GPU firmware in-kernel. Both need a power cycle to

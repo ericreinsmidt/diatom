@@ -1,7 +1,7 @@
 # Diatom
 
 A minimal libretro frontend for low-power ARM Linux handhelds (~1GB RAM),
-intended as a permissively licensed replacement for the GPL minarch that PlayOS
+intended as a permissively licensed replacement for the GPL minarch that TortOS
 currently patches and rebuilds, and as a reusable base for future firmware.
 
 **MIT licensed.** Diatom loads whatever core it is handed and ships none of

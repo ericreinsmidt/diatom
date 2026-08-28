@@ -1,6 +1,6 @@
 /* Zip content, because that is how launchers ship ROM libraries.
  *
- * PlayOS's entire library is zipped - one ROM per archive, No-Intro style -
+ * TortOS's entire library is zipped - one ROM per archive, No-Intro style -
  * and minarch handled that, so Diatom meeting its first real launcher failed
  * on the first game it was handed. The register's line about protodrive
  * testing "what the author expected" earned its keep in under a minute.

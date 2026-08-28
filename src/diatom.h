@@ -211,7 +211,7 @@ diatom_rect diatom_scale_rect(diatom_scale_mode mode, int src_w, int src_h,
                               double aspect, int surf_w, int surf_h);
 
 /* Mode and filter are independent axes, cycled independently on device. They
- * were briefly modelled as a flat list of (mode, filter) presets on the
+ * were briefly modeled as a flat list of (mode, filter) presets on the
  * assumption that most combinations collapse; measurement killed that. FCEUmm
  * reports an 8:7 pixel aspect, about 1.219, not 4:3, so on the Brick's 4:3
  * panel fit, fill and stretch are three different pictures. */
