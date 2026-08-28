@@ -1234,6 +1234,36 @@ operation never occurs.
       across five cores, previously all unreachable.** Diatom holds definitions
       and values; the launcher decides them.
       [log](discussion/2026-08-25-core-options.md).
+- [x] **[OPEN]** **What the launcher asks for is not what the core currently
+      has**, and conflating them was two bugs at once. Found 2026-08-28 when
+      PlayOS began setting options per launch.
+
+      A core re-declares its options on every `retro_load_game` and
+      `define_v2` rebuilds the table at its defaults. So a `SETOPT` for a key
+      the core had already declared was written into that table and then wiped
+      by the very load it was sent for: **a launcher's option took effect
+      exactly once per core per process**, silently, with no log line after the
+      first. Meanwhile the pending list, which did survive, was never cleared -
+      so `mgba_gb_model=Game Boy` set for a Game Boy folder was re-applied to
+      every later load, and Game Boy **Color** titles ran as DMG hardware. A
+      `0xC0` cartridge showed its own "only for Game Boy Color" screen.
+
+      Now: the table is the core's **state**, the pending list is the launcher's
+      **intent**. Intent is recorded whether or not the key exists yet, survives
+      re-declaration, and is dropped when the game ends
+      (`diatom_options_clear_pending`). Per-launch is also the right model, not
+      just the fixed one - ADR-0009 makes the launcher drive, and an option set
+      for one game is not a standing instruction about the next.
+
+      **Fixing one alone would have hidden the other.** Clearing pending without
+      recording intent leaves a launcher's options working once per process and
+      looking fine, because the first launch is the one anybody checks.
+
+      Verified on hardware. A trap for whoever tests this next, which cost two
+      false "still broken" readings: a **resume state carries the machine it
+      was made on**, so a `(Restart)` hardware option is overruled on any game
+      already played. The log says `state: restored` on the line above, and
+      twice that was read as the fix failing.
 - [x] **[OPEN]** Surface options over the protocol → done. `OPTIONS` returns a
       count plus one `OPTION` line per setting carrying key, current value,
       default, permitted values and description - everything a menu needs.

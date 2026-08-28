@@ -1378,6 +1378,11 @@ int main(int argc, char **argv)
 			sn.mode   = start_mode;
 			sn.filter = start_filter;
 			run_session(&sn);   /* its own ERROR/EXIT is the report */
+
+			/* The options the launcher sent were for THAT game. Cores are
+			 * resident and several systems share one, so a value left
+			 * standing reaches the next game through the same core. */
+			diatom_options_clear_pending();
 		}
 		diatom_proto_close();
 	} else {

@@ -104,6 +104,8 @@ bool        diatom_options_take_update(void);   /* consumes the flag */
 int         diatom_options_count(void);
 void        diatom_options_list(void);
 void        diatom_options_emit(void);   /* over the protocol, for a menu */
+/* Drop values the launcher set for a game that is now over - see options.c. */
+void        diatom_options_clear_pending(void);
 
 /* proto.c - the launcher protocol (ADR-0009). One Unix socket, line-based,
  * tab-separated key=value. Diatom is a component the launcher drives; this is

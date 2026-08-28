@@ -191,36 +191,64 @@ const char *diatom_options_get(const char *key)
 	return (o && o->value[0]) ? o->value : NULL;
 }
 
+/* Forget every value the launcher asked for. Called when a game ends, so the
+ * next one starts from the core's own defaults plus whatever the launcher sends
+ * for THAT game.
+ *
+ * Without this they were permanent. A core re-declares its options on every
+ * load and `define_v2` rebuilds the table at those defaults, so the only thing
+ * carrying a value across launches was this list - and it carried it to every
+ * core that ever declared the same key. Measured 2026-08-28: PlayOS pins
+ * mgba_gb_model=Game Boy for its Game Boy folder, and Game Boy COLOR titles
+ * launched afterwards came up in DMG green, because the same mgba serves both
+ * and the pending value outlived the game it was for. Dragon Warrior III is a
+ * 0xC0 cartridge and showed its own "only for Game Boy Color" warning screen.
+ *
+ * Per-launch is also the right model rather than merely the fixed one: ADR-0009
+ * makes the launcher drive, and an option it set for one game is not a standing
+ * instruction about the next. */
+void diatom_options_clear_pending(void)
+{
+	g_npending = 0;
+}
+
 bool diatom_options_set(const char *key, const char *value)
 {
 	diatom_option *o = find(key);
 
 	if (!key || !value) return false;
 
-	/* Before the core has declared anything, remember it for later.
+	/* Recorded as INTENT, always, whether or not the core has declared this key
+	 * yet. The table below is the core's current state; this list is what the
+	 * caller asked for, and the two are not the same thing.
 	 *
-	 * Keyed, not appended. Pending entries are applied when a core declares
-	 * that key and then deliberately KEPT, because the next core to load needs
-	 * them too - a launcher's preference for mGBA has to survive a game of NES
-	 * in between. An append-only list makes that correct behavior leak: a
-	 * launcher that states its preferences before every launch adds an entry
-	 * each time, and on the 33rd this starts returning false and the option is
-	 * quietly refused. Found 2026-08-28 before wiring PlayOS to do exactly
-	 * that. */
-	if (!o) {
+	 * Both halves of that were bugs, found on 2026-08-28. Writing only the
+	 * table lost the value: a core re-declares its options on every
+	 * retro_load_game and define_v2 rebuilds the table at its defaults, so an
+	 * option set on a resident core was wiped by the very load it was sent
+	 * for, and a launcher's setting worked exactly once per core per process.
+	 * Writing only the list, appended, leaked the other way - a launcher
+	 * stating its preferences before every launch added an entry each time and
+	 * was refused on the 33rd.
+	 *
+	 * So: keyed, and dropped when a game ends by
+	 * diatom_options_clear_pending(). Intent survives the core re-declaring
+	 * and does not survive the game it was for, which is what kept
+	 * mgba_gb_model=Game Boy from a Game Boy launch and applied it to the Game
+	 * Boy COLOR title after it - same core, different machine. */
+	{
 		int i;
 		for (i = 0; i < g_npending; i++)
-			if (!strcmp(g_pending[i].key, key)) {
-				snprintf(g_pending[i].value, sizeof g_pending[0].value,
-				         "%s", value);
-				return true;
-			}
-		if (g_npending >= MAX_PENDING) return false;
-		snprintf(g_pending[g_npending].key,   sizeof g_pending[0].key,   "%s", key);
-		snprintf(g_pending[g_npending].value, sizeof g_pending[0].value, "%s", value);
-		g_npending++;
-		return true;
+			if (!strcmp(g_pending[i].key, key)) break;
+		if (i == g_npending) {
+			if (g_npending >= MAX_PENDING) return false;
+			snprintf(g_pending[i].key, sizeof g_pending[0].key, "%s", key);
+			g_npending++;
+		}
+		snprintf(g_pending[i].value, sizeof g_pending[0].value, "%s", value);
 	}
+
+	if (!o) return true;             /* not declared yet; apply_pending will */
 	if (!offered(o, value)) {
 		log_(DIATOM_LOG_WARN, "options: %s does not offer '%s'", key, value);
 		return false;
