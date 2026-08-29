@@ -73,3 +73,4 @@ never started.
 | [0022](0022-display-mode-on-the-state-plane.md) | Display mode joins the state plane, and is the second contested row | Accepted |
 | [0023](0023-core-licensing.md) | Diatom is MIT and ships no cores, which is what makes that safe | Proposed |
 | [0024](0024-session-persistence-paths.md) | A session carries its persistence paths, and PREVIEW finally exists | Accepted |
+| [0025](0025-achievements-belong-to-the-frontend.md) | Achievements belong to the frontend, and rcheevos is the evaluator | Proposed |
