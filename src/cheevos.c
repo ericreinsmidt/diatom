@@ -40,12 +40,16 @@
  * RetroArch's mmap_reduce.
  */
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "cheevos.h"
 #include "diatom.h"
 
 #include "rc_consoles.h"
+#include "rc_error.h"
+#include "rc_runtime.h"
+#include "rc_runtime_types.h"
 
 /* ---------------------------------------------------------------- capture */
 
@@ -90,6 +94,7 @@ void diatom_cheevos_reset(void)
 	g_supported = true;
 	g_support_stated = false;
 	g_core = NULL;
+	diatom_cheevos_unload();
 	/* g_console is NOT cleared: it is the launcher's statement about the
 	 * content it is about to ask for, and it arrives before the load. */
 }
@@ -465,6 +470,180 @@ uint32_t diatom_cheevos_peek(uint32_t address, uint32_t num_bytes, void *ud)
 	                ((uint32_t)buf[2] << 16);
 	default: return (uint32_t)buf[0] | ((uint32_t)buf[1] << 8) |
 	                ((uint32_t)buf[2] << 16) | ((uint32_t)buf[3] << 24);
+	}
+}
+
+/* ------------------------------------------------- the set, and the frames */
+
+/* The evaluator. Everything about a condition - deltas, hit counts, alt
+ * groups, AndNext chains - is rcheevos' problem, which is the whole reason
+ * ADR-0025 vendored it. Diatom's side is memory and a clock. */
+static rc_runtime_t g_rt;
+static bool         g_rt_live;
+
+static const char *state_name(uint8_t state)
+{
+	switch (state) {
+	case RC_TRIGGER_STATE_TRIGGERED: return "unlocked";
+	case RC_TRIGGER_STATE_PRIMED:    return "primed";
+	case RC_TRIGGER_STATE_PAUSED:    return "paused";
+	case RC_TRIGGER_STATE_DISABLED:  return "disabled";
+	default:                         return "active";
+	}
+}
+
+/* Two events are reported, and the choice is deliberate.
+ *
+ * TRIGGERED is the feature. DISABLED means the achievement referenced memory
+ * that is not there, which without a report is indistinguishable from one the
+ * player has not earned - the silent failure this whole file is arranged to
+ * avoid.
+ *
+ * PRIMED and UNPRIMED are not reported yet. They would let a launcher show
+ * "one condition away", but they are edge events on game state and can arrive
+ * often. Adding an event later costs nothing, because ADR-0009 promises
+ * unknown verbs are ignored; removing chatter from a launcher that came to
+ * depend on it costs a great deal. */
+static void on_event(const rc_runtime_event_t *e)
+{
+	char msg[96];
+
+	switch (e->type) {
+	case RC_RUNTIME_EVENT_ACHIEVEMENT_TRIGGERED:
+		diatom_proto_send("CHEEVO\tid=%u\tstate=unlocked", (unsigned)e->id);
+		snprintf(msg, sizeof msg, "cheevos: %u unlocked", (unsigned)e->id);
+		diatom_port_log(DIATOM_LOG_INFO, msg);
+		break;
+	case RC_RUNTIME_EVENT_ACHIEVEMENT_DISABLED:
+		diatom_proto_send("CHEEVO\tid=%u\tstate=disabled", (unsigned)e->id);
+		snprintf(msg, sizeof msg,
+		         "cheevos: %u disabled; it reads memory this core does not map",
+		         (unsigned)e->id);
+		diatom_port_log(DIATOM_LOG_WARN, msg);
+		break;
+	default:
+		break;
+	}
+}
+
+void diatom_cheevos_unload(void)
+{
+	if (g_rt_live) {
+		rc_runtime_destroy(&g_rt);
+		g_rt_live = false;
+	}
+}
+
+int diatom_cheevos_load(const char *path)
+{
+	/* getline, not a fixed buffer, and this is measured rather than cautious.
+	 * Across 428 achievements from four RetroAchievements sets on 2026-08-29
+	 * the median condition string is 113 characters and the longest is 30,897
+	 * - Mega Man 2. Any buffer chosen by intuition would have been too small,
+	 * and the failure would have been an achievement that quietly never fires,
+	 * on the hardest achievements in the hardest games. */
+	char  *line = NULL;
+	size_t cap  = 0;
+	char   msg[256];
+	FILE  *f;
+	int    ok = 0, bad = 0;
+
+	diatom_cheevos_unload();
+	if (!path || !*path) return 0;
+
+	f = fopen(path, "r");
+	if (!f) {
+		snprintf(msg, sizeof msg, "cheevos: cannot read the set at %s", path);
+		diatom_port_log(DIATOM_LOG_WARN, msg);
+		return 0;
+	}
+
+	rc_runtime_init(&g_rt);
+	g_rt_live = true;
+
+	while (getline(&line, &cap, f) > 0) {
+		unsigned long id;
+		char *tab, *end;
+		int rc;
+
+		line[strcspn(line, "\r\n")] = '\0';
+		if (!line[0] || line[0] == '#') continue;
+
+		tab = strchr(line, '\t');
+		if (!tab) { bad++; continue; }
+		*tab++ = '\0';
+
+		id = strtoul(line, &end, 10);
+		if (end == line || *end || id == 0) { bad++; continue; }
+
+		/* Anything past a second tab is room the format leaves for a title
+		 * or points later, and is not read here. */
+		end = strchr(tab, '\t');
+		if (end) *end = '\0';
+
+		rc = rc_runtime_activate_achievement(&g_rt, (uint32_t)id, tab, NULL, 0);
+		if (rc == RC_OK) {
+			ok++;
+		} else {
+			bad++;
+			snprintf(msg, sizeof msg, "cheevos: %lu rejected: %s",
+			         id, rc_error_str(rc));
+			diatom_port_log(DIATOM_LOG_WARN, msg);
+		}
+	}
+	free(line);
+	fclose(f);
+
+	snprintf(msg, sizeof msg, "cheevos: %d watched, %d rejected, from %s",
+	         ok, bad, path);
+	diatom_port_log(bad ? DIATOM_LOG_WARN : DIATOM_LOG_INFO, msg);
+
+	/* A set with nothing readable underneath it evaluates every condition
+	 * against zero, and some conditions are true when their address is zero.
+	 * Say so rather than firing achievements at a player who did nothing. */
+	if (ok && g_mapped == 0)
+		diatom_port_log(DIATOM_LOG_WARN,
+		                "cheevos: a set is loaded but no memory resolved; "
+		                "nothing will be evaluated");
+	return ok;
+}
+
+void diatom_cheevos_frame(void)
+{
+	/* Both guards matter. Without a set there is nothing to do; without
+	 * memory, every peek returns zero and the runtime would happily conclude
+	 * things about a console that is not there. */
+	if (!g_rt_live || g_mapped == 0) return;
+
+	rc_runtime_do_frame(&g_rt, on_event, diatom_cheevos_peek, NULL, NULL);
+}
+
+void diatom_cheevos_runtime_reset(void)
+{
+	if (g_rt_live) rc_runtime_reset(&g_rt);
+}
+
+void diatom_cheevos_emit(void)
+{
+	uint32_t i, n = g_rt_live ? g_rt.trigger_count : 0, unlocked = 0;
+
+	for (i = 0; i < n; i++) {
+		const rc_trigger_t *t = g_rt.triggers[i].trigger;
+
+		if (t && t->state == RC_TRIGGER_STATE_TRIGGERED) unlocked++;
+	}
+
+	diatom_proto_send("CHEEVOS\tconsole=%u\tcount=%u\tunlocked=%u"
+	                  "\tmemory=%zu\tspans=%d",
+	                  g_console, (unsigned)n, (unsigned)unlocked,
+	                  g_mapped, g_nspan);
+
+	for (i = 0; i < n; i++) {
+		const rc_runtime_trigger_t *rt = &g_rt.triggers[i];
+
+		diatom_proto_send("CHEEVO\tid=%u\tstate=%s", (unsigned)rt->id,
+		                  rt->trigger ? state_name(rt->trigger->state)
+		                              : "disabled");
 	}
 }
 

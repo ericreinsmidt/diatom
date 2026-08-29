@@ -330,6 +330,21 @@ others remain:
       `key=value`. Collapses five mechanisms (two fifos, pid file, temp file,
       signal) into one. `ERROR` = never started; `EXIT` = ran and stopped -
       a rule about **display ownership**, not error reporting.
+- [x] **[OPEN]** **Achievements cross the boundary as a path, not as data** →
+      **[ADR-0026](decisions/0026-achievements-on-the-launcher-protocol.md)**
+      *(Proposed)*. The launcher declares the console on `RUN` and names a file;
+      Diatom reports `CHEEVO id= state=` as things fire.
+
+      The path is not tidiness. Measured across 428 achievements from four
+      RetroAchievements sets on 2026-08-29, the median condition string is 113
+      characters and **the longest is 30,897** - Mega Man 2. The protocol line
+      buffer is 4096 bytes and drops the rest with a warning, so a third of
+      those sets contain an achievement that would never have been watched, and
+      an unwatched achievement looks exactly like an unearned one.
+
+      The console id has to be declared because nobody on this side can infer
+      it: an RA address is an offset into a per-console space, libretro has no
+      call that asks, and `genesis_plus_gx` is three consoles anyway.
 - [x] **[OPEN]** The power-off failsafe is respected: the launcher stays alive
       as supervisor, and `SIGUSR1` is retained as the escape hatch for a core
       wedged inside `retro_run` that cannot read the socket.
@@ -1395,6 +1410,19 @@ operation never occurs.
       core declares - so it is cheap enough for `make check` rather than for
       the conformance suite. It is also the thing that fails if rcheevos is
       updated and the mapping stops agreeing with it.
+
+      **The wiring is tested separately, and had to be.** `test/stateplane.py`
+      now runs a game with a set attached and waits for the unlock to arrive
+      over the socket, because "the evaluator is correct" and "the evaluator is
+      connected to the frame loop" are different claims and this project has
+      shipped the first without the second before. The stub core grew a small
+      block of predictable system RAM to make that possible.
+
+      Writing it found a fixture bug that had been there all along: **the stub
+      core's frame counter carried across games**, because cores stay resident
+      (ADR-0006) and nothing reset it on load. Every fixture built on that
+      counter - the geometry toggle, the crash frame - therefore meant
+      something different on the second game of a run than on the first.
 - [ ] **[LATER]** CI.
 
 ---

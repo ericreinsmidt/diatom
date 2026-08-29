@@ -74,3 +74,4 @@ never started.
 | [0023](0023-core-licensing.md) | Diatom is MIT and ships no cores, which is what makes that safe | Proposed |
 | [0024](0024-session-persistence-paths.md) | A session carries its persistence paths, and PREVIEW finally exists | Accepted |
 | [0025](0025-achievements-belong-to-the-frontend.md) | Achievements belong to the frontend, and rcheevos is the evaluator | Proposed |
+| [0026](0026-achievements-on-the-launcher-protocol.md) | Achievements on the launcher protocol: the console is declared and the set is a file | Proposed |

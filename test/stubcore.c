@@ -29,6 +29,9 @@
  *   STUBCORE_CRASH=exit[@N]   exit(1), which raises no signal at all
  *   STUBCORE_CRASH=load       die inside retro_load_game, before RUNNING
  *
+ * It also exposes a small, entirely predictable block of system RAM, so the
+ * achievement path has bytes to watch without an emulator. See sysram below.
+ *
  * Test fixture. Not part of Diatom's runtime.
  */
 #include <stdint.h>
@@ -180,6 +183,11 @@ bool retro_load_game(const struct retro_game_info *game)
 	enum retro_pixel_format fmt = RETRO_PIXEL_FORMAT_RGB565;
 	(void)game;                                  /* content is optional here */
 	crash_configure();
+	/* A new game starts at frame zero. The core is resident across games
+	 * (ADR-0006), so without this the counter carries over and every fixture
+	 * built on it - the geometry toggle, the crash frame, sysram - means
+	 * something different on the second game than on the first. */
+	frame = 0;
 	/* Offered by every real core and discarded by Diatom until ADR-0020. The
 	 * port-1 entry is here so the "port 0 only" filter has something to
 	 * exclude rather than being untested. */
@@ -200,8 +208,40 @@ bool retro_serialize(void *d, size_t n)
 bool retro_unserialize(const void *d, size_t n)
 { if (n < sizeof frame) return false; memcpy(&frame, d, sizeof frame); return true; }
 
-void *retro_get_memory_data(unsigned id) { (void)id; return NULL; }
-size_t retro_get_memory_size(unsigned id) { (void)id; return 0; }
+/* A block of "system RAM", so the achievement path (ADR-0025, ADR-0026) has
+ * something real to read. Deliberately predictable: an achievement condition
+ * is a statement about specific bytes, and a fixture whose bytes move
+ * unpredictably proves nothing when one fires.
+ *
+ *   [0]  the frame number, low byte
+ *   [1]  counts up to 10 and stays there
+ *   [2]  counts DOWN 10 to 0, so a delta condition has something to compare
+ *        against - `0xH0002<d0xH0002` with `0xH0001=10` is true on exactly
+ *        one frame, frame 10
+ *   [3]  the LEFT button, 1 or 0, so a condition can be driven by hand
+ *
+ * Only SYSTEM_RAM. Exposing SAVE_RAM would make the frontend start writing
+ * .srm files for a core that has nothing to save. */
+static uint8_t sysram[256];
+
+static void sysram_tick(void)
+{
+	sysram[0] = (uint8_t)(frame & 0xff);
+	sysram[1] = (uint8_t)(frame < 10 ? frame : 10);
+	sysram[2] = (uint8_t)(frame < 10 ? 10 - frame : 0);
+	sysram[3] = (uint8_t)(input_cb(0, RETRO_DEVICE_JOYPAD, 0,
+	                               RETRO_DEVICE_ID_JOYPAD_LEFT) ? 1 : 0);
+}
+
+void *retro_get_memory_data(unsigned id)
+{
+	return id == RETRO_MEMORY_SYSTEM_RAM ? sysram : NULL;
+}
+
+size_t retro_get_memory_size(unsigned id)
+{
+	return id == RETRO_MEMORY_SYSTEM_RAM ? sizeof sysram : 0;
+}
 void retro_reset(void) { frame = 0; }
 void retro_cheat_reset(void) { }
 void retro_cheat_set(unsigned i, bool e, const char *c)
@@ -238,6 +278,7 @@ void retro_run(void)
 	if (n > AUDIO_MAX_FRAMES) n = AUDIO_MAX_FRAMES;   /* cannot happen; guard anyway */
 
 	poll_cb();
+	sysram_tick();
 
 	/* A box you can drive, so input is verifiable by looking at it. */
 	held = input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_LEFT);

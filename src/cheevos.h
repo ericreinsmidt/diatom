@@ -78,6 +78,43 @@ size_t diatom_cheevos_resolve(diatom_core *c);
  * looks like data is how a condition fires on a game that is not running. */
 uint32_t diatom_cheevos_peek(uint32_t address, uint32_t num_bytes, void *ud);
 
+/* ---- the set, and evaluating it -----------------------------------------
+ *
+ * ADR-0026. The launcher owns the network and the account; Diatom owns the
+ * frame. So the launcher fetches a set, writes it to a file and says where it
+ * is, and Diatom evaluates it against every frame the core produces.
+ *
+ * The file is one achievement per line, tab separated:
+ *
+ *     <id>\t<condition string>[\t anything else, ignored]
+ *
+ * Blank lines and lines starting with '#' are skipped. It is not JSON, on
+ * purpose: RetroAchievements' wire format is the launcher's problem, and a
+ * parser in here would be a second place that has to track their schema.
+ *
+ * The launcher sends only what it wants watched. An achievement the player has
+ * already earned is simply left out of the file - Diatom has no account, no
+ * idea what "earned" means, and nowhere to keep it. */
+
+/* Read a set and activate it. Replaces whatever was loaded. A NULL or empty
+ * path unloads. Returns the number of achievements now being watched. */
+int  diatom_cheevos_load(const char *path);
+void diatom_cheevos_unload(void);
+
+/* One frame of evaluation, called after retro_run and before anything can
+ * change memory again. Emits CHEEVO to the launcher as things fire. Cheap and
+ * safe to call when nothing is loaded. */
+void diatom_cheevos_frame(void);
+
+/* Forget hit counts and deltas without forgetting the set. A loaded state is
+ * a different point in the game's history, and carrying a half-finished match
+ * across it would credit progress that did not happen. */
+void diatom_cheevos_runtime_reset(void);
+
+/* The state plane's query reply (ADR-0020): a CHEEVOS summary followed by one
+ * CHEEVO line per achievement. */
+void diatom_cheevos_emit(void);
+
 /* What was found, for the log and for the launcher to be told about. */
 bool   diatom_cheevos_supported(void);
 size_t diatom_cheevos_mapped_bytes(void);   /* readable */

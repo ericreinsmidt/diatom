@@ -31,8 +31,9 @@ alone is a stricter test than designing for one embedder.
 `make check` is not advice. It fails on a port including `libretro.h`
 ([ADR-0007](docs/decisions/0007-port-interface.md)), on the scoping register
 drifting out of shape, on documented core measurements describing binaries the
-project no longer ships, and on any sample rate stated as current truth that the
-generated core facts do not record. Each of those exists because the rule it guards
+project no longer ships, on any sample rate stated as current truth that the
+generated core facts do not record, and on a RetroAchievements address failing
+to reach the byte it names. Each of those exists because the rule it guards
 decayed the moment nothing failed when it was broken.
 
 Two suites sit outside it because they need a build or a device, and are named
@@ -56,7 +57,7 @@ are now assertions rather than sentences.
 | `test/stubcore.c` | A libretro core that is not an emulator, so the frontend can be exercised with no third-party binary |
 | `tools/` | Measurement instruments and checks. Every number cited in `docs/` came from one of these |
 | `test/` | The stub core, and the suites that exercise the frontend against it |
-| `docs/decisions/` | 22 ADRs, 20 accepted. Immutable once accepted - superseded, never edited |
+| `docs/decisions/` | 26 ADRs, 21 accepted. Immutable once accepted - superseded, never edited |
 | `docs/scoping-register.md` | The living checklist: what is still open, and nothing else |
 | `docs/spikes/`, `docs/discussion/` | Measurements and dated session logs |
 

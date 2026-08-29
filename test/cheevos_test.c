@@ -15,8 +15,12 @@
  *
  * Build and run:  make check-cheevos
  */
+#include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <time.h>
+#include <unistd.h>
 
 #include "cheevos.h"
 #include "diatom.h"
@@ -29,6 +33,42 @@ void diatom_port_log(diatom_log_level lvl, const char *msg)
 {
 	static const char *n[] = { "DEBUG", "INFO", "WARN", "ERROR" };
 	printf("    [%s] %s\n", n[lvl], msg);
+}
+
+/* cheevos.c reports to the launcher through this. Captured rather than
+ * discarded, because what reaches the launcher IS the feature: an achievement
+ * that fires and is not reported has not happened. */
+#define CAP_LINES 4096
+static char g_cap[CAP_LINES][192];
+static int  g_ncap;
+
+void diatom_proto_send(const char *fmt, ...)
+{
+	va_list ap;
+
+	if (g_ncap >= CAP_LINES) return;
+	va_start(ap, fmt);
+	vsnprintf(g_cap[g_ncap], sizeof g_cap[0], fmt, ap);
+	va_end(ap);
+	g_ncap++;
+}
+
+static void sent_clear(void) { g_ncap = 0; }
+
+static int sent(const char *line)
+{
+	int i;
+	for (i = 0; i < g_ncap; i++)
+		if (!strcmp(g_cap[i], line)) return 1;
+	return 0;
+}
+
+static const char *sent_starting(const char *prefix)
+{
+	int i;
+	for (i = 0; i < g_ncap; i++)
+		if (!strncmp(g_cap[i], prefix, strlen(prefix))) return g_cap[i];
+	return NULL;
 }
 
 static int failures;
@@ -74,6 +114,23 @@ static void console_reset(void)
 
 	diatom_cheevos_reset();
 	diatom_cheevos_set_console(RC_CONSOLE_NINTENDO);
+	sent_clear();
+}
+
+/* A set file, written where the loader will actually have to read one. */
+static char g_set_path[128];
+
+static void write_set(const char *body)
+{
+	FILE *f;
+
+	if (!g_set_path[0])
+		snprintf(g_set_path, sizeof g_set_path,
+		         "/tmp/diatom-cheevos-test-%ld.set", (long)getpid());
+	f = fopen(g_set_path, "w");
+	if (!f) { printf("  FAIL: cannot write %s\n", g_set_path); failures++; return; }
+	fputs(body, f);
+	fclose(f);
 }
 
 /* ---- 1. no memory map: system RAM, then cartridge RAM --------------------- */
@@ -239,12 +296,207 @@ static void test_condition(void)
 	rc_runtime_destroy(&rt);
 }
 
+/* ---- 4. the set file ----------------------------------------------------- */
+
+static void test_set_file(void)
+{
+	const char *summary;
+
+	printf("  reading a set from a file:\n");
+	console_reset();
+	diatom_cheevos_resolve(&g_core);
+
+	write_set("# a comment, and a blank line follow\n"
+	          "\n"
+	          "76195\t0xH06f3=0_0xH0400=3\n"
+	          "76196\t0xH0010=7\ta title the format leaves room for\n"
+	          "nonsense\t0xH0010=1\n"          /* id is not a number */
+	          "77000 0xH0010=1\n"               /* space, not a tab */
+	          "77001\t)(nonsense((\n"          /* rcheevos will refuse this */
+	          "0\t0xH0010=1\n");               /* zero is not an id */
+
+	CHECK(diatom_cheevos_load(g_set_path) == 2,
+	      "expected exactly the two well-formed lines to be watched");
+
+	sent_clear();
+	diatom_cheevos_emit();
+	summary = sent_starting("CHEEVOS\t");
+	CHECK(summary && strstr(summary, "count=2") && strstr(summary, "unlocked=0"),
+	      "CHEEVOS summary wrong: %s", summary ? summary : "(nothing sent)");
+	CHECK(sent("CHEEVO\tid=76195\tstate=active"), "76195 not enumerated as active");
+	CHECK(sent("CHEEVO\tid=76196\tstate=active"), "76196 not enumerated as active");
+
+	/* A condition longer than any buffer anyone would have guessed at.
+	 * Measured 2026-08-29 over 428 achievements from four RetroAchievements
+	 * sets: median 113 characters, longest 30,897 (Mega Man 2). This is
+	 * larger than that, and larger than the whole protocol line buffer, which
+	 * is why the set travels as a file and the loader has no line limit. */
+	{
+		size_t n = 40000, off;
+		char  *big = malloc(n + 64);
+
+		CHECK(big != NULL, "out of memory building the long-condition case");
+		if (big) {
+			off = (size_t)snprintf(big, n, "99001\t0xH0010=1");
+			while (off < n)
+				off += (size_t)snprintf(big + off, n - off + 32,
+				                        "_0xH%04x=1", (unsigned)(off % 0x100));
+			big[off] = '\n';
+			big[off + 1] = '\0';
+			write_set(big);
+			CHECK(diatom_cheevos_load(g_set_path) == 1,
+			      "a %zu-character condition was not loaded", off);
+			free(big);
+		}
+	}
+
+	/* An empty path is how the launcher says "stop watching". */
+	console_reset();
+	diatom_cheevos_resolve(&g_core);
+	CHECK(diatom_cheevos_load(NULL) == 0, "a null path should unload");
+	sent_clear();
+	diatom_cheevos_emit();
+	summary = sent_starting("CHEEVOS\t");
+	CHECK(summary && strstr(summary, "count=0"), "unload did not clear the set");
+}
+
+/* ---- 5. the whole path: file to unlock ----------------------------------- */
+
+static void test_end_to_end(void)
+{
+	const char *summary;
+
+	printf("  a set loaded from a file, unlocking through the frame call:\n");
+	console_reset();
+	diatom_cheevos_resolve(&g_core);
+
+	write_set("76195\t0xH06f3=0_0xH0400=3_0xH00ba=0_0xH06f0<d0xH06f0\n"
+	          "76196\t0xH0500=99\n");         /* never true here */
+	CHECK(diatom_cheevos_load(g_set_path) == 2, "both achievements should load");
+
+	g_ram[0x06f3] = 0;
+	g_ram[0x0400] = 3;
+	g_ram[0x00ba] = 0;
+	g_ram[0x06f0] = 5;
+
+	sent_clear();
+	diatom_cheevos_frame();
+	diatom_cheevos_frame();
+	CHECK(!sent_starting("CHEEVO\tid=76195"), "fired before the byte moved");
+
+	g_ram[0x06f0] = 4;
+	diatom_cheevos_frame();
+	CHECK(sent("CHEEVO\tid=76195\tstate=unlocked"),
+	      "the launcher was never told 76195 unlocked");
+	CHECK(!sent_starting("CHEEVO\tid=76196"), "76196 fired and should not have");
+
+	/* And it must not fire twice - a launcher counting unlocks would be
+	 * counting frames. */
+	sent_clear();
+	g_ram[0x06f0] = 3;
+	diatom_cheevos_frame();
+	CHECK(!sent_starting("CHEEVO\tid=76195"), "fired a second time");
+
+	sent_clear();
+	diatom_cheevos_emit();
+	summary = sent_starting("CHEEVOS\t");
+	CHECK(summary && strstr(summary, "unlocked=1"),
+	      "summary should show one unlocked: %s", summary ? summary : "(nothing)");
+	CHECK(sent("CHEEVO\tid=76195\tstate=unlocked"), "76195 not enumerated as unlocked");
+}
+
+/* ---- 6. a loaded state is a different timeline --------------------------- */
+
+static void test_runtime_reset(void)
+{
+	printf("  a state load discards progress in flight:\n");
+	console_reset();
+	diatom_cheevos_resolve(&g_core);
+
+	/* True once the byte has been 1 on three separate frames. Hit counts are
+	 * exactly the progress a state load must not carry. */
+	write_set("90001\t0xH0010=1.3.\n");
+	CHECK(diatom_cheevos_load(g_set_path) == 1, "the hit-count set should load");
+
+	g_ram[0x0010] = 1;
+	sent_clear();
+	diatom_cheevos_frame();
+	diatom_cheevos_frame();
+	CHECK(!sent_starting("CHEEVO\tid=90001"), "fired after two of three hits");
+
+	diatom_cheevos_runtime_reset();
+
+	diatom_cheevos_frame();
+	diatom_cheevos_frame();
+	CHECK(!sent_starting("CHEEVO\tid=90001"),
+	      "the two hits before the reset were carried across it");
+
+	diatom_cheevos_frame();
+	CHECK(sent("CHEEVO\tid=90001\tstate=unlocked"),
+	      "three hits after the reset should still unlock");
+}
+
+/* ---- 7. what a frame of this costs --------------------------------------- */
+
+/* Printed, not asserted. A timing assertion in `make check` fails on a loaded
+ * machine and gets disabled, and a disabled check is worse than none. The
+ * number that decides anything is the device's, and this is not it. */
+static void measure_cost(void)
+{
+	enum { SET = 100, FRAMES = 2000 };
+	char  body[SET * 96];
+	int   i, off = 0;
+	clock_t t0, t1;
+	double us;
+
+	printf("  cost of a frame:\n");
+	console_reset();
+	diatom_cheevos_resolve(&g_core);
+
+	/* A mix of shapes rather than a hundred copies of one: a plain compare, a
+	 * delta, a hit count, and a chained pair with a reset. */
+	for (i = 0; i < SET; i++) {
+		static const char *shape[] = {
+			"0xH%04x=3_0xH0011=1",
+			"0xH%04x<d0xH0012_0xH0013=0",
+			"0xH%04x=1.30._0xH0014>2",
+			"R:0xH0015=0_N:0xH%04x=1_0xH0016=4",
+		};
+		off += snprintf(body + off, sizeof body - (size_t)off, "%d\t",
+		                90100 + i);
+		off += snprintf(body + off, sizeof body - (size_t)off,
+		                shape[i % 4], 0x100 + i);
+		off += snprintf(body + off, sizeof body - (size_t)off, "\n");
+	}
+	write_set(body);
+	CHECK(diatom_cheevos_load(g_set_path) == SET,
+	      "the benchmark set did not load whole");
+
+	sent_clear();
+	t0 = clock();
+	for (i = 0; i < FRAMES; i++) {
+		g_ram[0x0100 + (i % SET)] ^= 1;   /* keep memory actually moving */
+		diatom_cheevos_frame();
+	}
+	t1 = clock();
+
+	us = (double)(t1 - t0) * 1e6 / CLOCKS_PER_SEC / FRAMES;
+	printf("    %d achievements, %d frames: %.1f us per frame on this host\n"
+	       "    (%.2f%% of a 16.7 ms frame; the device number is not this one)\n",
+	       SET, FRAMES, us, us / 16742.0 * 100.0);
+}
+
 int main(void)
 {
 	printf("cheevos: address space and evaluation\n");
 	test_unmapped();
 	test_mapped();
 	test_condition();
+	test_set_file();
+	test_end_to_end();
+	test_runtime_reset();
+	measure_cost();
+	if (g_set_path[0]) unlink(g_set_path);
 
 	if (failures) {
 		printf("\n%d check(s) failed\n", failures);

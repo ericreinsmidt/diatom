@@ -170,6 +170,8 @@ static void parse_line(char *line, diatom_msg *out)
 	else if (!strcmp(field, "SETLEVEL")) out->kind = DIATOM_MSG_SETLEVEL;
 	else if (!strcmp(field, "DISPLAY"))  out->kind = DIATOM_MSG_DISPLAY;
 	else if (!strcmp(field, "SETDISPLAY")) out->kind = DIATOM_MSG_SETDISPLAY;
+	else if (!strcmp(field, "CHEEVOS"))    out->kind = DIATOM_MSG_CHEEVOS;
+	else if (!strcmp(field, "SETCHEEVOS")) out->kind = DIATOM_MSG_SETCHEEVOS;
 	else {
 		log_(DIATOM_LOG_WARN, "proto: ignoring unknown verb '%s'", field);
 		out->kind = DIATOM_MSG_NONE;
@@ -198,6 +200,12 @@ static void parse_line(char *line, diatom_msg *out)
 		else if (!strcmp(field, "preview"))
 			snprintf(out->preview, sizeof out->preview, "%s", v);
 		else if (!strcmp(field, "path")) snprintf(out->path,  sizeof out->path,  "%s", v);
+		/* ADR-0026. `cheevos=` is a path on RUN rather than the set itself:
+		 * a condition string runs to kilobytes and would not survive a line
+		 * protocol, and ADR-0016 already has the launcher passing paths. */
+		else if (!strcmp(field, "cheevos"))
+			snprintf(out->cheevos, sizeof out->cheevos, "%s", v);
+		else if (!strcmp(field, "console")) out->console = (int)strtol(v, NULL, 10);
 		else if (!strcmp(field, "key"))  snprintf(out->key,   sizeof out->key,   "%s", v);
 		else if (!strcmp(field, "value"))snprintf(out->value, sizeof out->value, "%s", v);
 		else if (!strcmp(field, "map"))  snprintf(out->map,   sizeof out->map,   "%s", v);

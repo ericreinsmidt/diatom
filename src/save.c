@@ -27,6 +27,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "cheevos.h"
 #include "diatom.h"
 
 /* Long enough that a churning game is not writing constantly, short enough
@@ -335,5 +336,13 @@ bool diatom_state_load(diatom_core *c, const char *path)
 	free(buf);
 	logf_(DIATOM_LOG_INFO, "state: %s %s",
 	      ok ? "restored" : "REFUSED by core:", path);
+
+	/* Here rather than at the three call sites. A loaded state is a different
+	 * point in the game's history, so half-finished achievement progress -
+	 * hit counts, and the previous frame every delta is measured against -
+	 * belongs to a timeline that no longer exists. Leaving it would credit
+	 * progress nobody made, and a call site added later would inherit the
+	 * fix instead of having to remember it. */
+	if (ok) diatom_cheevos_runtime_reset();
 	return ok;
 }

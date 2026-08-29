@@ -18,6 +18,7 @@
 #include <signal.h>
 #include <unistd.h>
 
+#include "cheevos.h"
 #include "diatom.h"
 
 /* --- the frame the core last handed us ----------------------------------- */
@@ -36,6 +37,8 @@ typedef struct diatom_session {
 	const char   *core, *rom, *shot, *state_load, *state_exit;
 	const char   *preview;    /* BMP of the frame, written on pause and exit */
 	const char   *firmware;   /* what the launcher says this content needs */
+	const char   *cheevos;    /* an achievement set to watch, ADR-0026 */
+	int           console;    /* which console's address space it is written against */
 	long          limit;
 	int           mode;
 	diatom_filter filter;
@@ -454,6 +457,9 @@ static bool menu_pause(const diatom_session *sn)
 			/* The menu's Reset row. The game stays paused - the launcher
 			 * still owns the display and sends RESUME when it is done. */
 			g_core->reset();
+			/* Same reason as a state load, one step further: the game is
+			 * back at the title screen and nothing in progress survived. */
+			diatom_cheevos_runtime_reset();
 			diatom_proto_send("RESETDONE");
 			break;
 		case DIATOM_MSG_OPTIONS:
@@ -668,6 +674,12 @@ static bool state_plane_msg(const diatom_msg *m)
 		apply_display(g_mode, g_filter);
 		return true;
 	case DIATOM_MSG_SETDISPLAY: display_set(m); return true;
+	case DIATOM_MSG_CHEEVOS: diatom_cheevos_emit(); return true;
+	case DIATOM_MSG_SETCHEEVOS:
+		if (m->console) diatom_cheevos_set_console((unsigned)m->console);
+		diatom_cheevos_load(m->path);
+		diatom_cheevos_emit();
+		return true;
 	default: return false;
 	}
 }
@@ -745,6 +757,11 @@ static int run_session_inner(const diatom_session *sn)
 			return 4;
 		}
 	}
+
+	/* Before the core starts, because the address space is resolved during
+	 * the load and it cannot be laid out until someone says which console it
+	 * belongs to. ADR-0026: Diatom never guesses this. */
+	diatom_cheevos_set_console((unsigned)sn->console);
 
 	if (!diatom_core_start(g_core, sn->rom)) {
 		/* Say the firmware was found, so a launcher that reports this does not
@@ -837,6 +854,11 @@ static int run_session_inner(const diatom_session *sn)
 	diatom_proto_send("RUNNING");
 	g_phase = PHASE_RUNNING;   /* a crash from here on is EXIT, not ERROR */
 
+	/* A set sent with RUN is watched from the first frame. A launcher that is
+	 * still fetching one sends SETCHEEVOS when it arrives; both paths run the
+	 * same loader. */
+	if (sn->cheevos) diatom_cheevos_load(sn->cheevos);
+
 	/* Warm up before starting the clock. The first frames create the texture,
 	 * fault in code paths and prime the audio device; measured on a COLD
 	 * process, they overrun the frame budget badly enough to trip a resync
@@ -904,6 +926,12 @@ static int run_session_inner(const diatom_session *sn)
 		g_frame_fresh = false;
 		g_core->run();
 		frames++;
+
+		/* Immediately after the frame the core produced, and before anything
+		 * else can touch memory. This is the whole of ADR-0025 in one line:
+		 * conditions compare against the previous frame, so they have to be
+		 * evaluated once per frame, here, and not over a socket at 10Hz. */
+		diatom_cheevos_frame();
 
 		/* ADR-0011 locked the rect and never moved it. That is right when the
 		 * load-time geometry is the mode the game runs in and the change is an
@@ -997,6 +1025,10 @@ static int run_session_inner(const diatom_session *sn)
 				break;
 			case DIATOM_MSG_RESET:
 				g_core->reset();
+				/* Same reason as a state load, one step further: the game
+				 * is back at the title screen and nothing in progress
+				 * survived. */
+				diatom_cheevos_runtime_reset();
 				diatom_proto_send("RESETDONE");
 				break;
 			/* HANGUP is deliberately not a stop. ADR-0008 exists so a
@@ -1237,12 +1269,12 @@ int main(int argc, char **argv)
 	 * and is the only thing that has made this loop miss a frame. */
 	const char *display = "stretch", *filter = "nearest";
 	const char *state_load = NULL, *state_exit = NULL, *firmware = NULL, *tap = NULL;
-	const char *preview_path = NULL;
+	const char *preview_path = NULL, *cheevos_path = NULL;
 	const char *sock = getenv("DIATOM_SOCKET");
 	bool list_options = false;
 	diatom_filter start_filter;
 	long limit = 0;
-	int i, start_mode = -1;
+	int i, start_mode = -1, console = 0;
 
 	for (i = 1; i < argc; i++) {
 		if (!strcmp(argv[i], "--core") && i + 1 < argc) core_path = argv[++i];
@@ -1257,6 +1289,12 @@ int main(int argc, char **argv)
 		else if (!strcmp(argv[i], "--state-on-exit") && i + 1 < argc) state_exit = argv[++i];
 		else if (!strcmp(argv[i], "--preview-on-exit") && i + 1 < argc) preview_path = argv[++i];
 		else if (!strcmp(argv[i], "--firmware") && i + 1 < argc) firmware = argv[++i];
+		/* ADR-0026. Present on the command line as well as the protocol so a
+		 * set can be exercised on the desktop with no launcher at all, which
+		 * is how anything here gets debugged. */
+		else if (!strcmp(argv[i], "--cheevos") && i + 1 < argc) cheevos_path = argv[++i];
+		else if (!strcmp(argv[i], "--console") && i + 1 < argc)
+			console = (int)strtol(argv[++i], NULL, 10);
 		else if (!strcmp(argv[i], "--tap-audio") && i + 1 < argc) tap = argv[++i];
 		else if (!strcmp(argv[i], "--socket") && i + 1 < argc) sock = argv[++i];
 		else if (!strcmp(argv[i], "--list-options")) list_options = true;
@@ -1375,6 +1413,8 @@ int main(int argc, char **argv)
 			sn.state_load = m.resume[0]     ? m.resume     : NULL;
 			sn.state_exit = m.exit_state[0] ? m.exit_state : NULL;
 			sn.preview    = m.preview[0]    ? m.preview    : NULL;
+			sn.cheevos    = m.cheevos[0]    ? m.cheevos    : NULL;
+			sn.console    = m.console;
 			sn.mode   = start_mode;
 			sn.filter = start_filter;
 			run_session(&sn);   /* its own ERROR/EXIT is the report */
@@ -1386,10 +1426,17 @@ int main(int argc, char **argv)
 		}
 		diatom_proto_close();
 	} else {
-		diatom_session sn = { core_path, rom_path, shot_path,
-		                      state_load, state_exit, preview_path, firmware,
-		                      limit, start_mode, start_filter,
-		                      list_options };
+		/* Named, not positional. A positional list mis-assigns silently the
+		 * moment a field is added in the middle, and this one has grown
+		 * three times. */
+		diatom_session sn = {
+			.core = core_path, .rom = rom_path, .shot = shot_path,
+			.state_load = state_load, .state_exit = state_exit,
+			.preview = preview_path, .firmware = firmware,
+			.cheevos = cheevos_path, .console = console,
+			.limit = limit, .mode = start_mode, .filter = start_filter,
+			.list_only = list_options,
+		};
 		int rc = run_session(&sn);
 		if (rc) return rc;
 	}

@@ -134,6 +134,8 @@ typedef enum {
 	DIATOM_MSG_SETLEVEL,   /* set `lkind` to `index` of `count` positions */
 	DIATOM_MSG_DISPLAY,    /* report the display mode and filter */
 	DIATOM_MSG_SETDISPLAY, /* set them: `dmode`, `dfilter` */
+	DIATOM_MSG_CHEEVOS,    /* report the achievement set and what has fired */
+	DIATOM_MSG_SETCHEEVOS, /* load a set from `path`; empty unloads */
 	DIATOM_MSG_HANGUP      /* launcher went away; the game keeps running */
 } diatom_msg_kind;
 
@@ -149,7 +151,12 @@ typedef struct {
 	char resume[1024];     /* RUN: state to load at start, if it exists */
 	char exit_state[1024]; /* RUN: state written on every way out */
 	char preview[1024];    /* RUN: BMP of the frame, on pause and on exit */
-	char path[1024];       /* SAVE / LOAD */
+	/* Achievements, ADR-0026. `console` is a RetroAchievements console id and
+	 * is not optional for them: an RA address is an offset into a per-console
+	 * space, so 0x06f3 means nothing until the launcher says which console. */
+	char cheevos[1024];    /* RUN: a set to watch from the first frame */
+	int  console;          /* RUN / SETCHEEVOS */
+	char path[1024];       /* SAVE / LOAD / SETCHEEVOS */
 	char key[80];          /* SETOPT */
 	char value[128];       /* SETOPT */
 	char map[512];         /* SETMAP */

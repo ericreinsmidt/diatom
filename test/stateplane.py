@@ -8,6 +8,10 @@ why they are cases rather than a smoke test:
   - a refused SETMAP left the table cleared rather than unchanged.
   - labels have to follow a remap, or a remap screen shows the wrong verbs.
 
+Since extended past ADR-0020's four states to whatever else the plane carries -
+session persistence (ADR-0024) and achievements (ADR-0026) - because the
+harness and the fixture are the same and a second copy of both would drift.
+
 The level half cannot be tested here: a desktop has no volume or brightness of
 its own, so `LEVELS count=0` is the whole of it. Levels are exercised on
 hardware by `protodrive --state`.
@@ -148,6 +152,52 @@ check_that("resume path accepted, game reaches RUNNING",
            "RUNNING" in got and not any(l.startswith("ERROR") for l in got), got)
 # pause writes the preview BEFORE announcing PAUSED - the order is the contract
 before = pathlib.Path(pv).stat().st_mtime_ns
+send("STOP"); drain(2.0)
+
+# --- ADR-0026: achievements over the protocol ------------------------------
+# The unit test (make check-cheevos) proves the mapping and the evaluation.
+# This proves the WIRING: that a set named on RUN is read, that the frame call
+# is actually in the loop, and that an unlock reaches the launcher. Every one
+# of those is a place where a correct component has been connected to nothing.
+setf = f"{tmp}/stub.set"
+open(setf, "w").write(
+    "# id\tcondition\n"
+    # frame 10 exactly: the counter has reached 10 AND the countdown byte is
+    # lower than it was on the previous frame. Both halves are needed - the
+    # delta is the thing a 10Hz launcher could never have seen.
+    "5001\t0xH0002<d0xH0002_0xH0001=10\n"
+    "5002\t0xH0003=99\n")           # never true; the control
+
+send(f"RUN\tcore={ROOT}/build/desktop/stubcore.so\tconsole=0\tcheevos={setf}")
+got = drain(3.0)
+check_that("a set named on RUN unlocks and reports it",
+           "CHEEVO\tid=5001\tstate=unlocked" in got, got)
+check_that("the control achievement stays quiet",
+           not any(l.startswith("CHEEVO\tid=5002") for l in got), got)
+
+send("CHEEVOS"); got = drain(2.0)
+summary = next((l for l in got if l.startswith("CHEEVOS\t")), "")
+check_that("CHEEVOS reports two watched, one unlocked",
+           "count=2" in summary and "unlocked=1" in summary, summary)
+check("the unlocked one enumerates as unlocked",
+      next((l for l in got if l.startswith("CHEEVO\tid=5001")), ""),
+      "CHEEVO\tid=5001\tstate=unlocked")
+check("the other is still active",
+      next((l for l in got if l.startswith("CHEEVO\tid=5002")), ""),
+      "CHEEVO\tid=5002\tstate=active")
+
+# SETCHEEVOS replaces the set mid-game. The launcher needs this because the
+# set arrives over the network, and a game must not wait for a download.
+open(setf, "w").write("5003\t0xH0000>200\n")
+send(f"SETCHEEVOS\tpath={setf}"); got = drain(2.0)
+summary = next((l for l in got if l.startswith("CHEEVOS\t")), "")
+check_that("SETCHEEVOS replaces the set whole",
+           "count=1" in summary and "unlocked=0" in summary, summary)
+
+send("SETCHEEVOS\tpath="); got = drain(2.0)
+summary = next((l for l in got if l.startswith("CHEEVOS\t")), "")
+check_that("an empty path unloads", "count=0" in summary, summary)
+
 send("STOP"); drain(2.0)
 
 send("QUIT"); time.sleep(0.4)

@@ -132,9 +132,10 @@ Foreclosed: evaluating anywhere but in the frontend. Any future "just read
 memory over the socket" proposal is answered by the 10Hz measurement above.
 
 New protocol surface, in both directions - the launcher sends a condition set
-at RUN, Diatom reports unlocks. That is an extension of ADR-0009 and wants its
-own ADR once the shape is known, not a guess here. **The console id is part of
-that surface and is not optional**: a RetroAchievements address is an offset
+at RUN, Diatom reports unlocks. That is an extension of ADR-0009 and wanted its
+own ADR once the shape was known rather than a guess here; it is
+[ADR-0026](0026-achievements-on-the-launcher-protocol.md). **The console id is
+part of that surface and is not optional**: a RetroAchievements address is an offset
 into a per-console space, so `0x06f3` means nothing until someone says NES.
 Diatom does not guess it from the core, because the core does not know either.
 
