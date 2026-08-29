@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "cheevos.h"
 #include "diatom.h"
 
 #define MASK(x) ((x) & 0xffff)   /* experimental commands carry 0x10000 */
@@ -214,8 +215,18 @@ static bool env_cb(unsigned cmd, void *data)
 	/* ---- accepted and ignored ------------------------------------------- */
 	case MASK(RETRO_ENVIRONMENT_SET_PERFORMANCE_LEVEL):
 	case MASK(RETRO_ENVIRONMENT_SET_CONTROLLER_INFO):
+		return true;
+
+	/* ---- kept for achievements (ADR-0025) -------------------------------- */
+	/* Both were in the ignore list above until 2026-08-29. The map in
+	 * particular had to be captured rather than noted: the header says the
+	 * frontend must keep its own copy, because the core's is valid only for
+	 * the duration of this call. */
 	case MASK(RETRO_ENVIRONMENT_SET_MEMORY_MAPS):
+		diatom_cheevos_note_map(data);
+		return true;
 	case MASK(RETRO_ENVIRONMENT_SET_SUPPORT_ACHIEVEMENTS):
+		diatom_cheevos_note_support(data ? *(const bool *)data : true);
 		return true;
 
 	case MASK(RETRO_ENVIRONMENT_SET_SUPPORT_NO_GAME):

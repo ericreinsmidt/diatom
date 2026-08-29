@@ -17,6 +17,19 @@ interface between them carries no copyleft.
 
 Full text is at the top of the file.
 
+## `vendor/rcheevos/`
+
+RetroAchievements' implementation of their achievement condition language,
+vendored under ADR-0025 so the build stays self-contained.
+
+- **Copyright (c) 2018 RetroAchievements.org**
+- **MIT licensed**, full text in `vendor/rcheevos/LICENSE`.
+
+MIT is the whole reason this is possible rather than a problem: it is Diatom's
+own licence, so ADR-0002's founding goal - escaping GPL inheritance - is
+untouched. The networking halves (`rc_client`, `rapi`, `rurl`) are deliberately
+not vendored; `vendor/rcheevos/README.md` lists every omission and why.
+
 ## Cores
 
 **Diatom ships no cores and has no core list.** It loads whatever shared library

@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "cheevos.h"
 #include "diatom.h"
 
 static bool bind_sym(void *h, void *slot, const char *name)
@@ -138,6 +139,11 @@ bool diatom_core_start(diatom_core *c, const char *rom_path)
 
 	memset(&si, 0, sizeof si);
 	c->get_system_info(&si);
+
+	/* Before the core can declare anything. A core re-declares its memory map
+	 * on every load, and a pointer kept from the previous game points into
+	 * memory that core has since freed - ADR-0025. */
+	diatom_cheevos_reset();
 
 	if (!c->initialized) { c->init(); c->initialized = true; }
 
