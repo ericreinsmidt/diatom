@@ -10,7 +10,8 @@
  * `struct diatom_core` tag to forward-declare - the header has to come in. */
 #include "diatom.h"
 
-/* Achievements.
+/* Achievements: turning what the core offers into the flat address space
+ * RetroAchievements writes its conditions against.
  *
  * This lives in Diatom rather than in the launcher because libretro says so:
  * RETRO_ENVIRONMENT_SET_SUPPORT_ACHIEVEMENTS is addressed to the FRONTEND, and
@@ -22,24 +23,38 @@
  * Diatom evaluates. The launcher does the network: it logs in, identifies the
  * game and hands over a condition set. Nothing here opens a socket.
  *
- * This first piece only captures what the core offers. Evaluation comes next.
+ * Three things have to line up before a condition can be read:
+ *
+ *   the console      RetroAchievements defines a separate address space per
+ *                    console, so `0x06f3` means nothing until you know it is
+ *                    an NES. Diatom never guesses this; the launcher knows it
+ *                    and says so.
+ *   the core's map   SET_MEMORY_MAPS, if the core sends one.
+ *   the fallback     retro_get_memory_data, for the cores that do not.
  */
 
-/* One usable block of emulated memory, already resolved to a pointer Diatom
- * can read. */
+/* One run of the RetroAchievements address space that resolves to real memory,
+ * or to nothing. Holes are kept rather than skipped, because RA addresses are
+ * offsets into the concatenation of these spans - dropping an unmapped one
+ * would silently shift every address after it. */
 typedef struct {
-	uint8_t *data;
+	uint8_t *data;         /* NULL: this run of addresses is not readable */
 	size_t   size;
-	uint32_t start;        /* where the core says this block begins */
-	bool     from_map;     /* from SET_MEMORY_MAPS, else retro_get_memory_data */
-} diatom_mem_block;
+} diatom_mem_span;
 
-#define DIATOM_MEM_BLOCKS 16
+#define DIATOM_MEM_SPANS 64    /* NES needs 11 console regions split by mirror */
+#define DIATOM_MEM_DESCS 32    /* the widest map in the pinned set has 10 */
 
 /* Reset to "this core has offered nothing", called before each load. A core
  * declares its map during retro_load_game, so anything held from the previous
  * game is not merely stale - it points into memory that core has freed. */
 void diatom_cheevos_reset(void);
+
+/* Which console's address space to resolve into, as a RetroAchievements
+ * console id (RC_CONSOLE_* in rc_consoles.h). Zero, the default, means unknown:
+ * the mapping then assumes system RAM followed by save RAM, which is what
+ * rcheevos itself does for a console it has no table for. */
+void diatom_cheevos_set_console(unsigned ra_console_id);
 
 /* SET_MEMORY_MAPS. The header is explicit that the frontend must keep its own
  * copy of the descriptors and everything they point at, because the core's
@@ -47,20 +62,27 @@ void diatom_cheevos_reset(void);
 void diatom_cheevos_note_map(const void *retro_memory_map);
 
 /* SET_SUPPORT_ACHIEVEMENTS. A core saying false means it knows its memory is
- * not stable enough to be worth watching, and is worth honouring. */
+ * not stable enough to be worth watching, and is worth honoring. */
 void diatom_cheevos_note_support(bool supported);
 
-/* Fill in the blocks from whatever the core offered, preferring the memory map
- * and falling back to retro_get_memory_data(RETRO_MEMORY_SYSTEM_RAM). Called
- * once the game is loaded, since neither source is complete before that.
- * Takes the core rather than reaching for a global, the same way
- * diatom_env_bind does. Returns the number of blocks found. */
-int diatom_cheevos_resolve(diatom_core *c);
+/* Build the address space from whatever the core offered. Called once the game
+ * is loaded, since neither source is complete before that. Takes the core
+ * rather than reaching for a global, the same way diatom_env_bind does.
+ * Returns the number of readable bytes, which is zero when nothing mapped. */
+size_t diatom_cheevos_resolve(diatom_core *c);
+
+/* Read up to four bytes at a RetroAchievements address, little-endian.
+ * Signature-compatible with rc_runtime_peek_t; cheevos.c proves that at
+ * compile time rather than trusting this comment. A read that runs off the end
+ * of mapped memory returns 0 whole, never a partial value - a half-read that
+ * looks like data is how a condition fires on a game that is not running. */
+uint32_t diatom_cheevos_peek(uint32_t address, uint32_t num_bytes, void *ud);
 
 /* What was found, for the log and for the launcher to be told about. */
-int  diatom_cheevos_block_count(void);
-const diatom_mem_block *diatom_cheevos_block(int i);
-bool diatom_cheevos_supported(void);
-size_t diatom_cheevos_total_bytes(void);
+bool   diatom_cheevos_supported(void);
+size_t diatom_cheevos_mapped_bytes(void);   /* readable */
+size_t diatom_cheevos_total_bytes(void);    /* readable + holes */
+int    diatom_cheevos_span_count(void);
+const diatom_mem_span *diatom_cheevos_span(int i);
 
 #endif

@@ -154,6 +154,7 @@ bool diatom_core_start(diatom_core *c, const char *rom_path)
 			return false;
 		}
 		c->game_loaded = true;
+		diatom_cheevos_resolve(c);
 		return true;
 	}
 
@@ -218,6 +219,11 @@ bool diatom_core_start(diatom_core *c, const char *rom_path)
 		return false;
 	}
 	c->game_loaded = true;
+
+	/* Now, and not before: a core declares its memory map during load, and
+	 * retro_get_memory_data has nothing to hand back until there is a game.
+	 * A map that arrives later still counts - cheevos.c re-resolves. */
+	diatom_cheevos_resolve(c);
 	return true;
 }
 

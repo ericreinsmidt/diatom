@@ -6,7 +6,7 @@ anyway: a spike table labelled 32040 as NES (it is SNES), and Game Boy as 32768
 (mGBA runs it at 131072). The second is a rate no pinned core produces, so that
 row measured nothing - and the genuinely hardest ratio in the matrix, 131072
 into 48000 at 2.73:1, went untested as a result. It was caught by a person
-noticing a neighbouring number, which is not a mechanism.
+noticing a neighboring number, which is not a mechanism.
 
 So: any `NNNN Hz` in a file that claims to describe how things are NOW must be a
 rate core-facts records, or half of one - a Nyquist figure is the only derived

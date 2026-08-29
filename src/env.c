@@ -143,7 +143,7 @@ static bool env_cb(unsigned cmd, void *data)
 		return true;
 	case MASK(RETRO_ENVIRONMENT_SET_ROTATION):
 		/* Declined by default - the port already owns panel rotation, and
-		 * honouring this would mean rotation twice over. Logged so we find out
+		 * honoring this would mean rotation twice over. Logged so we find out
 		 * if the assumption is wrong. */
 		diatom_port_log(DIATOM_LOG_INFO, "core asked for SET_ROTATION; declined");
 		return false;

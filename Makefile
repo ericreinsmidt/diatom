@@ -12,7 +12,7 @@ PORT ?= desktop
 
 CC      ?= cc
 CFLAGS  += -std=gnu11 -Wall -Wextra -Wno-unused-parameter -O2
-CFLAGS  += -Iinclude -Isrc
+CFLAGS  += -Iinclude -Isrc -Ivendor/rcheevos/include
 # Header dependency tracking. Without it, changing a struct in diatom.h leaves
 # stale objects calling through old member offsets - which on 2026-08-26 turned
 # serialize_size() into a call to a different function entirely and made state
@@ -27,6 +27,33 @@ SRC   := src/main.c src/cheevos.c src/core.c src/env.c src/scale.c src/audio.c s
 OBJ   := $(SRC:%.c=$(BUILD)/%.o)
 BIN   := $(BUILD)/diatom
 CONFORM := $(BUILD)/diatom-conform
+
+# rcheevos, vendored under ADR-0025. Listed rather than wildcarded: a file
+# appearing in vendor/ should be a decision recorded in its README, not
+# something the build picks up because it happens to be on disk.
+RC_DIR := vendor/rcheevos
+RC_SRC := \
+  $(RC_DIR)/src/rc_compat.c $(RC_DIR)/src/rc_util.c $(RC_DIR)/src/rc_version.c \
+  $(RC_DIR)/src/rhash/md5.c \
+  $(RC_DIR)/src/rcheevos/alloc.c $(RC_DIR)/src/rcheevos/condition.c \
+  $(RC_DIR)/src/rcheevos/condset.c $(RC_DIR)/src/rcheevos/consoleinfo.c \
+  $(RC_DIR)/src/rcheevos/format.c $(RC_DIR)/src/rcheevos/lboard.c \
+  $(RC_DIR)/src/rcheevos/memref.c $(RC_DIR)/src/rcheevos/operand.c \
+  $(RC_DIR)/src/rcheevos/rc_validate.c $(RC_DIR)/src/rcheevos/richpresence.c \
+  $(RC_DIR)/src/rcheevos/runtime.c $(RC_DIR)/src/rcheevos/runtime_progress.c \
+  $(RC_DIR)/src/rcheevos/trigger.c $(RC_DIR)/src/rcheevos/value.c
+RC_OBJ := $(RC_SRC:%.c=$(BUILD)/%.o)
+
+# Someone else's code, compiled on its own terms. -Wall -Wextra is a rule this
+# project holds itself to; applying it to a dependency only produces noise that
+# cannot be fixed here, because vendor/rcheevos/README.md forbids patching -
+# a local fix there goes invisible at the next update.
+#
+# -DRC_DISABLE_LUA is not a preference: rich presence is the only thing that
+# wants Lua, Diatom has no Lua, and upstream's own package sets the same define.
+RC_CFLAGS := -std=gnu11 -O2 -MMD -MP -DRC_DISABLE_LUA \
+             -I$(RC_DIR)/include -I$(RC_DIR)/src
+$(RC_OBJ): CFLAGS := $(RC_CFLAGS)
 
 ifeq ($(PORT),desktop)
   # sdl2-config ships with SDL2 itself; pkg-config is a separate install and is
@@ -63,7 +90,7 @@ ifeq ($(PORT),brick)
 endif
 
 .PHONY: all clean check check-seam check-register check-register-diff \
-        check-corefacts stub run-stub tools probes
+        check-corefacts check-cheevos stub run-stub tools probes
 
 all: $(BIN)
 
@@ -135,9 +162,9 @@ $(STUB): test/stubcore.c
 run-stub: $(BIN) $(STUB)
 	./$(BIN) --core $(STUB)
 
-$(BIN): $(OBJ)
+$(BIN): $(OBJ) $(RC_OBJ)
 	@mkdir -p $(BUILD)
-	$(CC) -o $@ $(OBJ) $(LDFLAGS)
+	$(CC) -o $@ $(OBJ) $(RC_OBJ) $(LDFLAGS)
 
 $(BUILD)/%.o: %.c
 	@mkdir -p $(dir $@)
@@ -150,7 +177,23 @@ $(BUILD)/%.o: %.c
 # fails when it is broken. check-seam has held since day one for exactly that
 # reason; the register drifted 418 -> 992 lines in three days because nothing
 # ever complained.
-check: check-seam check-register check-corefacts check-rates
+check: check-seam check-register check-corefacts check-rates check-cheevos
+
+# Does a RetroAchievements address reach the byte it names? Offline, needs no
+# core and no ROM, and links only cheevos.c plus the vendored runtime - so it
+# belongs in `check` rather than beside the conformance suite. It is also the
+# only thing that fails if the vendored library is updated and the mapping
+# stops agreeing with it.
+CHEEVOS_TEST := $(BUILD)/cheevos-test
+
+check-cheevos: $(CHEEVOS_TEST)
+	@./$(CHEEVOS_TEST)
+
+$(CHEEVOS_TEST): test/cheevos_test.c src/cheevos.c $(RC_OBJ)
+	@mkdir -p $(BUILD)
+	$(CC) -std=gnu11 -Wall -Wextra -Wno-unused-parameter -O2 \
+	      -Iinclude -Isrc -I$(RC_DIR)/include -DRC_DISABLE_LUA \
+	      -o $@ test/cheevos_test.c src/cheevos.c $(RC_OBJ)
 
 # Deliberately NOT part of `check`. It needs a build and it runs in real time -
 # Diatom paces to the core's frame rate, so 300 frames costs five seconds of
@@ -192,6 +235,16 @@ check-seam:
 	else \
 		echo "ok: no port includes libretro.h"; \
 	fi
+	@# ADR-0025 made rcheevos a second thing on the frontend's side of the
+	@# seam, and named this as the check to look at. A port reaching for it
+	@# would be reaching past the frontend for the core's memory.
+	@if grep -nE '^[[:space:]]*#[[:space:]]*include.*(rc_|rcheevos|rhash)' \
+	        port/*.c include/*.h 2>/dev/null; then \
+		echo "FAIL: a port or the port header includes rcheevos (ADR-0025)"; \
+		exit 1; \
+	else \
+		echo "ok: no port includes rcheevos"; \
+	fi
 
 clean:
 	rm -rf build
@@ -205,7 +258,7 @@ $(TOOLS_DIR)/allocwatch.o: tools/allocwatch.c
 	@mkdir -p $(TOOLS_DIR)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-$(CONFORM): $(OBJ) $(TOOLS_DIR)/allocwatch.o
+$(CONFORM): $(OBJ) $(RC_OBJ) $(TOOLS_DIR)/allocwatch.o
 	$(CC) -o $@ $^ $(LDFLAGS) \
 	  -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=realloc -Wl,--wrap=free
 
@@ -222,4 +275,4 @@ conform-device:
 # would otherwise become the default goal, and `make` would silently build one
 # object and stop - which it did, on 2026-08-26, and looked exactly like the
 # docker mtime staleness it was added to prevent.
--include $(OBJ:.o=.d)
+-include $(OBJ:.o=.d) $(RC_OBJ:.o=.d)

@@ -473,7 +473,7 @@ Two amendments ADR-0007 makes to the table above:
       overlay from the same session was already removed (commit `b7f1258`).
 - [x] **[OPEN]** Rotation → **the port hides it entirely.** `surface_w/h` are
       logical and always landscape; a core asking `SET_ROTATION` is declined
-      because honouring it would rotate twice. **Designed, not proven** - the
+      because honoring it would rotate twice. **Designed, not proven** - the
       only portrait panel is the Miniloong, so by §0's own test this abstraction
       does not yet have two implementations behind it.
 - [ ] **[LATER]** Zero-copy: `GET_CURRENT_SOFTWARE_FRAMEBUFFER` - **confirmed
@@ -1374,6 +1374,27 @@ operation never occurs.
       The general lesson is the one this project keeps relearning: a number that
       looks reasonable is not evidence that the thing producing it works. The
       check that caught it was internal consistency, not plausibility.
+- [x] **[OPEN]** **The achievement address space is tested offline** →
+      `make check-cheevos` (`test/cheevos_test.c`), and it is part of
+      `make check`. A RetroAchievements address is an offset into a per-console
+      space `rc_consoles.h` defines, not into anything a core hands over, and
+      the failure mode of getting it wrong is not a crash - it is a condition
+      reading the wrong byte and firing on a game nobody is playing.
+
+      The test builds an NES out of two arrays and checks both mapping paths
+      against numbers worked out by hand first: **0x2800 readable in 4 spans**
+      with no memory map, **0x4000 in 7 spans** with one, and the mirrors at
+      $0800 and $16f3 following $0000 and $06f3 only in the second case. It
+      then runs a real condition from Blaster Master's set through the vendored
+      runtime and requires it to fire on the frame the watched byte goes down
+      and on no other - which is ADR-0025's argument, executed rather than
+      asserted. A negative control with one guard byte wrong must not fire;
+      without it the positive proves nothing.
+
+      No core, no ROM, no device - the mapping is a pure function of what a
+      core declares - so it is cheap enough for `make check` rather than for
+      the conformance suite. It is also the thing that fails if rcheevos is
+      updated and the mapping stops agreeing with it.
 - [ ] **[LATER]** CI.
 
 ---

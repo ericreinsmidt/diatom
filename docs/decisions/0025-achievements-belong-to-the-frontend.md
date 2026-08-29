@@ -57,9 +57,9 @@ are in no No-Intro-derived database under those names.
 **Assumed, not measured:** that an unregistered client may still submit
 unlocks. RA injects a `Warning: Unknown Emulator` achievement (condition
 `1=1.300.`, true after 300 frames) into sets fetched by clients it does not
-recognise, but the achievement data itself arrives complete and correctly
+recognize, but the achievement data itself arrives complete and correctly
 pointed - 27 achievements at 0/5/10/25/50 points. Whether `awardachievement`
-is honoured from an unregistered client was deliberately not tested, because
+is honored from an unregistered client was deliberately not tested, because
 testing it writes to a real account.
 
 ## Options considered
@@ -90,7 +90,7 @@ values.
 ### Option C - Diatom evaluates, vendoring rcheevos
 
 rcheevos is RetroAchievements' own reference implementation, **MIT licensed**,
-2.8MB of repository. Same licence as Diatom, so ADR-0002's founding goal -
+2.8MB of repository. Same license as Diatom, so ADR-0002's founding goal -
 escaping GPL inheritance - is untouched. It is also what every other frontend
 uses, including minarch, which this project replaces.
 
@@ -133,7 +133,22 @@ memory over the socket" proposal is answered by the 10Hz measurement above.
 
 New protocol surface, in both directions - the launcher sends a condition set
 at RUN, Diatom reports unlocks. That is an extension of ADR-0009 and wants its
-own ADR once the shape is known, not a guess here.
+own ADR once the shape is known, not a guess here. **The console id is part of
+that surface and is not optional**: a RetroAchievements address is an offset
+into a per-console space, so `0x06f3` means nothing until someone says NES.
+Diatom does not guess it from the core, because the core does not know either.
+
+One file of rcheevos is reimplemented rather than vendored, and that is worth
+naming: `rc_libretro.c` turns libretro's memory descriptors into RA's address
+space, and is excluded for the reason in the table above. `src/cheevos.c` does
+that mapping instead, following upstream's algorithm rather than inventing one,
+and says so at the top of the file. The console tables it reads are the
+vendored ones, unmodified. Not vendoring a file is not a license to guess at
+what it did.
+
+`make check-seam` grew a second clause. rcheevos sits on the frontend's side of
+ADR-0007's seam, so a port including any of its headers now fails the build the
+same way including `libretro.h` does.
 
 Not addressed: client registration with RetroAchievements. Unregistered
 clients get a warning achievement injected into every set. That is Eric's
@@ -144,8 +159,25 @@ request to make and no code changes it.
 - RetroAchievements publishes a stable condition-language specification
   versioned independently of rcheevos, which would make Option B a matter of
   effort rather than of chasing a moving target.
-- rcheevos's licence changes from MIT, which would put it in conflict with
+- rcheevos's license changes from MIT, which would put it in conflict with
   ADR-0002 and require removing it rather than upgrading it.
-- The vendored source exceeds a size where "self-contained build" stops being
+- ~~The vendored source exceeds a size where "self-contained build" stops being
   honest - concretely, if rcheevos plus its build is larger than the rest of
-  `src/` combined.
+  `src/` combined.~~
+
+  **This fired on the first build that linked it**, 2026-08-29: 77,517 bytes of
+  machine code against Diatom's own 42,548, and 11,529 source lines against
+  4,634. rcheevos is about 1.8x the frontend it is going into.
+
+  It does not change the decision, and the clause was written badly. Both
+  alternatives are *larger*: Option B is a hand-written implementation of the
+  condition language whose reference implementation is the 11,529 lines being
+  weighed, and Option A does not work at 10Hz at any size. Nor is there
+  anything to trim - each of the 18 compiled files was removed in turn and the
+  link fails on every one, so this is the floor for using rcheevos at all
+  (`vendor/rcheevos/README.md`).
+
+  What the size actually bears on is §11's RSS budget, which is a device
+  measurement and has **not** been re-run. That is the falsifiable form of this
+  clause and replaces it: **revisit if the device RSS budget no longer holds**,
+  rather than if a ratio crosses a line with no consequence attached.
