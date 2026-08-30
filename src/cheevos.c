@@ -99,9 +99,32 @@ void diatom_cheevos_reset(void)
 	 * content it is about to ask for, and it arrives before the load. */
 }
 
+static void   report(void);
+static size_t resolve_now(diatom_core *c);
+
 void diatom_cheevos_set_console(unsigned ra_console_id)
 {
+	if (g_console == ra_console_id) return;
 	g_console = ra_console_id;
+
+	/* The address space is laid out per console, so changing the console
+	 * changes every address in it. Re-resolving here rather than leaving it to
+	 * the caller, for the same reason note_map does: a launcher that hands
+	 * over a set mid-game - which ADR-0026 makes the normal path when the set
+	 * was still downloading - would otherwise get a console it named and a map
+	 * laid out for the one before it.
+	 *
+	 * Seen on the device: a SNES game started with no set, resolved as
+	 * "Unknown", and kept that layout after SETCHEEVOS said console 3. It
+	 * happened to work, because the fallback puts system RAM first and RA puts
+	 * SNES work RAM first too - which is luck, not design, and not true of
+	 * every console. */
+	if (g_core) {
+		const size_t before = g_mapped;
+
+		resolve_now(g_core);
+		if (g_mapped != before || g_nspan) report();
+	}
 }
 
 void diatom_cheevos_note_support(bool supported)
@@ -109,9 +132,6 @@ void diatom_cheevos_note_support(bool supported)
 	g_supported = supported;
 	g_support_stated = true;
 }
-
-static void   report(void);
-static size_t resolve_now(diatom_core *c);
 
 void diatom_cheevos_note_map(const void *mmap_v)
 {

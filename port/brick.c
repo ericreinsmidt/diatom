@@ -918,7 +918,22 @@ static void blit(uint8_t *page, const void *src, int w, int h, size_t pitch,
 	}                                                                        \
 } while (0)
 
-	if (!g_map_valid || w > ROWCACHE_MAX) return;
+	if (!g_map_valid || w > ROWCACHE_MAX) {
+		static bool said;
+
+		/* Once. A source wider than the row cache draws NOTHING, and doing
+		 * that sixty times a second in silence is how a blank or stale panel
+		 * gets blamed on the core. */
+		if (!said) {
+			char m[96];
+
+			said = true;
+			snprintf(m, sizeof m, "blit refused: source %d wide, cache holds %d",
+			         w, ROWCACHE_MAX);
+			diatom_port_log(DIATOM_LOG_WARN, m);
+		}
+		return;
+	}
 
 	y0 = dst.y > 0 ? dst.y : 0;
 	x0 = dst.x > 0 ? dst.x : 0;
@@ -968,7 +983,27 @@ void diatom_port_present(const void *src, int w, int h, size_t pitch,
 	if (!src || w <= 0 || h <= 0) return;
 
 	rect_changed = !g_map_valid || memcmp(&dst, &g_map_dst, sizeof dst) != 0;
-	if (!ensure_maps(w, h, dst, filter)) return;
+
+	/* What the PORT was handed, which is not the same claim as what the host
+	 * computed and logged. A game came up filling only the left half of the
+	 * panel while the host's own line said 1024x768 at 0,0, and there was no
+	 * way to tell which of the two was wrong. Only on a change, so it is one
+	 * line per mode rather than one per frame. */
+	if (rect_changed) {
+		char m[128];
+
+		snprintf(m, sizeof m, "present: src %dx%d -> dst %dx%d at %d,%d (panel %ux%u)",
+		         w, h, dst.w, dst.h, dst.x, dst.y, g_vinfo.xres, g_vinfo.yres);
+		diatom_port_log(DIATOM_LOG_INFO, m);
+	}
+
+	if (!ensure_maps(w, h, dst, filter)) {
+		/* Silent until now: a failed map means present draws nothing at all
+		 * and the panel holds whatever was there, which looks like the game
+		 * having frozen rather than like an allocation having failed. */
+		diatom_port_log(DIATOM_LOG_WARN, "present: no scale map; frame dropped");
+		return;
+	}
 	/* A smaller rect leaves the old picture around the new one. Only on a mode
 	 * change, so the cost of wiping every page does not matter. */
 	if (rect_changed) clear_pages();
