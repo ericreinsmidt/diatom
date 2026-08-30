@@ -228,6 +228,16 @@ check_that("a file that is not an overlay is refused",
 send(f"OVERLAY\tpath={ovl}\tms=0"); got = drain(2.0)
 check_that("ms=0 clears rather than failing", "OVERLAID" in got, got)
 
+# PAUSE: the launcher asking for the menu, for the resume-after-shutdown case
+# where nobody pressed anything. It must reach the same paused state a MENU
+# press does, and RESUME must come back out of it.
+send("PAUSE"); got = drain(2.0)
+check_that("PAUSE opens the menu", any(l == "PAUSED" for l in got), got)
+send("RESUME"); drain(1.0)
+send("DISPLAY"); got = drain(2.0)
+check_that("the game is running again after RESUME",
+           any(l.startswith("DISPLAY\t") for l in got), got)
+
 send("STOP"); got = drain(3.0)
 check_that("the game still ends normally after all that",
            any(l.startswith("EXIT") for l in got), got)

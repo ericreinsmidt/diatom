@@ -118,6 +118,7 @@ typedef enum {
 	DIATOM_MSG_RUN,
 	DIATOM_MSG_STOP,
 	DIATOM_MSG_QUIT,
+	DIATOM_MSG_PAUSE,      /* open the menu, as a MENU press would */
 	DIATOM_MSG_RESUME,     /* leave the menu, Diatom takes the display back */
 	DIATOM_MSG_RESET,      /* retro_reset: the menu's Reset row, and nothing else */
 	DIATOM_MSG_SAVE,       /* write a state to `path` */

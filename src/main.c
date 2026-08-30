@@ -473,6 +473,19 @@ static void report_slot(int mode, diatom_filter filter)
  * the core would advance a world the player cannot see.
  *
  * Returns false if the session should end. */
+/* The launcher asking for the menu. Exists for one case that has no other
+ * answer: coming back after a shutdown, where the game has to be loaded and
+ * the menu has to be up, and nobody pressed anything. Edge-consumed, so a
+ * launcher that sends it twice gets one menu. */
+static bool g_pause_requested;
+
+static bool take_pause_request(void)
+{
+	bool v = g_pause_requested;
+	g_pause_requested = false;
+	return v;
+}
+
 static bool menu_pause(const diatom_session *sn)
 {
 	/* The pause preview goes out BEFORE PAUSED, so by the time the launcher
@@ -1081,6 +1094,10 @@ static int run_session_inner(const diatom_session *sn)
 			switch (diatom_proto_poll(&m, 0, true)) {
 			case DIATOM_MSG_STOP: stop = true; break;
 			case DIATOM_MSG_QUIT: stop = true; g_quit_requested = true; break;
+			/* Consumed at the top of the next frame, beside the MENU press it
+			 * stands in for - not here, because the menu takes the display and
+			 * this is the middle of a frame that has already been presented. */
+			case DIATOM_MSG_PAUSE: g_pause_requested = true; break;
 			case DIATOM_MSG_OPTIONS: diatom_options_emit(); break;
 			case DIATOM_MSG_SETOPT:
 				diatom_proto_send(diatom_options_set(m.key, m.value)
@@ -1134,7 +1151,8 @@ static int run_session_inner(const diatom_session *sn)
 		 * what it means is host policy: standalone it ends the session, under
 		 * the launcher it opens the launcher's menu. Edge-triggered, or holding
 		 * it would re-enter the menu every frame. */
-		if ((buttons & ~prev_buttons) & DIATOM_BIT(DIATOM_BTN_MENU)) {
+		if (((buttons & ~prev_buttons) & DIATOM_BIT(DIATOM_BTN_MENU)) ||
+		    take_pause_request()) {
 			if (!diatom_proto_active()) {
 				stop = true;
 			} else {
