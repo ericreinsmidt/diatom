@@ -73,6 +73,12 @@ static int             g_nspan;
 static size_t          g_total;      /* RA address space covered, holes included */
 static size_t          g_mapped;     /* of which readable */
 
+/* Which source the spans actually came from, which is not the same as which
+ * one was available: a core can declare a map that resolves nothing, and
+ * reporting "via the core's memory map" after falling back off it is the
+ * report contradicting the warning printed one line above it. */
+static bool g_used_map;
+
 static unsigned g_console;
 static bool     g_supported = true;  /* until a core says otherwise */
 static bool     g_support_stated;    /* ...and whether it ever said anything */
@@ -411,6 +417,8 @@ static size_t resolve_now(diatom_core *c)
 	g_total  = 0;
 	g_mapped = 0;
 
+	g_used_map = false;
+
 	if (!regions || regions->num_regions == 0) {
 		map_without_regions(c);
 		return g_mapped;
@@ -418,6 +426,7 @@ static size_t resolve_now(diatom_core *c)
 
 	if (g_ndesc > 0) {
 		map_from_descriptors(regions);
+		g_used_map = true;
 
 		/* A map that maps nothing is not a map. snes9x2010 declares one whose
 		 * descriptors do not cover the addresses RetroAchievements uses for
@@ -439,6 +448,7 @@ static size_t resolve_now(diatom_core *c)
 			memset(g_span, 0, sizeof g_span);
 			g_nspan = 0;
 			g_total = 0;
+			g_used_map = false;
 			map_from_core(c, regions);
 		}
 		return g_mapped;
@@ -455,7 +465,7 @@ static void report(void)
 	snprintf(msg, sizeof msg,
 	         "cheevos: %s via %s: %zu of %zu bytes readable, %d spans%s",
 	         rc_console_name(g_console),
-	         g_ndesc ? "the core's memory map" : "retro_get_memory_data",
+	         g_used_map ? "the core's memory map" : "retro_get_memory_data",
 	         g_mapped, g_total, g_nspan,
 	         g_supported ? "" : " (core says achievements are unsupported)");
 
