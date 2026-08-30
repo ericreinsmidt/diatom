@@ -479,6 +479,43 @@ static void report_slot(int mode, diatom_filter filter)
  * launcher that sends it twice gets one menu. */
 static bool g_pause_requested;
 
+/* Idleness, for the launcher's auto-off.
+ *
+ * Reported rather than acted on: Diatom does not decide that a device should
+ * turn itself off, and does not know whether it is on a charger or what the
+ * player set. It knows one thing the launcher cannot see - whether anybody is
+ * pressing anything - because it owns the pad while a game runs and the
+ * launcher is blocked on a socket. ADR-0009: the launcher drives.
+ *
+ * A held button counts. Reading a map with a direction pressed is somebody
+ * being there.
+ *
+ * IDLE and nothing else. There is no ACTIVE, because nothing would consume
+ * one: the launcher acts on IDLE at once rather than warning first, since
+ * powering off costs about two seconds and lands the player back in the same
+ * game with the menu up. A window to cancel is only worth having when the
+ * thing being cancelled is expensive. */
+static unsigned g_idle_after_ms;      /* 0: not asked for */
+static uint64_t g_idle_since_us;
+static bool     g_idle_said;
+
+static void idle_note_input(bool any)
+{
+	if (!g_idle_after_ms) return;
+
+	if (any) {
+		g_idle_since_us = diatom_port_now_us();
+		g_idle_said = false;
+		return;
+	}
+	if (!g_idle_said && g_idle_since_us &&
+	    diatom_port_now_us() - g_idle_since_us >
+	        (uint64_t)g_idle_after_ms * 1000ull) {
+		g_idle_said = true;
+		diatom_proto_send("IDLE");
+	}
+}
+
 static bool take_pause_request(void)
 {
 	bool v = g_pause_requested;
@@ -1113,6 +1150,11 @@ static int run_session_inner(const diatom_session *sn)
 			 * stands in for - not here, because the menu takes the display and
 			 * this is the middle of a frame that has already been presented. */
 			case DIATOM_MSG_PAUSE: g_pause_requested = true; break;
+			case DIATOM_MSG_SETIDLE:
+				g_idle_after_ms = (unsigned)(m.count > 0 ? m.count : 0);
+				g_idle_since_us = diatom_port_now_us();
+				g_idle_said = false;
+				break;
 			case DIATOM_MSG_OPTIONS: diatom_options_emit(); break;
 			case DIATOM_MSG_SETOPT:
 				diatom_proto_send(diatom_options_set(m.key, m.value)
@@ -1149,6 +1191,7 @@ static int run_session_inner(const diatom_session *sn)
 		levels_tick();
 
 		buttons = diatom_port_input_state();
+		idle_note_input(buttons != 0);
 
 		/* Latched at whichever entry point began these frames - game start or
 		 * menu resume - and narrowed here: a button the player has genuinely

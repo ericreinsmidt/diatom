@@ -158,6 +158,7 @@ static void parse_line(char *line, diatom_msg *out)
 	else if (!strcmp(field, "STOP"))    out->kind = DIATOM_MSG_STOP;
 	else if (!strcmp(field, "QUIT"))    out->kind = DIATOM_MSG_QUIT;
 	else if (!strcmp(field, "PAUSE"))   out->kind = DIATOM_MSG_PAUSE;
+	else if (!strcmp(field, "SETIDLE")) out->kind = DIATOM_MSG_SETIDLE;
 	else if (!strcmp(field, "RESUME"))  out->kind = DIATOM_MSG_RESUME;
 	else if (!strcmp(field, "RESET"))   out->kind = DIATOM_MSG_RESET;
 	else if (!strcmp(field, "SAVE"))    out->kind = DIATOM_MSG_SAVE;

@@ -231,6 +231,15 @@ check_that("ms=0 clears rather than failing", "OVERLAID" in got, got)
 # PAUSE: the launcher asking for the menu, for the resume-after-shutdown case
 # where nobody pressed anything. It must reach the same paused state a MENU
 # press does, and RESUME must come back out of it.
+# SETIDLE: Diatom reports that nobody is pressing anything, because the
+# launcher cannot see input during a game. It reports; it does not act.
+send("SETIDLE\tms=300")
+got = drain(2.0)          # send() already sleeps; do not drain before checking
+check_that("idleness is reported after the timeout", "IDLE" in got, got)
+send("SETIDLE\tms=0")
+got = drain(1.5)
+check_that("ms=0 turns it off", "IDLE" not in got, got)
+
 send("PAUSE"); got = drain(2.0)
 check_that("PAUSE opens the menu", any(l == "PAUSED" for l in got), got)
 send("RESUME"); drain(1.0)
