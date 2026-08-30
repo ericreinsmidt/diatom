@@ -508,7 +508,17 @@ static bool menu_pause(const diatom_session *sn)
 	/* Symmetrical with RUNNING: the launcher may draw from here. */
 	diatom_proto_send("PAUSED");
 
-	for (;;) {
+	/* NOT for(;;). A paused Diatom blocks here on a socket with no timeout,
+	 * and this loop used to ignore g_terminate entirely - so SIGTERM set the
+	 * flag and nothing read it, and the process could not be signalled out of
+	 * an open menu at all. Seen on the device 2026-08-29: the launcher was
+	 * asked to quit, left its menu loop without sending RESUME, and went back
+	 * to waiting on a game that would never report anything, while this sat
+	 * waiting for a message that would never come. Each on the other.
+	 *
+	 * Ending the pause is enough. The caller stops the game, which is what a
+	 * termination means anyway. */
+	while (!g_terminate) {
 		diatom_msg m;
 
 		switch (diatom_proto_poll(&m, -1, false)) {
@@ -578,6 +588,11 @@ static bool menu_pause(const diatom_session *sn)
 			break;
 		}
 	}
+
+	/* Terminated while paused. False means "do not resume", and the caller's
+	 * loop then ends the session the same way STOP does - which is the right
+	 * reading of a termination arriving with the menu open. */
+	return false;
 }
 
 /* SELECT is the modifier: SELECT+R1 and SELECT+L1 step the mode, SELECT+A
