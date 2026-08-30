@@ -54,13 +54,21 @@ this exists and is being dropped on the floor.
 180 ROMs (measured 2026-08-29); 8 of the 12 misses are fan translations, which
 are in no No-Intro-derived database under those names.
 
-**Assumed, not measured:** that an unregistered client may still submit
-unlocks. RA injects a `Warning: Unknown Emulator` achievement (condition
-`1=1.300.`, true after 300 frames) into sets fetched by clients it does not
-recognize, but the achievement data itself arrives complete and correctly
-pointed - 27 achievements at 0/5/10/25/50 points. Whether `awardachievement`
-is honored from an unregistered client was deliberately not tested, because
-testing it writes to a real account.
+~~**Assumed, not measured:**~~ **Measured 2026-08-29.** An unregistered client
+**can** submit softcore unlocks. `awardachievement` for a real achievement,
+genuinely earned on the device and absent from the account, returned
+`Success: true` and the unlock is on the profile. RA still injects a
+`Warning: Unknown Emulator` achievement (condition `1=1.300.`, true after 300
+frames) into every set it serves us, but that is a notice rather than a
+refusal.
+
+This was left untested here on the grounds that testing writes to a real
+account, which was the right caution and the wrong stopping point: the test
+was run with Eric's consent, on an achievement he had actually earned, so the
+record it wrote is true. RetroAchievements' published requirements
+(`hardcore-compliance-requirements.md`) govern the hardcore-compliant list and
+its downloads page, not whether softcore unlocks are accepted - and they
+include a six-month public-availability gate that no amount of code shortens.
 
 ## Options considered
 
