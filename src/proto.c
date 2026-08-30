@@ -170,6 +170,7 @@ static void parse_line(char *line, diatom_msg *out)
 	else if (!strcmp(field, "SETLEVEL")) out->kind = DIATOM_MSG_SETLEVEL;
 	else if (!strcmp(field, "DISPLAY"))  out->kind = DIATOM_MSG_DISPLAY;
 	else if (!strcmp(field, "SETDISPLAY")) out->kind = DIATOM_MSG_SETDISPLAY;
+	else if (!strcmp(field, "OVERLAY"))    out->kind = DIATOM_MSG_OVERLAY;
 	else if (!strcmp(field, "CHEEVOS"))    out->kind = DIATOM_MSG_CHEEVOS;
 	else if (!strcmp(field, "SETCHEEVOS")) out->kind = DIATOM_MSG_SETCHEEVOS;
 	else {
@@ -212,6 +213,10 @@ static void parse_line(char *line, diatom_msg *out)
 		else if (!strcmp(field, "kind")) snprintf(out->lkind, sizeof out->lkind, "%s", v);
 		else if (!strcmp(field, "index")) out->index = (int)strtol(v, NULL, 10);
 		else if (!strcmp(field, "count")) out->count = (int)strtol(v, NULL, 10);
+		/* OVERLAY's duration, into the same int. A second integer field whose
+		 * only difference is which verb reads it would be two names for one
+		 * slot, which is how the launcher ends up setting the wrong one. */
+		else if (!strcmp(field, "ms"))    out->count = (int)strtol(v, NULL, 10);
 		else if (!strcmp(field, "mode"))  snprintf(out->dmode,  sizeof out->dmode,  "%s", v);
 		else if (!strcmp(field, "filter"))snprintf(out->dfilter,sizeof out->dfilter,"%s", v);
 		/* anything else: forward compatibility, ignore */

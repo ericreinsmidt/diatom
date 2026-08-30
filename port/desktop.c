@@ -124,6 +124,55 @@ static bool ensure_texture(int w, int h, diatom_pixfmt fmt, diatom_filter filter
 	return true;
 }
 
+/* The overlay from diatom_port_overlay: a borrowed pointer, not a copy. The
+ * texture is rebuilt only when the image changes, which for a notice on a
+ * timer is once. */
+static const uint8_t *g_ov;
+static int            g_ov_w, g_ov_h;
+static uint64_t       g_ov_until;
+static SDL_Texture   *g_ov_tex;
+
+void diatom_port_overlay(const uint8_t *bgra, int w, int h, unsigned ms)
+{
+	int sw = 0, sh = 0;
+
+	if (g_ov_tex) { SDL_DestroyTexture(g_ov_tex); g_ov_tex = NULL; }
+	g_ov = NULL;
+	g_ov_until = 0;
+	if (!bgra || ms == 0 || w <= 0 || h <= 0) return;
+
+	SDL_GetRendererOutputSize(g_renderer, &sw, &sh);
+	/* Refused, not clipped - see diatom_port.h. */
+	if ((sw && w > sw) || (sh && h > sh)) {
+		diatom_port_log(DIATOM_LOG_WARN, "overlay larger than the window; ignored");
+		return;
+	}
+
+	g_ov_tex = SDL_CreateTexture(g_renderer, SDL_PIXELFORMAT_ARGB8888,
+	                             SDL_TEXTUREACCESS_STATIC, w, h);
+	if (!g_ov_tex) return;
+	SDL_SetTextureBlendMode(g_ov_tex, SDL_BLENDMODE_BLEND);
+	SDL_UpdateTexture(g_ov_tex, NULL, bgra, w * 4);
+	g_ov = bgra;
+	g_ov_w = w;
+	g_ov_h = h;
+	g_ov_until = diatom_port_now_us() + (uint64_t)ms * 1000ull;
+}
+
+static void draw_overlay(void)
+{
+	SDL_Rect r;
+	int sw = 0, sh = 0;
+
+	if (!g_ov_tex || diatom_port_now_us() >= g_ov_until) return;
+	SDL_GetRendererOutputSize(g_renderer, &sw, &sh);
+	r.w = g_ov_w;
+	r.h = g_ov_h;
+	r.x = (sw - g_ov_w) / 2;
+	r.y = sh - g_ov_h - sh / 24;
+	SDL_RenderCopy(g_renderer, g_ov_tex, NULL, &r);
+}
+
 void diatom_port_present(const void *src, int w, int h, size_t pitch,
                          diatom_pixfmt fmt, diatom_rect dst,
                          diatom_filter filter)
@@ -138,6 +187,7 @@ void diatom_port_present(const void *src, int w, int h, size_t pitch,
 		r.x = dst.x; r.y = dst.y; r.w = dst.w; r.h = dst.h;
 		SDL_RenderCopy(g_renderer, g_texture, NULL, &r);
 	}
+	draw_overlay();
 	SDL_RenderPresent(g_renderer);
 }
 

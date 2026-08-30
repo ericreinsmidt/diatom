@@ -134,6 +134,7 @@ typedef enum {
 	DIATOM_MSG_SETLEVEL,   /* set `lkind` to `index` of `count` positions */
 	DIATOM_MSG_DISPLAY,    /* report the display mode and filter */
 	DIATOM_MSG_SETDISPLAY, /* set them: `dmode`, `dfilter` */
+	DIATOM_MSG_OVERLAY,    /* composite `path` over the game for `count` ms */
 	DIATOM_MSG_CHEEVOS,    /* report the achievement set and what has fired */
 	DIATOM_MSG_SETCHEEVOS, /* load a set from `path`; empty unloads */
 	DIATOM_MSG_HANGUP      /* launcher went away; the game keeps running */
@@ -163,7 +164,9 @@ typedef struct {
 	char lkind[32];        /* SETLEVEL: volume | brightness */
 	char dmode[32];        /* SETDISPLAY: a name from diatom_modes[] */
 	char dfilter[16];      /* SETDISPLAY: nearest | sharp */
-	int  index, count;     /* SETLEVEL: `count` is POSITIONS, not a max index */
+	int  index, count;     /* SETLEVEL: `count` is POSITIONS, not a max index.
+	                        * OVERLAY: `count` is the duration in ms, sent as
+	                        * `ms=`. One slot, two verbs, no second name. */
 } diatom_msg;
 
 /* Input mapping and labels live in env.c, the one layer a remap touches. */

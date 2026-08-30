@@ -98,6 +98,26 @@ void diatom_port_present(const void *src, int w, int h, size_t pitch,
                          diatom_pixfmt fmt, diatom_rect dst,
                          diatom_filter filter);
 
+/* An image composited over the presented frame for a while, in SCREEN space -
+ * the same job the port already does for its own level bar, which is why it
+ * lives here rather than in the host: the OSD is drawn after scaling, and a
+ * host that wanted to draw it would have to copy and scale the frame itself.
+ *
+ * Pixels and a duration. The port is not told what the image means, and it
+ * must not care: `overlay` is a pixel word, and a parameter named for an
+ * achievement or a message would be this header's own rule being broken.
+ *
+ * `bgra` is 8-bit BGRA, straight (not premultiplied), `w * 4` bytes per row.
+ * THE POINTER IS BORROWED, not copied: the host guarantees it stays valid and
+ * unchanged until the next call or until the duration elapses. That keeps the
+ * buffer in one place instead of one per port, which matters on a device where
+ * a notice is 150KB and the whole process is meant to hold 8MB.
+ *
+ * ms == 0, or bgra == NULL, clears it. An image larger than the surface is
+ * refused rather than clipped: something drawn half off the screen is a bug
+ * that looks like a design choice. */
+void diatom_port_overlay(const uint8_t *bgra, int w, int h, unsigned ms);
+
 /* Stop presenting, without tearing down. Returns when nothing is pending and
  * nothing is in flight, so a SECOND presenter may take the display safely.
  * The port stays initialized and must serve the next diatom_port_present.

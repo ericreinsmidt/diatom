@@ -57,7 +57,7 @@ are now assertions rather than sentences.
 | `test/stubcore.c` | A libretro core that is not an emulator, so the frontend can be exercised with no third-party binary |
 | `tools/` | Measurement instruments and checks. Every number cited in `docs/` came from one of these |
 | `test/` | The stub core, and the suites that exercise the frontend against it |
-| `docs/decisions/` | 26 ADRs, 21 accepted. Immutable once accepted - superseded, never edited |
+| `docs/decisions/` | 27 ADRs, 21 accepted. Immutable once accepted - superseded, never edited |
 | `docs/scoping-register.md` | The living checklist: what is still open, and nothing else |
 | `docs/spikes/`, `docs/discussion/` | Measurements and dated session logs |
 

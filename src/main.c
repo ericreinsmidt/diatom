@@ -52,6 +52,75 @@ static void apply_display(int mode, diatom_filter filter);
 static diatom_core     *g_core;   /* resident, never unloaded - ADR-0006 */
 static diatom_policy    g_policy;
 
+/* An overlay image, from the launcher, to be composited over the game.
+ *
+ * Diatom has no font and is not getting one: drawing text means a face, a
+ * layout, and opinions about wording, all of which belong to whoever is
+ * saying something. So the launcher renders the line and this carries the
+ * pixels. The port composites (diatom_port.h), for the reason the level bar
+ * is drawn there too - the OSD is screen space, after scaling.
+ *
+ * The file is eight bytes of header and then BGRA rows:
+ *
+ *     "DTOV"  uint16 width LE  uint16 height LE  w*h*4 bytes
+ *
+ * Deliberately not BMP, which is the obvious choice and the wrong one here:
+ * getting an alpha channel through BMP means BI_BITFIELDS, SDL will not write
+ * it, and a notice with no alpha is a hard rectangle stamped over the game.
+ * This is a private channel between two programs in one repository pair,
+ * written and read within milliseconds, so it is worth being exactly what is
+ * needed and saying so.
+ *
+ * The buffer is held HERE because the port borrows rather than copies - one
+ * buffer instead of one per port. */
+#define OVERLAY_MAX_W 1024
+#define OVERLAY_MAX_H 256
+
+static uint8_t *g_overlay;
+
+static bool show_overlay(const char *path, unsigned ms)
+{
+	unsigned char hdr[8];
+	FILE *f;
+	size_t need;
+	int w, h;
+
+	if (!path || !*path || ms == 0) {
+		diatom_port_overlay(NULL, 0, 0, 0);
+		return true;
+	}
+	f = fopen(path, "rb");
+	if (!f) return false;
+	if (fread(hdr, 1, sizeof hdr, f) != sizeof hdr || memcmp(hdr, "DTOV", 4) != 0) {
+		fclose(f);
+		return false;
+	}
+	w = hdr[4] | (hdr[5] << 8);
+	h = hdr[6] | (hdr[7] << 8);
+	if (w <= 0 || h <= 0 || w > OVERLAY_MAX_W || h > OVERLAY_MAX_H) {
+		fclose(f);
+		return false;
+	}
+	need = (size_t)w * (size_t)h * 4;
+
+	/* Replacing frees the previous one, so at most one is ever held. The port
+	 * is cleared first: it is holding the pointer about to be freed. */
+	diatom_port_overlay(NULL, 0, 0, 0);
+	free(g_overlay);
+	g_overlay = malloc(need);
+	if (!g_overlay) { fclose(f); return false; }
+	if (fread(g_overlay, 1, need, f) != need) {
+		fclose(f);
+		free(g_overlay);
+		g_overlay = NULL;
+		return false;
+	}
+	fclose(f);
+
+	diatom_port_overlay(g_overlay, w, h, ms);
+	return true;
+}
+
 /* The preview is the CORE'S frame, not the screen. Three reasons, none of
  * them taste: it is 8-30x smaller (a 256x224 frame against a 1024x768 panel),
  * it never contains the OSD bar or a menu, and it needs nothing from the port
@@ -674,6 +743,14 @@ static bool state_plane_msg(const diatom_msg *m)
 		apply_display(g_mode, g_filter);
 		return true;
 	case DIATOM_MSG_SETDISPLAY: display_set(m); return true;
+	case DIATOM_MSG_OVERLAY:
+		/* Not on the state plane's query/write shape, because there is no
+		 * state to query: it is a thing that happens and then stops. The
+		 * launcher is told whether the image was usable, and nothing else. */
+		diatom_proto_send(show_overlay(m->path, (unsigned)m->count)
+		                  ? "OVERLAID" : "ERROR\tcode=bad_overlay\tmsg=%s",
+		                  m->path);
+		return true;
 	case DIATOM_MSG_CHEEVOS: diatom_cheevos_emit(); return true;
 	case DIATOM_MSG_SETCHEEVOS:
 		if (m->console) diatom_cheevos_set_console((unsigned)m->console);

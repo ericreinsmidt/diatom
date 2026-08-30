@@ -345,6 +345,19 @@ others remain:
       The console id has to be declared because nobody on this side can infer
       it: an RA address is an offset into a per-console space, libretro has no
       call that asks, and `genesis_plus_gx` is three consoles anyway.
+- [x] **[OPEN]** **The launcher can say something during a game** →
+      **[ADR-0027](decisions/0027-an-overlay-the-port-composites.md)**
+      *(Proposed)*. It renders pixels, `OVERLAY path= ms=` carries them, and
+      the port composites them the way it already composites the level bar.
+
+      The problem was not drawing, it was ownership: one presenter at a time
+      (the handoff spike), so the launcher physically cannot put anything on
+      screen while Diatom holds the display. An achievement fired and nobody
+      could mention it.
+
+      The port function is named `diatom_port_overlay` and takes pixels and a
+      duration, because §4's rule is that a domain noun in this header means
+      the wrong layer - `notice` or `achievement` would have broken it.
 - [x] **[OPEN]** The power-off failsafe is respected: the launcher stays alive
       as supervisor, and `SIGUSR1` is retained as the escape hatch for a core
       wedged inside `retro_run` that cannot read the socket.

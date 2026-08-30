@@ -198,7 +198,39 @@ send("SETCHEEVOS\tpath="); got = drain(2.0)
 summary = next((l for l in got if l.startswith("CHEEVOS\t")), "")
 check_that("an empty path unloads", "count=0" in summary, summary)
 
-send("STOP"); drain(2.0)
+# --- ADR-0027: an overlay composited over a running game -------------------
+# The launcher cannot draw while Diatom owns the display, so a notice has to
+# be handed over as pixels. This checks the carrying, not the look: that the
+# format is read, that a malformed one is refused rather than drawn, and that
+# a running game keeps running either way.
+import struct
+ovl = f"{tmp}/notice.dtov"
+W, H = 240, 40
+with open(ovl, "wb") as f:
+    f.write(b"DTOV" + struct.pack("<HH", W, H))
+    f.write(bytes([40, 30, 20, 200]) * (W * H))       # BGRA, mostly opaque
+
+send(f"RUN\tcore={ROOT}/build/desktop/stubcore.so")
+drain(2.0)
+send(f"OVERLAY\tpath={ovl}\tms=1500"); got = drain(2.0)
+check_that("an overlay is accepted while a game runs", "OVERLAID" in got, got)
+
+send(f"OVERLAY\tpath={tmp}/nope.dtov\tms=1500"); got = drain(2.0)
+check_that("a missing overlay is refused, not drawn",
+           any(l.startswith("ERROR\tcode=bad_overlay") for l in got), got)
+
+open(f"{tmp}/bad.dtov", "wb").write(b"NOPE" + struct.pack("<HH", 8, 8) + b"\0" * 256)
+send(f"OVERLAY\tpath={tmp}/bad.dtov\tms=1500"); got = drain(2.0)
+check_that("a file that is not an overlay is refused",
+           any(l.startswith("ERROR\tcode=bad_overlay") for l in got), got)
+
+# Clearing is ms=0, and must not be an error.
+send(f"OVERLAY\tpath={ovl}\tms=0"); got = drain(2.0)
+check_that("ms=0 clears rather than failing", "OVERLAID" in got, got)
+
+send("STOP"); got = drain(3.0)
+check_that("the game still ends normally after all that",
+           any(l.startswith("EXIT") for l in got), got)
 
 send("QUIT"); time.sleep(0.4)
 s.close(); p.terminate(); p.wait(timeout=5)

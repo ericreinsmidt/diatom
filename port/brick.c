@@ -199,6 +199,12 @@ static int g_bright = -1;       /* index into bright_ladder, or -1 unread */
 static int g_mixer_fd = -1;
 static int g_level = -1;        /* 0..GAIN_LEVELS, or -1 before first read */
 static uint64_t g_osd_until;    /* show the bar until this time */
+
+/* The overlay from diatom_port_overlay: a borrowed pointer, not a copy. See
+ * diatom_port.h for the lifetime the host guarantees. */
+static const uint8_t *g_ov;
+static int            g_ov_w, g_ov_h;
+static uint64_t       g_ov_until;
 static int      g_osd_level;    /* what the bar shows - volume OR brightness */
 static int      g_osd_max = GAIN_LEVELS;   /* out of what: the two differ now */
 
@@ -351,6 +357,65 @@ static void draw_gain_bar(uint8_t *base)
 			} else {
 				row[x] = (60u << ro) | (62u << go) | (72u << bo) | g_opaque;
 			}
+		}
+	}
+}
+
+void diatom_port_overlay(const uint8_t *bgra, int w, int h, unsigned ms)
+{
+	if (!bgra || ms == 0 || w <= 0 || h <= 0) {
+		g_ov = NULL;
+		g_ov_until = 0;
+		return;
+	}
+	/* Refused, not clipped. Half a notice off the edge of the panel looks
+	 * deliberate and is not. */
+	if (w > (int)g_vinfo.xres || h > (int)g_vinfo.yres) {
+		diatom_port_log(DIATOM_LOG_WARN, "overlay larger than the panel; ignored");
+		return;
+	}
+	g_ov = bgra;
+	g_ov_w = w;
+	g_ov_h = h;
+	g_ov_until = diatom_port_now_us() + (uint64_t)ms * 1000ull;
+}
+
+/* Straight into the page after the blit and before publish, riding the same
+ * flip as the picture - the level bar's arrangement, for the level bar's
+ * reason: a second present would be a second presenter. */
+static void draw_overlay(uint8_t *base)
+{
+	const unsigned ro = g_vinfo.red.offset, go = g_vinfo.green.offset;
+	const unsigned bo = g_vinfo.blue.offset;
+	const int x0 = ((int)g_vinfo.xres - g_ov_w) / 2;
+	const int y0 = (int)g_vinfo.yres - g_ov_h - (int)g_vinfo.yres / 24;
+	int y, x;
+
+	if (!g_ov || y0 < 0 || x0 < 0) return;
+
+	for (y = 0; y < g_ov_h; y++) {
+		uint32_t *row = (uint32_t *)(base + (size_t)(y0 + y) * g_finfo.line_length);
+		const uint8_t *src = g_ov + (size_t)y * (size_t)g_ov_w * 4;
+
+		for (x = 0; x < g_ov_w; x++) {
+			const unsigned a = src[x * 4 + 3];
+			uint32_t p;
+			unsigned r, g, b;
+
+			if (a == 0) continue;
+			p = row[x0 + x];
+			if (a == 255) {
+				r = src[x * 4 + 2];
+				g = src[x * 4 + 1];
+				b = src[x * 4 + 0];
+			} else {
+				/* Straight alpha, rounded. The source is not premultiplied
+				 * because the launcher renders it with SDL, which is not. */
+				r = (src[x * 4 + 2] * a + ((p >> ro) & 0xff) * (255 - a) + 127) / 255;
+				g = (src[x * 4 + 1] * a + ((p >> go) & 0xff) * (255 - a) + 127) / 255;
+				b = (src[x * 4 + 0] * a + ((p >> bo) & 0xff) * (255 - a) + 127) / 255;
+			}
+			row[x0 + x] = (r << ro) | (g << go) | (b << bo) | g_opaque;
 		}
 	}
 }
@@ -911,6 +976,7 @@ void diatom_port_present(const void *src, int w, int h, size_t pitch,
 	if (g_pan_broken) {
 		blit(page_base(g_front), src, w, h, pitch, fmt, dst);
 		if (diatom_port_now_us() < g_osd_until) draw_gain_bar(page_base(g_front));
+		if (diatom_port_now_us() < g_ov_until)  draw_overlay(page_base(g_front));
 		return;
 	}
 
@@ -932,6 +998,7 @@ void diatom_port_present(const void *src, int w, int h, size_t pitch,
 
 	blit(page_base(page), src, w, h, pitch, fmt, dst);
 	if (diatom_port_now_us() < g_osd_until) draw_gain_bar(page_base(page));
+	if (diatom_port_now_us() < g_ov_until)  draw_overlay(page_base(page));
 
 	pthread_mutex_lock(&g_flip_mx);
 	g_presented = true;
