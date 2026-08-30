@@ -337,7 +337,7 @@ others remain:
 
       The path is not tidiness. Measured across 428 achievements from four
       RetroAchievements sets on 2026-08-29, the median condition string is 113
-      characters and **the longest is 30,897** - Mega Man 2. The protocol line
+      characters and **the longest is 30,897** - Gran Turismo 2. The protocol line
       buffer is 4096 bytes and drops the rest with a warning, so a third of
       those sets contain an achievement that would never have been watched, and
       an unwatched achievement looks exactly like an unearned one.

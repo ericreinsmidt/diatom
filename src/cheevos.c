@@ -539,7 +539,8 @@ int diatom_cheevos_load(const char *path)
 	/* getline, not a fixed buffer, and this is measured rather than cautious.
 	 * Across 428 achievements from four RetroAchievements sets on 2026-08-29
 	 * the median condition string is 113 characters and the longest is 30,897
-	 * - Mega Man 2. Any buffer chosen by intuition would have been too small,
+	 * - Gran Turismo 2. Any buffer chosen by intuition would have been too
+	 * small,
 	 * and the failure would have been an achievement that quietly never fires,
 	 * on the hardest achievements in the hardest games. */
 	char  *line = NULL;

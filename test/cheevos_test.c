@@ -328,7 +328,7 @@ static void test_set_file(void)
 
 	/* A condition longer than any buffer anyone would have guessed at.
 	 * Measured 2026-08-29 over 428 achievements from four RetroAchievements
-	 * sets: median 113 characters, longest 30,897 (Mega Man 2). This is
+	 * sets: median 113 characters, longest 30,897 - Gran Turismo 2. This is
 	 * larger than that, and larger than the whole protocol line buffer, which
 	 * is why the set travels as a file and the loader has no line limit. */
 	{

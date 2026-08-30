@@ -32,9 +32,14 @@ three.
 | set | achievements | median condition | longest |
 |---|---|---|---|
 | Blaster Master | 27 | 46 | 124 |
-| Zelda: A Link to the Past | 110 | 101 | 6,969 |
-| Super Metroid | 166 | 118 | 8,368 |
-| Mega Man 2 | 125 | 113 | **30,897** |
+| The Legend of Zelda: A Link to the Past | 110 | 101 | 6,969 |
+| Super Mario 64 | 166 | 118 | 8,368 |
+| Gran Turismo 2 | 125 | 113 | **30,897** |
+
+*(Titles as RetroAchievements gives them. An earlier revision of this table
+named two of these from memory - "Super Metroid" and "Mega Man 2" - which were
+game ids I had labelled without checking. The numbers were always the response's
+own; the names were not, and were wrong.)*
 
 Diatom's protocol line buffer is **4096 bytes**, and `proto.c` drops anything
 longer with a warning. A third of these sets contain at least one achievement
