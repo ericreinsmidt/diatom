@@ -409,6 +409,8 @@ static void test_end_to_end(void)
 
 static void test_runtime_reset(void)
 {
+	const char *summary;
+
 	printf("  a state load discards progress in flight:\n");
 	console_reset();
 	diatom_cheevos_resolve(&g_core);
@@ -434,6 +436,31 @@ static void test_runtime_reset(void)
 	diatom_cheevos_frame();
 	CHECK(sent("CHEEVO\tid=90001\tstate=unlocked"),
 	      "three hits after the reset should still unlock");
+
+	/* And now the case that took a device and someone save-scumming Contra to
+	 * find: rc_runtime_reset puts a TRIGGERED achievement back to active, so
+	 * without deactivating it on the way out, loading a state and playing
+	 * forward reports the same unlock again. */
+	sent_clear();
+	diatom_cheevos_runtime_reset();
+	diatom_cheevos_frame();
+	diatom_cheevos_frame();
+	diatom_cheevos_frame();
+	diatom_cheevos_frame();
+	CHECK(!sent_starting("CHEEVO\tid=90001"),
+	      "an already-unlocked achievement fired again after a state load");
+
+	/* It must still READ as unlocked, though. Deactivating leaves the runtime
+	 * with no state to report, and the naive answer to that is "disabled" -
+	 * which is what a launcher shows for an achievement whose memory is
+	 * missing. */
+	sent_clear();
+	diatom_cheevos_emit();
+	CHECK(sent("CHEEVO\tid=90001\tstate=unlocked"),
+	      "an earned achievement should still enumerate as unlocked");
+	summary = sent_starting("CHEEVOS\t");
+	CHECK(summary && strstr(summary, "unlocked=1"),
+	      "the summary lost the unlock: %s", summary ? summary : "(nothing)");
 }
 
 /* ---- 7. what a frame of this costs --------------------------------------- */

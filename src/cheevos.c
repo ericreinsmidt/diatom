@@ -481,6 +481,34 @@ uint32_t diatom_cheevos_peek(uint32_t address, uint32_t num_bytes, void *ud)
 static rc_runtime_t g_rt;
 static bool         g_rt_live;
 
+/* What has fired this session.
+ *
+ * Kept because rc_runtime_reset - which a state load must call, since hit
+ * counts and deltas belong to a timeline that no longer exists - puts an
+ * already-TRIGGERED achievement back to active, so playing forward fires it
+ * again. Measured on the device 2026-08-29: a Contra session with four state
+ * restores in it reported the same unlock twice.
+ *
+ * So a fired achievement is deactivated outright and remembered here. The
+ * runtime then has nothing to revive, and this list is what tells emit() that
+ * a trigger which is now absent is absent because it was earned rather than
+ * because its memory was invalid. */
+#define CHEEVOS_FIRED_MAX 512
+static uint32_t g_fired[CHEEVOS_FIRED_MAX];
+static int      g_nfired;
+
+/* How many the launcher asked for. Deactivating does not null a trigger, it
+ * REMOVES it and shrinks trigger_count, so the runtime's own count stops being
+ * the size of the set the moment anything unlocks. */
+static int      g_nloaded;
+
+static bool already_fired(uint32_t id)
+{
+	int i;
+	for (i = 0; i < g_nfired; i++) if (g_fired[i] == id) return true;
+	return false;
+}
+
 static const char *state_name(uint8_t state)
 {
 	switch (state) {
@@ -510,6 +538,12 @@ static void on_event(const rc_runtime_event_t *e)
 
 	switch (e->type) {
 	case RC_RUNTIME_EVENT_ACHIEVEMENT_TRIGGERED:
+		if (already_fired(e->id)) break;
+		if (g_nfired < CHEEVOS_FIRED_MAX) g_fired[g_nfired++] = e->id;
+		/* Out of the runtime entirely, so no later reset can bring it back.
+		 * Reporting an unlock twice would have a launcher count it twice, and
+		 * once unlocks are submitted it would send it twice. */
+		rc_runtime_deactivate_achievement(&g_rt, e->id);
 		diatom_proto_send("CHEEVO\tid=%u\tstate=unlocked", (unsigned)e->id);
 		snprintf(msg, sizeof msg, "cheevos: %u unlocked", (unsigned)e->id);
 		diatom_port_log(DIATOM_LOG_INFO, msg);
@@ -532,6 +566,8 @@ void diatom_cheevos_unload(void)
 		rc_runtime_destroy(&g_rt);
 		g_rt_live = false;
 	}
+	g_nfired = 0;
+	g_nloaded = 0;
 }
 
 int diatom_cheevos_load(const char *path)
@@ -595,6 +631,7 @@ int diatom_cheevos_load(const char *path)
 	free(line);
 	fclose(f);
 
+	g_nloaded = ok;
 	snprintf(msg, sizeof msg, "cheevos: %d watched, %d rejected, from %s",
 	         ok, bad, path);
 	diatom_port_log(bad ? DIATOM_LOG_WARN : DIATOM_LOG_INFO, msg);
@@ -626,18 +663,16 @@ void diatom_cheevos_runtime_reset(void)
 
 void diatom_cheevos_emit(void)
 {
-	uint32_t i, n = g_rt_live ? g_rt.trigger_count : 0, unlocked = 0;
+	uint32_t i, n = g_rt_live ? g_rt.trigger_count : 0;
+	int k;
 
-	for (i = 0; i < n; i++) {
-		const rc_trigger_t *t = g_rt.triggers[i].trigger;
-
-		if (t && t->state == RC_TRIGGER_STATE_TRIGGERED) unlocked++;
-	}
-
-	diatom_proto_send("CHEEVOS\tconsole=%u\tcount=%u\tunlocked=%u"
+	/* `count` is the SET, not what the runtime still holds. An unlocked
+	 * achievement has been deactivated and is gone from the runtime, so
+	 * reporting trigger_count would tell a launcher the set shrank every time
+	 * the player earned something. */
+	diatom_proto_send("CHEEVOS\tconsole=%u\tcount=%d\tunlocked=%d"
 	                  "\tmemory=%zu\tspans=%d",
-	                  g_console, (unsigned)n, (unsigned)unlocked,
-	                  g_mapped, g_nspan);
+	                  g_console, g_nloaded, g_nfired, g_mapped, g_nspan);
 
 	for (i = 0; i < n; i++) {
 		const rc_runtime_trigger_t *rt = &g_rt.triggers[i];
@@ -646,6 +681,9 @@ void diatom_cheevos_emit(void)
 		                  rt->trigger ? state_name(rt->trigger->state)
 		                              : "disabled");
 	}
+	/* Then the ones the runtime no longer has, because they are done. */
+	for (k = 0; k < g_nfired; k++)
+		diatom_proto_send("CHEEVO\tid=%u\tstate=unlocked", (unsigned)g_fired[k]);
 }
 
 /* ---------------------------------------------------------------- reports */
