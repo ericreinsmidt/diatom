@@ -411,13 +411,40 @@ static size_t resolve_now(diatom_core *c)
 	g_total  = 0;
 	g_mapped = 0;
 
-	if (!regions || regions->num_regions == 0)
+	if (!regions || regions->num_regions == 0) {
 		map_without_regions(c);
-	else if (g_ndesc > 0)
-		map_from_descriptors(regions);
-	else
-		map_from_core(c, regions);
+		return g_mapped;
+	}
 
+	if (g_ndesc > 0) {
+		map_from_descriptors(regions);
+
+		/* A map that maps nothing is not a map. snes9x2010 declares one whose
+		 * descriptors do not cover the addresses RetroAchievements uses for
+		 * the SNES, and following it produced 0 of 657408 bytes readable -
+		 * every condition reading zero, silently, for a game with a set
+		 * loaded. retro_get_memory_data still answers, so use it.
+		 *
+		 * This is a fallback and not a preference: where a map does resolve,
+		 * it is richer and reaches memory the plain call cannot. */
+		if (g_mapped == 0) {
+			char msg[160];
+
+			snprintf(msg, sizeof msg,
+			         "cheevos: the core's %d-descriptor map resolves none of "
+			         "%s's address space; using retro_get_memory_data",
+			         g_ndesc, rc_console_name(g_console));
+			diatom_port_log(DIATOM_LOG_WARN, msg);
+
+			memset(g_span, 0, sizeof g_span);
+			g_nspan = 0;
+			g_total = 0;
+			map_from_core(c, regions);
+		}
+		return g_mapped;
+	}
+
+	map_from_core(c, regions);
 	return g_mapped;
 }
 
