@@ -36,6 +36,7 @@
 
 static int  g_listen = -1;
 static int  g_conn   = -1;
+static int  g_wake   = -1;   /* see diatom_proto_wake_fd */
 static char g_path[256];
 static char g_in[4096];      /* accumulates until a newline arrives */
 static size_t g_used;
@@ -256,10 +257,12 @@ static void accept_or_refuse(void)
 	log_(DIATOM_LOG_INFO, "proto: launcher connected");
 }
 
+void diatom_proto_wake_fd(int fd) { g_wake = fd; }
+
 diatom_msg_kind diatom_proto_poll(diatom_msg *out, int timeout_ms, bool running)
 {
-	struct pollfd p[2];
-	int n = 0, li = -1, ci = -1;
+	struct pollfd p[3];
+	int n = 0, li = -1, ci = -1, wi = -1;
 	ssize_t got;
 
 	memset(out, 0, sizeof *out);
@@ -270,8 +273,17 @@ diatom_msg_kind diatom_proto_poll(diatom_msg *out, int timeout_ms, bool running)
 
 	if (g_conn < 0) { p[n].fd = g_listen; p[n].events = POLLIN; li = n++; }
 	else            { p[n].fd = g_conn;   p[n].events = POLLIN; ci = n++; }
+	if (g_wake >= 0) { p[n].fd = g_wake;  p[n].events = POLLIN; wi = n++; }
 
 	if (poll(p, (nfds_t)n, timeout_ms) <= 0) return DIATOM_MSG_NONE;
+
+	/* Drained and thrown away. The only information a wake byte carries is
+	 * that this call should return so the caller can look at its flags. */
+	if (wi >= 0 && (p[wi].revents & POLLIN)) {
+		char drain[64];
+		while (read(g_wake, drain, sizeof drain) > 0) ;
+		return DIATOM_MSG_NONE;
+	}
 
 	if (li >= 0 && (p[li].revents & POLLIN)) {
 		accept_or_refuse();

@@ -187,6 +187,20 @@ void diatom_proto_send(const char *fmt, ...);
  * mid-game, so a restarted launcher does not draw over live output. */
 diatom_msg_kind diatom_proto_poll(diatom_msg *out, int timeout_ms, bool running);
 
+/* An fd polled alongside the socket, purely so a blocking poll can be woken.
+ * Anything readable on it makes the current poll return DIATOM_MSG_NONE, so
+ * the caller's loop gets to re-read its own flags; the bytes are drained and
+ * discarded, because the fd carries no meaning beyond "look again".
+ *
+ * A pipe rather than the bare flag, because a signal handler setting a
+ * variable does not wake anybody: SIGTERM is process-directed and the kernel
+ * may hand it to any thread not blocking it, and Diatom has four - three of
+ * them SDL's. A flag set on an SDL thread is a flag nothing reads while the
+ * main one sits in poll(-1). The write is what turns the flag into an event.
+ *
+ * -1 to unregister. */
+void diatom_proto_wake_fd(int fd);
+
 /* Async-signal-safe, for the crash handler. `line` must be a complete constant
  * with its own newline: nothing that formats a string is callable from there. */
 void diatom_proto_emit_fatal(const char *line);

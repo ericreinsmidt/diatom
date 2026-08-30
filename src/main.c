@@ -15,6 +15,7 @@
 #include <string.h>
 #include <time.h>
 #include <math.h>
+#include <fcntl.h>
 #include <signal.h>
 #include <unistd.h>
 
@@ -191,7 +192,63 @@ static diatom_rect      g_dst;   /* locked at load - ADR-0011 */
 static volatile sig_atomic_t g_terminate;
 static bool g_quit_requested;   /* launcher said QUIT */
 
-static void on_terminate(int sig) { (void)sig; g_terminate = 1; }
+/* The pipe that lets a blocked poll notice the flag above. See
+ * diatom_proto_wake_fd - the flag alone is not enough, because the signal may
+ * be delivered to any of SDL's threads while the main one sits in poll(-1). */
+static int g_wake_pipe[2] = { -1, -1 };
+
+static void on_terminate(int sig)
+{
+	(void)sig;
+	g_terminate = 1;
+	/* write() is on the async-signal-safe list; one byte down a non-blocking
+	 * pipe, and a full pipe means a wake is already pending, so the failure
+	 * case is the case that needed nothing. The result is read to keep the
+	 * compiler quiet about a return value there is genuinely nothing to do
+	 * about. */
+	if (g_wake_pipe[1] >= 0) {
+		ssize_t rc = write(g_wake_pipe[1], "", 1);
+		(void)rc;
+	}
+}
+
+/* Called once, before anything can be signalled.
+ *
+ * The per-session sigaction further down is about saving a game's state on
+ * power-off. This is about the process being able to exit at all, which an
+ * idle one could not: that sigaction is the ONLY install there was, and it
+ * runs as part of starting a game, so a Diatom that had not run one had no
+ * handler of its own at all.
+ *
+ * Measured on the device 2026-08-30, on a Diatom sitting at the shelf:
+ * SigCgt had SIGTERM but not SIGHUP, and this function installs all three -
+ * so what was catching SIGTERM was SDL's own handler, which sets an SDL quit
+ * flag that the idle loop below never looks at. SIGTERM was delivered,
+ * caught, and swallowed; the main thread stayed in poll_schedule_timeout
+ * through six seconds of waiting and every attempt after that. The pre-fix
+ * binary reproduces it on a desktop, which is where the two halves of this -
+ * an install that happens early enough, and a poll that can be woken - were
+ * checked against each other. */
+static void terminate_init(void)
+{
+	struct sigaction sa;
+
+	if (pipe(g_wake_pipe) == 0) {
+		fcntl(g_wake_pipe[0], F_SETFL, O_NONBLOCK);
+		fcntl(g_wake_pipe[1], F_SETFL, O_NONBLOCK);
+		fcntl(g_wake_pipe[0], F_SETFD, FD_CLOEXEC);
+		fcntl(g_wake_pipe[1], F_SETFD, FD_CLOEXEC);
+		diatom_proto_wake_fd(g_wake_pipe[0]);
+	}
+
+	memset(&sa, 0, sizeof sa);
+	sa.sa_handler = on_terminate;
+	/* No SA_RESTART, deliberately: a poll that resumes where it left off is
+	 * a poll that never returns to the loop that would read the flag. */
+	sigaction(SIGTERM, &sa, NULL);
+	sigaction(SIGINT,  &sa, NULL);
+	sigaction(SIGHUP,  &sa, NULL);
+}
 
 /* --- crash reporting - ADR-0009's `EXIT reason=crash` --------------------- */
 
@@ -499,6 +556,23 @@ static unsigned g_idle_after_ms;      /* 0: not asked for */
 static uint64_t g_idle_since_us;
 static bool     g_idle_said;
 
+/* Start the count again from now.
+ *
+ * For the stretches when this loop is not running and somebody is plainly
+ * there anyway - the in-game menu, where the player is operating the
+ * LAUNCHER's pad and nothing here polls it. The clock is a timestamp, so it
+ * goes on advancing through a pause it is not being read across, and the
+ * first read after the menu closes would see the whole menu as idle time and
+ * power the device off in the frame after RESUME.
+ *
+ * Safe when nobody asked for idle reporting: idle_note_input returns before
+ * it looks at any of this. */
+static void idle_restart(void)
+{
+	g_idle_since_us = diatom_port_now_us();
+	g_idle_said = false;
+}
+
 static void idle_note_input(bool any)
 {
 	if (!g_idle_after_ms) return;
@@ -565,6 +639,10 @@ static bool menu_pause(const diatom_session *sn)
 			 * than step from a cached value nobody is at. ADR-0020. */
 			diatom_port_level_invalidate();
 			levels_forget();
+			/* The menu was time somebody spent pressing buttons, on a pad
+			 * this loop could not see. Counting it as idle is the opposite of
+			 * what happened. */
+			idle_restart();
 			diatom_proto_send("RUNNING");
 			return true;
 		case DIATOM_MSG_STOP:
@@ -938,6 +1016,9 @@ static int run_session_inner(const diatom_session *sn)
 		printf("diatom: no usable state at %s; starting the game normally\n",
 		       sn->state_load);
 
+	/* Standalone's install. Socket mode did this in terminate_init before it
+	 * ever listened, and re-doing it here is idempotent; standalone has no
+	 * such moment, because there is nothing before the game. */
 	{
 		struct sigaction sa;
 		memset(&sa, 0, sizeof sa);
@@ -1531,6 +1612,7 @@ int main(int argc, char **argv)
 	 * than per launch. Measured: ~35 ms warm against 625-750 ms cold. */
 	if (sock) {
 		if (!diatom_proto_listen(sock)) return 5;
+		terminate_init();
 
 		while (!g_quit_requested && !g_terminate) {
 			diatom_msg m;
