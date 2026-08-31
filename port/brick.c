@@ -207,6 +207,15 @@ static int            g_ov_w, g_ov_h;
 static uint64_t       g_ov_until;
 static int      g_osd_level;    /* what the bar shows - volume OR brightness */
 static int      g_osd_max = GAIN_LEVELS;   /* out of what: the two differ now */
+static int      g_osd_kind;     /* 0 volume, 1 brightness - only the tint differs */
+/* Which pages still carry a bar outside the picture.
+ *
+ * blit only writes inside dst, so in any mode that does not fill the panel the
+ * band above the picture is never written again and the bar stays there for
+ * good - as two stubs in the pillarbox margins, appearing and disappearing as
+ * the pages rotate. Recorded per page because a page is only safe to touch
+ * when it is the one being prepared. */
+static bool     g_osd_painted[FB_PAGES];
 
 /* The port thinks in percent and converts; the inverted register never leaves
  * this file. Rounded both ways so a read-back lands on the level it came from. */
@@ -264,11 +273,12 @@ static void gain_apply(void)
 	ctl_io(SPEAKER_CTL, &v, 1);
 }
 
-static void osd_show(int level, int max)
+static void osd_show(int kind, int level, int max)
 {
 	/* Feedback lives here too: the launcher owns UI, but it is not drawing
 	 * while a game runs, so nothing else can show this. 1.5s from the last
 	 * press, so holding a key keeps the bar up. */
+	g_osd_kind  = kind;
 	g_osd_level = level;
 	g_osd_max   = max;
 	g_osd_until = diatom_port_now_us() + 1500000ull;
@@ -284,7 +294,7 @@ static void gain_nudge(int dir)
 	if (g_level < 0)           g_level = 0;
 	if (g_level > GAIN_LEVELS) g_level = GAIN_LEVELS;
 	gain_apply();
-	osd_show(g_level, GAIN_LEVELS);
+	osd_show(0, g_level, GAIN_LEVELS);
 }
 
 static void bright_ensure(void)
@@ -323,7 +333,7 @@ static void bright_nudge(int dir)
 	if (g_bright < 0)             g_bright = 0;
 	if (g_bright > BRIGHT_LEVELS) g_bright = BRIGHT_LEVELS;
 	bright_apply();
-	osd_show(g_bright, BRIGHT_LEVELS);
+	osd_show(1, g_bright, BRIGHT_LEVELS);
 }
 
 /* The one indicator, matching what the device UI draws so volume reads the same
@@ -338,6 +348,13 @@ static void draw_gain_bar(uint8_t *base)
 	const unsigned bo = g_vinfo.blue.offset;
 	const int pad = 3, bar = 6;
 	const int W = (int)g_vinfo.xres;
+	/* The launcher's two, so the bar means the same thing on the shelf and in
+	 * a game: UI_OSD_VOLUME and UI_OSD_BRIGHT in TortOS's src/ui.h. This was
+	 * one hardcoded off-white for both, which made the in-game bar the only
+	 * place the colour did not say which key you had pressed. */
+	const unsigned tint_r = g_osd_kind ? 255u :  61u;
+	const unsigned tint_g = g_osd_kind ? 206u : 214u;
+	const unsigned tint_b = g_osd_kind ? 128u : 255u;
 	int fill = g_osd_level < 0 || g_osd_max <= 0 ? 0
 	         : (W * g_osd_level) / g_osd_max;
 	int y, x;
@@ -353,10 +370,34 @@ static void draw_gain_bar(uint8_t *base)
 				uint32_t b = ((p >> bo) & 0xff) >> 1;
 				row[x] = (r << ro) | (g << go) | (b << bo) | g_opaque;
 			} else if (x < fill) {
-				row[x] = (235u << ro) | (235u << go) | (240u << bo) | g_opaque;
+				row[x] = ((uint32_t)tint_r << ro) | ((uint32_t)tint_g << go)
+				       | ((uint32_t)tint_b << bo) | g_opaque;
 			} else {
 				row[x] = (60u << ro) | (62u << go) | (72u << bo) | g_opaque;
 			}
+		}
+	}
+}
+
+/* Put back what the bar covered, for the part of the band the picture does not
+ * reach. Inside dst the blit has already redrawn it this frame; outside dst
+ * nothing ever will, which is the whole bug. Black, because that is what the
+ * margin around a picture is. */
+static void clear_gain_bar(uint8_t *base, diatom_rect dst)
+{
+	const int pad = 3, bar = 6, band = pad * 2 + bar;
+	const int W = (int)g_vinfo.xres;
+	int x0 = dst.x > 0 ? dst.x : 0;
+	int x1 = dst.x + dst.w < W ? dst.x + dst.w : W;
+	int y, x;
+
+	for (y = 0; y < band; y++) {
+		uint32_t *row = (uint32_t *)(base + (size_t)y * g_finfo.line_length);
+		bool covered = y >= dst.y && y < dst.y + dst.h;
+
+		for (x = 0; x < W; x++) {
+			if (covered && x >= x0 && x < x1) continue;   /* the blit's */
+			row[x] = g_opaque;
 		}
 	}
 }
@@ -1006,11 +1047,20 @@ void diatom_port_present(const void *src, int w, int h, size_t pitch,
 	}
 	/* A smaller rect leaves the old picture around the new one. Only on a mode
 	 * change, so the cost of wiping every page does not matter. */
-	if (rect_changed) clear_pages();
+	if (rect_changed) {
+		clear_pages();
+		memset(g_osd_painted, 0, sizeof g_osd_painted);
+	}
 
 	if (g_pan_broken) {
 		blit(page_base(g_front), src, w, h, pitch, fmt, dst);
-		if (diatom_port_now_us() < g_osd_until) draw_gain_bar(page_base(g_front));
+		if (diatom_port_now_us() < g_osd_until) {
+			draw_gain_bar(page_base(g_front));
+			g_osd_painted[g_front] = true;
+		} else if (g_osd_painted[g_front]) {
+			clear_gain_bar(page_base(g_front), dst);
+			g_osd_painted[g_front] = false;
+		}
 		if (diatom_port_now_us() < g_ov_until)  draw_overlay(page_base(g_front));
 		return;
 	}
@@ -1032,7 +1082,17 @@ void diatom_port_present(const void *src, int w, int h, size_t pitch,
 	if (g_present_debug) t0 = diatom_port_now_us();
 
 	blit(page_base(page), src, w, h, pitch, fmt, dst);
-	if (diatom_port_now_us() < g_osd_until) draw_gain_bar(page_base(page));
+	/* Painted, or unpainted. A page keeps whatever was last written outside
+	 * dst, so the bar has to be taken off the same page it was put on - and
+	 * only here, where this page is the one being prepared and no one is
+	 * scanning it out. */
+	if (diatom_port_now_us() < g_osd_until) {
+		draw_gain_bar(page_base(page));
+		g_osd_painted[page] = true;
+	} else if (g_osd_painted[page]) {
+		clear_gain_bar(page_base(page), dst);
+		g_osd_painted[page] = false;
+	}
 	if (diatom_port_now_us() < g_ov_until)  draw_overlay(page_base(page));
 
 	pthread_mutex_lock(&g_flip_mx);
