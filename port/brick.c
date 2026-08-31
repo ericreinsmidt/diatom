@@ -157,6 +157,22 @@ struct dm_ctl_elem_value {
 
 #define GAIN_CTL     "digital volume"
 #define GAIN_RAW_MAX 63         /* control range; 0 is loudest, 63 silent */
+/* The part of that range you can actually hear.
+ *
+ * The register goes to 63 and stops being useful long before it: measured on
+ * the speaker against a room baseline of 33 rms, raw 26 is 173 rms - five times
+ * the room, quiet but unmistakably there - and by raw 34 it is 55, which is 1.6
+ * times the room and indistinguishable from nothing. Spreading twenty levels
+ * across the whole 63 therefore spends more than half the slider below the
+ * floor: level 10 of 20 landed on raw 31, about two and a half times the room,
+ * which is what "50% and very quiet" is.
+ *
+ * TortOS's launcher already had this number - the sweep was done there and the
+ * constant is GAIN_RAW_USABLE in its src/platform.c. The port carries its own
+ * copy of the mapping because it owns the level while a game runs, and only one
+ * of the two was corrected. Same measurement, same ceiling, so the bar means
+ * the same thing on the shelf and in a game. */
+#define GAIN_RAW_USABLE 26
 #define GAIN_LEVELS  20         /* what the USER moves in: 20 steps of 5% */
 #define SPEAKER_CTL  "HpSpeaker Switch"   /* the only true mute on this codec */
 
@@ -221,11 +237,16 @@ static bool     g_osd_painted[FB_PAGES];
  * this file. Rounded both ways so a read-back lands on the level it came from. */
 static int level_to_raw(int lv)
 {
-	return GAIN_RAW_MAX - (lv * GAIN_RAW_MAX + GAIN_LEVELS / 2) / GAIN_LEVELS;
+	return GAIN_RAW_USABLE
+	     - (lv * GAIN_RAW_USABLE + GAIN_LEVELS / 2) / GAIN_LEVELS;
 }
 static int raw_to_level(int raw)
 {
-	return ((GAIN_RAW_MAX - raw) * GAIN_LEVELS + GAIN_RAW_MAX / 2) / GAIN_RAW_MAX;
+	/* A register left somewhere past the usable floor by another program reads
+	 * as level 0 rather than as a negative one. */
+	if (raw >= GAIN_RAW_USABLE) return 0;
+	return ((GAIN_RAW_USABLE - raw) * GAIN_LEVELS + GAIN_RAW_USABLE / 2)
+	     / GAIN_RAW_USABLE;
 }
 
 static int ctl_io(const char *name, long *val, int write)
@@ -1029,12 +1050,38 @@ void diatom_port_present(const void *src, int w, int h, size_t pitch,
 	 * computed and logged. A game came up filling only the left half of the
 	 * panel while the host's own line said 1024x768 at 0,0, and there was no
 	 * way to tell which of the two was wrong. Only on a change, so it is one
-	 * line per mode rather than one per frame. */
-	if (rect_changed) {
-		char m[128];
+	 * line per mode rather than one per frame.
+	 *
+	 * The SOURCE side counts as a change too, and used to not.
+	 *
+	 * ensure_maps rebuilds on src w/h and filter as well as dst, so a core that
+	 * alters its geometry mid-run - which they do, and the host counts them -
+	 * silently threw the maps away and built new ones with nothing written
+	 * down. That is precisely the case this line exists for: the half-panel
+	 * picture, and a report of a GBA game drawn twice side by side while the
+	 * display mode was being cycled. Whatever that turns out to be, the log now
+	 * says what the port was handed at the moment it changed, including the
+	 * pitch - a stride that disagrees with the width is what draws an image
+	 * twice across a row. */
+	if (rect_changed || w != g_map_src_w || h != g_map_src_h ||
+	    filter != g_map_filter) {
+		char m[192];
 
-		snprintf(m, sizeof m, "present: src %dx%d -> dst %dx%d at %d,%d (panel %ux%u)",
-		         w, h, dst.w, dst.h, dst.x, dst.y, g_vinfo.xres, g_vinfo.yres);
+		size_t bpp  = (fmt == DIATOM_PIX_RGB565) ? 2 : 4;
+		size_t span = pitch / (bpp ? bpp : 1);
+
+		/* The stride in PIXELS beside the width in pixels. A core is entitled
+		 * to pad - mGBA hands over 240 visible pixels in a 256-wide buffer, so
+		 * pitch 512 against width 240 is correct and normal, and calling that
+		 * a mismatch cries wolf on every GBA frame. What is not survivable is
+		 * a stride SHORTER than the width: that reads the next row's pixels
+		 * into this one, which is what draws an image twice across a row. */
+		snprintf(m, sizeof m,
+		         "present: src %dx%d pitch %zu (%zu px) fmt %d -> dst %dx%d "
+		         "at %d,%d (panel %ux%u)%s",
+		         w, h, pitch, span, (int)fmt, dst.w, dst.h, dst.x, dst.y,
+		         g_vinfo.xres, g_vinfo.yres,
+		         span >= (size_t)w ? "" : "  <-- STRIDE SHORTER THAN WIDTH");
 		diatom_port_log(DIATOM_LOG_INFO, m);
 	}
 
