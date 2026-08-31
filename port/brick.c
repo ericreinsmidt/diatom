@@ -130,8 +130,19 @@ static bool          g_map_valid;
  * louder. That metadata is wrong. Proven by diffing the mixer across a
  * volume-up press in the device UI: 37 -> 15 when turned UP.
  *
- * `Headphone Volume` is deliberately untouched. It is not a speaker level -
- * raising it routes output to the headphone JACK and mutes the speakers.
+ * `Headphone Volume` is 0-7 at 6 dB a step and is **INVERTED** too: 0 is
+ * loudest, 7 is near silence, and its TLV lies about the direction exactly the
+ * way `digital volume`'s does. Nothing on this codec's metadata can be trusted.
+ *
+ * This comment used to say the opposite - that the control was not a speaker
+ * level, and that raising it rerouted output to the headphone JACK and muted
+ * the speakers. That was wrong, and it was wrong in the most expensive way
+ * available: `HpSpeaker Switch` drives the speaker off the headphone stage, so
+ * this control gates everything the device plays. Whoever wrote the note
+ * raised it, heard the speaker fall away, and reached for routing to explain
+ * an attenuation. Settled by ear on 2026-08-31 with no plug in the jack - at 7
+ * the speaker is barely audible, at 0 it is loud. It had sat at 3 since the
+ * project began, so every sound Diatom has ever made was 18 dB down.
  */
 struct dm_ctl_elem_id {
 	unsigned int numid; int iface; unsigned int device, subdevice;
@@ -171,10 +182,19 @@ struct dm_ctl_elem_value {
  * constant is GAIN_RAW_USABLE in its src/platform.c. The port carries its own
  * copy of the mapping because it owns the level while a game runs, and only one
  * of the two was corrected. Same measurement, same ceiling, so the bar means
- * the same thing on the shelf and in a game. */
+ * the same thing on the shelf and in a game.
+ *
+ * Those rms figures were all taken with HP_CTL at 3, i.e. through 18 dB of
+ * attenuation nobody knew was in the path - see mixer_defaults(). Removing it
+ * did not invalidate the floor, because every reading moved up together and
+ * the shape held; Eric ran the full slider on 2026-08-31 and called the range
+ * right. The number stays, the derivation does not. Do not "correct" 26 by
+ * redoing this arithmetic - it no longer describes what was measured. */
 #define GAIN_RAW_USABLE 26
 #define GAIN_LEVELS  20         /* what the USER moves in: 20 steps of 5% */
 #define SPEAKER_CTL  "HpSpeaker Switch"   /* the only true mute on this codec */
+#define HP_CTL       "Headphone Volume"   /* 0-7, 6 dB a step, INVERTED */
+#define SWAP_CTL     "DAC Swap"           /* 1 crosses left and right */
 
 /* Backlight. This device has no /sys/class/backlight; the panel is driven by
  * the Allwinner disp2 engine, and the firmware's own settings library goes
@@ -267,6 +287,37 @@ static int ctl_io(const char *name, long *val, int write)
 }
 
 static int gain_io(long *val, int write) { return ctl_io(GAIN_CTL, val, write); }
+
+/* Write a control and complain if it does not land. The launcher had this same
+ * write spelled "Headphone", a control this codec does not have; the ioctl
+ * matches names exactly and the return was discarded, so it silently did
+ * nothing for the life of the project while the source read as though it had
+ * worked. Nothing here writes a control without checking again. */
+static void ctl_set(const char *name, long val)
+{
+	if (ctl_io(name, &val, 1) < 0)
+		fprintf(stderr, "brick: mixer rejected '%s' = %ld\n", name, val);
+}
+
+/* Codec-wide state that the volume level does not own, set once at init.
+ *
+ * Diatom sets this itself rather than inheriting it from the launcher because
+ * it runs standalone as well as under one, and a frontend that is quiet only
+ * when started the wrong way is worse than one that is simply quiet.
+ * Idempotent, so both doing it costs nothing.
+ *
+ * HP_CTL: see the header comment above - 0 is the loud end.
+ * SWAP_CTL at 1 crosses the channels. The stock hook clears it
+ * (runtrimui-original.sh: `tinymix set 1 0`) and so does NextUI; we never did,
+ * so left and right have been backwards the whole time. It is enumerated
+ * rather than integer, but the value union overlaps and we only ever write
+ * item 0, so the integer path reaches it. */
+static void mixer_defaults(void)
+{
+	if (g_mixer_fd < 0) return;
+	ctl_set(HP_CTL, 0);
+	ctl_set(SWAP_CTL, 0);
+}
 
 /* Split from the key handler so the level can be read without one being
  * pressed: the host polls these to report levels upward (ADR-0020). */
@@ -626,6 +677,7 @@ bool diatom_port_init(diatom_port_caps *out)
 
 	g_mixer_fd = open("/dev/snd/controlC0", O_RDWR);
 	g_disp_fd  = open("/dev/disp", O_RDWR);
+	mixer_defaults();
 	g_input_debug   = getenv("DIATOM_INPUT_DEBUG") != NULL;
 	g_present_debug = getenv("DIATOM_PRESENT_DEBUG") != NULL;
 
