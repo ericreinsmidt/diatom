@@ -60,7 +60,7 @@ def check_that(name, cond, got):
     if not cond: fails.append(name)
 
 print("READY:", (r := drain(2.0)))
-check("proto version", [x for x in r if x.startswith("READY")][0].split("\t")[1], "proto=2")
+check("proto version", [x for x in r if x.startswith("READY")][0].split("\t")[1], "proto=3")
 
 # Before any RUN: identity must already be identity, not "everything unbound".
 send("MAP"); check("map is identity while idle", drain(), ["MAP\tmap=identity"])
@@ -94,6 +94,37 @@ check("bad pair refuses whole message", got,
       ["ERROR\tcode=bad_map\tmsg=a:b,nonsense:x", "MAP\tmap=x:b,y:a"])
 
 send("SETMAP\tmap=identity"); check("identity clears", drain(), ["MAP\tmap=identity"])
+
+# ADR-0028: a pulse is part of a binding, so it travels in the same field and
+# obeys the same all-or-nothing rule. The rate itself cannot be checked here -
+# the desktop port reads the live keyboard, so no script can hold a button - and
+# is measured on hardware instead. What IS checkable is the grammar, which is
+# where the bugs live.
+send("SETMAP\tmap=x:a~3")
+check("turbo binding echoes with its period", drain(), ["MAP\tmap=x:a~3"])
+
+send("SETMAP\tmap=x:a~3,y:b")
+check("pulsed and plain bindings coexist", drain(), ["MAP\tmap=x:a~3,y:b"])
+
+# A pulse on a binding that is otherwise identity must still be reported, or the
+# launcher reads back a map missing the turbo it just set. The emit loop skips
+# identity bindings, and had to learn that a period makes one non-identity.
+send("SETMAP\tmap=a:a~2")
+check("turbo on an identity target is still emitted", drain(), ["MAP\tmap=a:a~2"])
+
+for bad, why in (("x:a~0",    "a zero period is a plain binding in a costume"),
+                 ("x:a~31",   "period above the ceiling"),
+                 ("x:a~abc",  "non-numeric period"),
+                 ("x:a~3x",   "trailing junk after the period"),
+                 ("x:a~",     "empty period"),
+                 ("x:none~3", "a pulse on an unbound button"),
+                 ("x:menu~3", "a pulse cannot smuggle menu past ADR-0019")):
+    send("SETMAP\tmap=" + bad); got = drain()
+    check("refused, unchanged: " + why, got,
+          ["ERROR\tcode=bad_map\tmsg=" + bad, "MAP\tmap=a:a~2"])
+
+send("SETMAP\tmap=identity")
+check("identity clears turbo too", drain(), ["MAP\tmap=identity"])
 
 # Display mode. RUNNING already emitted one, so drain before asking.
 drain(0.5)

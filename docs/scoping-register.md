@@ -874,15 +874,12 @@ Two levers the spike discovered:
       than reasoned: **X and Y are the opposite way round from their positions**
       - the top cap emits `BTN_WEST`, the left cap `BTN_NORTH` - and positional
       reasoning got exactly those two wrong. No analog, confirming §0b.
-- [ ] **[OPEN]** **Turbo.** Seven of the nine systems have two face buttons, so
-      canonical X and Y are spare and currently reach a core that ignores them.
-      Core options only reach two of the seven, and disagree: FCEUmm publishes
-      dedicated turbo buttons, Mednafen a toggle hotkey; `genesis_plus_gx` and
-      `mgba` declare none at all (measured 2026-08-31 from the option keys in
-      each `.so`). Proposal is to make a pulse a property of a map binding,
-      `x:a~3`, host-side, port untouched →
+- [x] **[OPEN]** **Turbo is a pulse on a map binding**, `SETMAP map=x:a~3`,
+      host-side, port untouched. Seven of nine systems have two face buttons so
+      X and Y are spare; core options reach two of them and disagree (measured
+      2026-08-31: `genesis_plus_gx` and `mgba` declare none). Costs `proto=3` →
       **[ADR-0028](decisions/0028-turbo-is-a-property-of-a-binding.md)**
-      *(Proposed)*.
+      *(Accepted)*.
 
 ### Test matrix - *not* a core list
 

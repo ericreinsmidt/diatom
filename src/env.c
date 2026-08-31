@@ -250,9 +250,13 @@ static bool env_cb(unsigned cmd, void *data)
 	}
 }
 
+/* Defined down with the map, which is the state it exists to advance. */
+static void turbo_tick(void);
+
 static void cb_input_poll(void)
 {
 	diatom_port_input_poll();
+	turbo_tick();
 }
 
 /* Canonical button names. The protocol speaks these, never retropad numbers,
@@ -289,6 +293,31 @@ static int button_map[DIATOM_BTN_COUNT] = {
 
 static int identity_map[DIATOM_BTN_COUNT];
 static bool g_map_saved;
+
+/* Turbo, ADR-0028. A pulse is a property of a BINDING, so this table is written
+ * and reset in lockstep with button_map above and never on its own: two tables
+ * that both answer "what does X do" would be free to disagree, and preventing
+ * that class of disagreement is what ADR-0020 is for.
+ *
+ * turbo_period[b] is half a cycle in FRAMES - `x:a~3` is three frames pressed,
+ * three released - and 0 means an ordinary binding. Frames rather than
+ * milliseconds because the core advances in frames, so the pulse is
+ * deterministic, reproducible, and does not drift when the frame rate does.
+ *
+ * turbo_anchor[b] is the frame the source last went down. The phase is measured
+ * from there rather than from an absolute counter so the first frame of a press
+ * is always ON; anchored absolutely, half of all presses would open on an OFF
+ * half-cycle and the button would feel like it had missed. */
+#define TURBO_PERIOD_MAX 30       /* frames; a slower pulse is a typo */
+static int  turbo_period[DIATOM_BTN_COUNT];
+static long turbo_anchor[DIATOM_BTN_COUNT];
+static uint32_t turbo_prev;      /* held mask at the previous poll, for edges */
+
+/* Advanced once per frame by cb_input_poll, which libretro guarantees is called
+ * once per retro_run before any input_state query. That makes it exactly the
+ * right clock for pulsing input, and means no frame number has to be plumbed in
+ * from the host. */
+static long g_input_frame;
 
 /* Labels the core gave us, indexed by canonical button after resolving the
  * active map - so they track a remap for free and a launcher never has to. */
@@ -337,6 +366,25 @@ static void ensure_identity(void)
 	g_map_saved = true;
 }
 
+/* One frame of pulse bookkeeping, from the one callback libretro promises is
+ * called exactly once per retro_run and before any input_state query. Doing it
+ * here rather than inside cb_input_state is the whole reason two buttons cannot
+ * disagree about where in the cycle they are: that function runs several times
+ * a frame, once per queried id. ADR-0028. */
+static void turbo_tick(void)
+{
+	uint32_t held;
+	int b;
+
+	g_input_frame++;
+	held = diatom_port_input_state() & ~g_suppress;
+	for (b = 0; b < DIATOM_BTN_COUNT; b++)
+		if (turbo_period[b] &&
+		    (held & DIATOM_BIT(b)) && !(turbo_prev & DIATOM_BIT(b)))
+			turbo_anchor[b] = g_input_frame;
+	turbo_prev = held;
+}
+
 /* RUN resets the map. Diatom is resident, so without this a table sent for one
  * game silently governs the next - a footgun that fires only on the games the
  * user did NOT configure, which is the worst possible place for it. ADR-0020. */
@@ -344,6 +392,9 @@ void diatom_input_reset_map(void)
 {
 	ensure_identity();
 	memcpy(button_map, identity_map, sizeof button_map);
+	memset(turbo_period, 0, sizeof turbo_period);
+	memset(turbo_anchor, 0, sizeof turbo_anchor);
+	turbo_prev = 0;
 	relabel();
 }
 
@@ -352,7 +403,7 @@ void diatom_input_reset_map(void)
  * is hard to diagnose, so a single bad pair rejects the message. */
 bool diatom_input_set_map(const char *spec)
 {
-	int next[DIATOM_BTN_COUNT];
+	int next[DIATOM_BTN_COUNT], next_period[DIATOM_BTN_COUNT];
 	char buf[512], *save = NULL, *pair;
 
 	ensure_identity();
@@ -365,11 +416,12 @@ bool diatom_input_set_map(const char *spec)
 	 * having already cleared the old map would be a silent third outcome:
 	 * neither the requested map nor the one the launcher still believes in. */
 	memcpy(next, identity_map, sizeof next);
+	memset(next_period, 0, sizeof next_period);
 	snprintf(buf, sizeof buf, "%s", spec);
 
 	for (pair = strtok_r(buf, ",", &save); pair; pair = strtok_r(NULL, ",", &save)) {
-		char *colon = strchr(pair, ':');
-		int from, to;
+		char *colon = strchr(pair, ':'), *tilde;
+		int from, to, period = 0;
 
 		if (!colon) return false;
 		*colon = '\0';
@@ -380,16 +432,54 @@ bool diatom_input_set_map(const char *spec)
 		 * map away the button that opens the screen which would undo it. */
 		if (from < 0 || from == DIATOM_BTN_MENU) return false;
 
+		/* ADR-0028's pulse. Split the target from its period BEFORE naming the
+		 * target, so `a~3` reads as the button `a` at period 3 rather than as a
+		 * button nobody has - which is also exactly why a Diatom older than
+		 * this rejects the whole map instead of misreading it. */
+		tilde = strchr(colon + 1, '~');
+		if (tilde) {
+			char *end;
+			long v;
+
+			*tilde = '\0';
+			v = strtol(tilde + 1, &end, 10);
+			/* `~0` is a plain binding in a costume, and the ceiling keeps a
+			 * typo from producing a pulse slower than any game can use. */
+			if (end == tilde + 1 || *end || v < 1 || v > TURBO_PERIOD_MAX)
+				return false;
+			period = (int)v;
+		}
+
 		if (!strcmp(colon + 1, "none")) {
+			/* A period against an unbound button would store a pulse nothing
+			 * can emit and read back as a map the launcher never sent. */
+			if (period) return false;
 			next[from] = -1;
 			continue;
 		}
 		to = button_by_name(colon + 1);
 		if (to < 0 || to == DIATOM_BTN_MENU) return false;
 		next[from] = identity_map[to];
+		next_period[from] = period;
 	}
 
 	memcpy(button_map, next, sizeof button_map);
+	memcpy(turbo_period, next_period, sizeof turbo_period);
+	/* Say what landed. A map arrives once a launch, from a config file nobody
+	 * looks at, and silence here cost an hour on 2026-08-31: a turbo that did
+	 * nothing was indistinguishable from a map that never arrived, from one
+	 * that was refused, and from a test rig that could not press the button.
+	 * Options already log this way, for the same reason. */
+	{
+		char msg[560];
+		snprintf(msg, sizeof msg, "map: %s", spec);
+		diatom_port_log(DIATOM_LOG_INFO, msg);
+	}
+	/* Any pulse in flight was measured from a press of a binding that no longer
+	 * exists. Clearing turbo_prev as well guarantees the next poll sees a held
+	 * button as a fresh edge and re-anchors it. */
+	memset(turbo_anchor, 0, sizeof turbo_anchor);
+	turbo_prev = 0;
 	relabel();
 	return true;
 }
@@ -411,7 +501,7 @@ void diatom_input_emit_map(void)
 		const char *to = "none";
 		int t;
 
-		if (button_map[b] == identity_map[b]) continue;
+		if (button_map[b] == identity_map[b] && !turbo_period[b]) continue;
 		for (t = 0; t < DIATOM_BTN_COUNT; t++)
 			if (button_map[b] >= 0 && identity_map[t] == button_map[b]) {
 				to = button_names[t];
@@ -419,6 +509,13 @@ void diatom_input_emit_map(void)
 			}
 		n += (size_t)snprintf(out + n, sizeof out - n, "%s%s:%s",
 		                      n ? "," : "", button_names[b], to);
+		/* Checked between the two writes, not only after: snprintf returns what
+		 * it WOULD have written, so a second call with an already-overflowed n
+		 * would underflow `sizeof out - n` and write past the buffer. */
+		if (n >= sizeof out) break;
+		if (turbo_period[b])
+			n += (size_t)snprintf(out + n, sizeof out - n, "~%d",
+			                      turbo_period[b]);
 		if (n >= sizeof out) break;
 	}
 	diatom_proto_send("MAP\tmap=%s", out[0] ? out : "identity");
@@ -456,10 +553,19 @@ static int16_t cb_input_state(unsigned port, unsigned device,
 	/* OR, not first-match. Under an identity map no two canonical buttons
 	 * share a target so returning the first was always correct; remapping
 	 * makes sharing legal, and `SETMAP map=x:b,y:b` must fire for either.
-	 * Returning early would have silently dropped one of them. */
-	for (b = 0; b < DIATOM_BTN_COUNT; b++)
-		if (button_map[b] == (int)id && (state & DIATOM_BIT(b)))
+	 * Returning early would have silently dropped one of them.
+	 *
+	 * A pulse is applied PER SOURCE, inside this loop, before the OR has
+	 * finished: holding A while a turbo-X also targets A must give a
+	 * continuously held A rather than an interference pattern between the two.
+	 * So a source in its OFF half-cycle keeps looking instead of returning 0.
+	 * ADR-0028. */
+	for (b = 0; b < DIATOM_BTN_COUNT; b++) {
+		if (button_map[b] != (int)id || !(state & DIATOM_BIT(b))) continue;
+		if (!turbo_period[b]) return 1;
+		if (((g_input_frame - turbo_anchor[b]) / turbo_period[b]) % 2 == 0)
 			return 1;
+	}
 	return 0;
 }
 

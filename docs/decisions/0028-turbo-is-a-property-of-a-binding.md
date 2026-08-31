@@ -1,6 +1,6 @@
 # 0028. Turbo is a property of a binding, and the host owns it
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-08-31
 - **Supersedes:** -
 - **Superseded by:** -

@@ -290,11 +290,19 @@ diatom_msg_kind diatom_proto_poll(diatom_msg *out, int timeout_ms, bool running)
 		/* Tell a fresh launcher whether the screen is already spoken for.
 		 * Without this, a launcher restarted by launch.sh while a game runs
 		 * would draw its shelf over live output. */
-		/* proto=2 adds ADR-0020's state plane. ADR-0009 already promises
+		/* proto=2 added ADR-0020's state plane. ADR-0009 already promises
 		 * unknown verbs are ignored, so an old launcher is unaffected; this is
 		 * how a NEW launcher discovers the plane is absent rather than
-		 * inferring it from silence. */
-		diatom_proto_send("READY\tproto=2\tstate=%s", running ? "running" : "idle");
+		 * inferring it from silence.
+		 *
+		 * proto=3 adds ADR-0028's turbo, and had to bump for a different
+		 * reason: it changes the value GRAMMAR of an existing key rather than
+		 * adding one, which the ignore-unknown promise does not cover. The
+		 * degradation is safe in both directions - a Diatom without it reads
+		 * `a~3` as a button name nobody has and rejects the whole map per
+		 * ADR-0020, so an old pairing loses turbo rather than getting a wrong
+		 * map - but a launcher should not have to discover that by trying. */
+		diatom_proto_send("READY\tproto=3\tstate=%s", running ? "running" : "idle");
 		return DIATOM_MSG_NONE;
 	}
 
