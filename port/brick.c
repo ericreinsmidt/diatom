@@ -184,13 +184,29 @@ struct dm_ctl_elem_value {
  * of the two was corrected. Same measurement, same ceiling, so the bar means
  * the same thing on the shelf and in a game.
  *
- * Those rms figures were all taken with HP_CTL at 3, i.e. through 18 dB of
- * attenuation nobody knew was in the path - see mixer_defaults(). Removing it
- * did not invalidate the floor, because every reading moved up together and
- * the shape held; Eric ran the full slider on 2026-08-31 and called the range
- * right. The number stays, the derivation does not. Do not "correct" 26 by
- * redoing this arithmetic - it no longer describes what was measured. */
-#define GAIN_RAW_USABLE 26
+ * Those rms figures were taken with HP_CTL already at 0 - the sweep script sets
+ * it before measuring - so they describe the chain as it behaves now, and the
+ * 18 dB mixer_defaults() restored was never inside them. A note here briefly
+ * claimed otherwise; it was inferred instead of read off the script that made
+ * the table. The gap was between the SWEEP and gameplay, not inside the sweep,
+ * which is why the table looked sane while the device sounded quiet.
+ *
+ * The weakness is the instrument. Those readings came from a microphone across
+ * the room, where raw 26 is 5.2x the room and raw 34 is indistinguishable from
+ * it - but a handheld sits at arm's length, and what reads as silence over
+ * there is plainly audible in your hands. The floor is therefore set by ear,
+ * not by this table.
+ *
+ * 39, chosen on the device on 2026-08-31 with a game playing, stepping the
+ * register down until Eric called it: raw 37 is barely audible and is where he
+ * wanted position 1. 39 is the constant that lands position 1 on 37 in both
+ * this ladder and the launcher's, which round differently; 26 put it on 25.
+ * Position 20 still lands on raw 0, so maximum is unchanged.
+ *
+ * The cost is resolution: about 2.3 dB a press rather than 1.5, in exchange for
+ * 45 dB of range rather than 30. Worth it - 30 dB down is not quiet in a quiet
+ * room, which is the thing a microphone across the room could not tell us. */
+#define GAIN_RAW_USABLE 39
 #define GAIN_LEVELS  20         /* what the USER moves in: 20 steps of 5% */
 #define SPEAKER_CTL  "HpSpeaker Switch"   /* the only true mute on this codec */
 #define HP_CTL       "Headphone Volume"   /* 0-7, 6 dB a step, INVERTED */
