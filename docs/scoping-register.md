@@ -875,7 +875,7 @@ Two levers the spike discovered:
       - the top cap emits `BTN_WEST`, the left cap `BTN_NORTH` - and positional
       reasoning got exactly those two wrong. No analog, confirming §0b.
 - [x] **[OPEN]** **Turbo is a pulse on a map binding**, `SETMAP map=x:a~3`,
-      host-side, port untouched. Seven of nine systems have two face buttons so
+      host-side, port untouched. Eight of ten systems have two face buttons so
       X and Y are spare; core options reach two of them and disagree (measured
       2026-08-31: `genesis_plus_gx` and `mgba` declare none). Costs `proto=3` →
       **[ADR-0028](decisions/0028-turbo-is-a-property-of-a-binding.md)**
