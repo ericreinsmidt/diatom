@@ -198,6 +198,13 @@ struct dm_ctl_elem_value {
  * there is plainly audible in your hands. The floor is therefore set by ear,
  * not by this table.
  *
+ * That session had ONE WORKING SPEAKER, unknown at the time. The quiet channel
+ * turned out on 2026-09-02 to be a loose connection on the PCB; resoldered, and
+ * both now play evenly. So 39 was originally judged against roughly half this
+ * device's output - and it stood anyway, re-heard on the repaired hardware the
+ * same day across the quiet end, the balance and the general sound. Two
+ * independent confirmations now, not one lucky derivation.
+ *
  * 39, chosen on the device on 2026-08-31 with a game playing, stepping the
  * register down until Eric called it: raw 37 is barely audible and is where he
  * wanted position 1. 39 is the constant that lands position 1 on 37 in both
