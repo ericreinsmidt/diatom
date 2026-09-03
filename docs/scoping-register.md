@@ -251,7 +251,7 @@ asks via `RETRO_ENVIRONMENT_*` can be answered from ABI knowledge alone.
 `GET_SAVE_DIRECTORY`, `SET_PIXEL_FORMAT`, `SET_ROTATION`, `GET_VARIABLE`,
 `SET_HW_RENDER`, `GET_INPUT_DEVICE_CAPABILITIES` all need port or session state
 - and they arrive from inside `retro_run`, crossing the boundary every frame in
-both directions. An interface that must be handed both neighbours' state to
+both directions. An interface that must be handed both neighbors' state to
 function is a pass-through, not a separation.
 
 **The boundary worth drawing instead is temporal, not architectural:**
@@ -386,7 +386,7 @@ Candidate surface - deliberately small:
       **twelve within a day** - `should_quit` and `capture`. Both look justified
       and neither carries a domain noun, but a surface that grows 20% on first
       contact is worth noticing rather than shrugging at.
-### Proposed division of labour *(2026-08-23, not ratified)*
+### Proposed division of labor *(2026-08-23, not ratified)*
 
 | Concern | Host (shared) | Port (device) |
 |---|---|---|
@@ -1004,7 +1004,7 @@ and fail clearly rather than mysteriously when it is missing.
 list, that work arrives with it - which is an argument for deciding the two
 together rather than assuming `genesis_plus_gx` covering Sega CD makes it free.
 
-**The coprocessor risk ADR-0005 flagged did not materialise** (measured
+**The coprocessor risk ADR-0005 flagged did not materialize** (measured
 2026-08-25): Star Fox and Stunt Race FX (SuperFX), Yoshi's Island (SA-1), Super
 Mario Kart (DSP-1) and Mega Man X2 (CX4) all hold full speed with 0 resyncs on
 both `snes9x2010` and `snes9x2005_plus`. The A53 carries every coprocessor in
@@ -1035,7 +1035,7 @@ host decision and only means re-running the spike, which is cheap.
       misreporting both PAL and NTSC rates, and saves not transferring between
       cores for the same game (§5).
 - [x] **[OPEN]** SNES coprocessors → **measured 2026-08-25 on the Brick, and
-      the risk did not materialise.** Star Fox and Stunt Race FX (SuperFX),
+      the risk did not materialize.** Star Fox and Stunt Race FX (SuperFX),
       Yoshi's Island (SA-1), Super Mario Kart (DSP-1) and Mega Man X2 (CX4) all
       hold full speed with 0 resyncs on `snes9x2010`. The A53 carries every
       coprocessor in the library, so ADR-0005's warning about them is retired.

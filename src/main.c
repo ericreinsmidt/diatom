@@ -212,7 +212,7 @@ static void on_terminate(int sig)
 	}
 }
 
-/* Called once, before anything can be signalled.
+/* Called once, before anything can be signaled.
  *
  * The per-session sigaction further down is about saving a game's state on
  * power-off. This is about the process being able to exit at all, which an
@@ -551,7 +551,7 @@ static bool g_pause_requested;
  * one: the launcher acts on IDLE at once rather than warning first, since
  * powering off costs about two seconds and lands the player back in the same
  * game with the menu up. A window to cancel is only worth having when the
- * thing being cancelled is expensive. */
+ * thing being canceled is expensive. */
 static unsigned g_idle_after_ms;      /* 0: not asked for */
 static uint64_t g_idle_since_us;
 static bool     g_idle_said;
@@ -621,7 +621,7 @@ static bool menu_pause(const diatom_session *sn)
 
 	/* NOT for(;;). A paused Diatom blocks here on a socket with no timeout,
 	 * and this loop used to ignore g_terminate entirely - so SIGTERM set the
-	 * flag and nothing read it, and the process could not be signalled out of
+	 * flag and nothing read it, and the process could not be signaled out of
 	 * an open menu at all. Seen on the device 2026-08-29: the launcher was
 	 * asked to quit, left its menu loop without sending RESUME, and went back
 	 * to waiting on a game that would never report anything, while this sat

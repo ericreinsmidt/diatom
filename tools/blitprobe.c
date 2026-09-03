@@ -36,7 +36,7 @@ static uint64_t us(void)
 static uint16_t src[SRC_W * SRC_H];
 static int colmap[4096], rowmap[4096];
 
-/* The same shape as port/brick.c: nearest-neighbour, RGB565 in, ARGB out. */
+/* The same shape as port/brick.c: nearest-neighbor, RGB565 in, ARGB out. */
 static void blit(uint32_t *dst, int dw, int dh, size_t stride_px)
 {
 	int x, y;

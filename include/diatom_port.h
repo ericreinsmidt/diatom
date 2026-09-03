@@ -87,7 +87,7 @@ void diatom_port_shutdown(void);
 
 /* Called AFTER retro_run returns, never from inside the core's video callback.
  * The host owns `src` and has already computed `dst`; the port blits.
- * src == NULL means "repeat the previous frame" (the core signalled a dupe).
+ * src == NULL means "repeat the previous frame" (the core signaled a dupe).
  *
  * `dst` may extend past the surface: a fill or overscale mode deliberately
  * crops. Ports clip; they never refuse the frame.

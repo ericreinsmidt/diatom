@@ -184,5 +184,5 @@ one was lost depended on iteration order. The generator now keys on the full
 value, giving 78 entries rather than 77.
 
 **No result above is affected** - command 44 was never observed in any run. But
-it would have mislabelled any core that used either command, and the throwaway
+it would have mislabeled any core that used either command, and the throwaway
 version would never have been looked at again.

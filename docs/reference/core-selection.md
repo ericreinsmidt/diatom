@@ -133,7 +133,7 @@ recorded as right.
 
 ## How to redo this
 
-The method mattered more than any individual answer, and it generalises to a new
+The method mattered more than any individual answer, and it generalizes to a new
 device:
 
 1. **Filter by runtime first.** Fetch candidates and check the `GLIBCXX_` and

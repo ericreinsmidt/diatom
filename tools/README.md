@@ -365,7 +365,7 @@ wrong, and the second is a rate no shipped core produces - so that row measured
 nothing, and the genuinely hardest ratio went untested as a result.
 
 The last row is the control: at a ratio of exactly 1.0 there is nothing to
-resample, both hit the 16-bit quantisation floor, and neither filter can be
+resample, both hit the 16-bit quantization floor, and neither filter can be
 blamed for what is left.
 
 ## hfprobe.py - and why it is not enough on its own

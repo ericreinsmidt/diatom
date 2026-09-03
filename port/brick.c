@@ -9,7 +9,7 @@
  * (/dev/fb0 -> the "disp" platform driver), while /dev/dri/card0 is only the
  * PowerVR render node (pvrsrvkm) with no display capability. The firmware's
  * SDL2 has exactly one real video driver, "mali", whose EGL swap blocks
- * ~30ms - two vblank intervals - regardless of swap interval, which quantised
+ * ~30ms - two vblank intervals - regardless of swap interval, which quantized
  * the frame loop to 30fps.
  *
  * FBIOPAN_DISPLAY is itself a blocking vsync'd flip. Measured: a pan issued
@@ -439,7 +439,7 @@ static void draw_gain_bar(uint8_t *base)
 	/* The launcher's two, so the bar means the same thing on the shelf and in
 	 * a game: UI_OSD_VOLUME and UI_OSD_BRIGHT in TortOS's src/ui.h. This was
 	 * one hardcoded off-white for both, which made the in-game bar the only
-	 * place the colour did not say which key you had pressed. */
+	 * place the color did not say which key you had pressed. */
 	const unsigned tint_r = g_osd_kind ? 255u :  61u;
 	const unsigned tint_g = g_osd_kind ? 206u : 214u;
 	const unsigned tint_b = g_osd_kind ? 128u : 255u;

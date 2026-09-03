@@ -66,7 +66,7 @@ quietly skipping them.
    why. Agreement given by reflex is worthless; the value is friction applied at
    the right places.
 4. **Verify before asserting.** Read the actual file, manifest or spec rather
-   than recalling it. Anything unverified must be labelled as unverified. This
+   than recalling it. Anything unverified must be labeled as unverified. This
    is written down because it was violated twice on the project's first day: an
    emulation requirement that turned out not to exist, and a feature proposed
    for a platform that does not support it.
@@ -99,9 +99,9 @@ quietly skipping them.
    Tracking `tools/envlog.c` immediately paid for itself: rebuilding its
    generated table exposed a real bug, two commands sharing number 44 and told
    apart only by the experimental bit, which the throwaway version had silently
-   mislabelled.
+   mislabeled.
 8. **Apply the seam test** (register §0) to every proposed abstraction, and the
-   same scepticism to process. Ceremony that does not earn its keep gets cut.
+   same skepticism to process. Ceremony that does not earn its keep gets cut.
 9. **Flag assumptions explicitly** rather than burying them in prose.
 10. **One dated log entry per working session** in `discussion/`, written at the
     end, capturing what was concluded and what remains open.

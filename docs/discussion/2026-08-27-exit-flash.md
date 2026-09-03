@@ -154,7 +154,7 @@ at the right file in the end.
 introduced by an earlier fix in this same hunt. While it was present, every
 "still flashes" report was measuring two faults stacked, and the reports could
 not distinguish them. Fixing forward on a symptom that several people are
-observing at once needs the intermediate states labelled, or the feedback is
+observing at once needs the intermediate states labeled, or the feedback is
 noise.
 
 **The unfollowed lead was a red herring.** The 215 ms gap with no pan changes

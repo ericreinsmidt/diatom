@@ -74,7 +74,7 @@ true only in the sense that nobody had looked.
 ### The rows in bold were added after this spike was first written, and that is
 ### the more useful finding
 
-The first version of this table labelled 32040 as NES and tested 32768 as Game
+The first version of this table labeled 32040 as NES and tested 32768 as Game
 Boy. Both are wrong, and `docs/reference/core-facts.md` - a **generated** file,
 built for exactly this - says so on one line each: NES is 48000, SNES is 32040,
 and mGBA runs Game Boy at **131072**. 32768 is a rate no core in the pinned set
@@ -82,11 +82,11 @@ produces, so that row measured nothing.
 
 The cost was not the labels. **131072 → 48000 is 2.73:1, the hardest ratio in
 the matrix and the one the register had specifically named, and it went
-untested.** It was caught by being challenged on a neighbouring number, not by
+untested.** It was caught by being challenged on a neighboring number, not by
 any check here. A generated reference is only worth what it is worth if it is
 read, and it was sitting three directories away the whole time.
 
-The last row is both filters hitting the 16-bit quantisation floor, which is the
+The last row is both filters hitting the 16-bit quantization floor, which is the
 control: at a ratio of exactly 1.0 there is nothing to resample and neither
 filter can be blamed for what is left.
 

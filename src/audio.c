@@ -224,7 +224,7 @@ void diatom_audio_sync(void)
 	/* Proportional plus integral.
 	 *
 	 * Proportional alone cannot sit on target: a persistent correction requires
-	 * a persistent error, so the buffer stabilises wherever the error happens to
+	 * a persistent error, so the buffer stabilizes wherever the error happens to
 	 * generate the needed nudge. Measured with P only: it held around 500-770
 	 * frames against a 2048 target, and dipped to 26 - a stall of 10ms from
 	 * underrunning. The integral term accumulates the residual and drives the

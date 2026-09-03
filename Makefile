@@ -170,7 +170,7 @@ $(BUILD)/%.o: %.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-# The seam test from ADR-0007, mechanised. A port that includes libretro.h can
+# The seam test from ADR-0007, mechanized. A port that includes libretro.h can
 # no longer be built without a core, which destroys the reason the desktop
 # backend exists. Cheap to check, so check it.
 # Two mechanical checks, both guarding a rule that decays the moment nothing
