@@ -35,6 +35,7 @@
 
 #include <fcntl.h>
 #include <linux/fb.h>
+#include <linux/input.h>
 #include <math.h>
 #include <pthread.h>
 #include <stdio.h>
@@ -207,6 +208,29 @@ struct dm_ctl_elem_value {
  * 45 dB of range rather than 30. Worth it - 30 dB down is not quiet in a quiet
  * room, which is the thing a microphone across the room could not tell us. */
 #define GAIN_RAW_USABLE 39
+
+/* The jack wants a different window, not the same one moved.
+ *
+ * Set by ear on 2026-09-02 with a game playing and a plug in, the same method
+ * that produced 39. The ceiling first: above raw 8 it is uncomfortable, so 8 is
+ * where level 20 belongs. Then the floor, stepping down - 37, 45, 49, 53 and 57
+ * were each still too loud to be a minimum, and 61 was called right.
+ *
+ * So the jack spends 53 register steps where the speaker spends 39, which an
+ * offset cannot express: offsetting from the ceiling would put level 1 on 47,
+ * and 45 was rejected on the way past. Headphones are far more efficient than
+ * this speaker, so the same twenty steps have to cover more ground - 61 dB
+ * against 45, about 3.1 dB a step rather than 2.3.
+ *
+ * The launcher carries the same four numbers in its src/platform.c, for the
+ * same reason it carries GAIN_RAW_USABLE: this port owns the level while a game
+ * runs and the shelf owns it otherwise, so a level that crosses the socket has
+ * to mean the same thing on both sides. Change one, change the other. */
+#define SPK_RAW_TOP     0
+#define SPK_RAW_BOTTOM  GAIN_RAW_USABLE
+#define HP_RAW_TOP      8
+#define HP_RAW_BOTTOM   61
+
 #define GAIN_LEVELS  20         /* what the USER moves in: 20 steps of 5% */
 #define SPEAKER_CTL  "HpSpeaker Switch"   /* the only true mute on this codec */
 #define HP_CTL       "Headphone Volume"   /* 0-7, 6 dB a step, INVERTED */
@@ -269,20 +293,77 @@ static int      g_osd_kind;     /* 0 volume, 1 brightness - only the tint differ
  * when it is the one being prepared. */
 static bool     g_osd_painted[FB_PAGES];
 
+/* Is there a plug in the headphone jack?
+ *
+ * SW_HEADPHONE_INSERT on the codec's own input node. The state is nowhere else
+ * on this device - no ALSA jack control among its seventeen, nothing in sysfs -
+ * so EVIOCGSW is the only way to ask, which is why this opens an input device
+ * rather than reading a file.
+ *
+ * Found by capability, not by number. It is /dev/input/event2 today, but that
+ * is an enumeration order rather than a promise, and being wrong would mean a
+ * ladder calibrated for the wrong output with no sign that anything is off. */
+#define BITS_PER_LONG   (8 * (int)sizeof(long))
+#define SW_NLONGS       ((SW_MAX + BITS_PER_LONG) / BITS_PER_LONG)
+#define BIT_IS_SET(a,b) (((a)[(b) / BITS_PER_LONG] >> ((b) % BITS_PER_LONG)) & 1UL)
+
+static int g_jack_fd = -1;
+
+static void jack_open(void)
+{
+	unsigned long bits[SW_NLONGS];
+	char path[32];
+	int i, fd;
+
+	for (i = 0; i < 32; i++) {
+		snprintf(path, sizeof path, "/dev/input/event%d", i);
+		if ((fd = open(path, O_RDONLY | O_NONBLOCK)) < 0) continue;
+		memset(bits, 0, sizeof bits);
+		if (ioctl(fd, EVIOCGBIT(EV_SW, sizeof bits), bits) >= 0 &&
+		    BIT_IS_SET(bits, SW_HEADPHONE_INSERT)) {
+			g_jack_fd = fd;
+			return;
+		}
+		close(fd);
+	}
+	fprintf(stderr, "diatom: no headphone jack input node; "
+	                "volume will use the speaker ladder\n");
+}
+
+static int jack_present(void)
+{
+	unsigned long bits[SW_NLONGS];
+
+	if (g_jack_fd < 0) return 0;
+	memset(bits, 0, sizeof bits);
+	if (ioctl(g_jack_fd, EVIOCGSW(sizeof bits), bits) < 0) return 0;
+	return BIT_IS_SET(bits, SW_HEADPHONE_INSERT) ? 1 : 0;
+}
+
+/* Which window the level maps into. See HP_RAW_TOP above: headphones and the
+ * speaker want different ceilings AND different floors, so both ends move. */
+static int gain_top(void)  { return jack_present() ? HP_RAW_TOP    : SPK_RAW_TOP; }
+static int gain_bot(void)  { return jack_present() ? HP_RAW_BOTTOM : SPK_RAW_BOTTOM; }
+
 /* The port thinks in percent and converts; the inverted register never leaves
  * this file. Rounded both ways so a read-back lands on the level it came from. */
 static int level_to_raw(int lv)
 {
-	return GAIN_RAW_USABLE
-	     - (lv * GAIN_RAW_USABLE + GAIN_LEVELS / 2) / GAIN_LEVELS;
+	int top = gain_top(), span = gain_bot() - top;
+
+	return top + ((GAIN_LEVELS - lv) * span + GAIN_LEVELS / 2) / GAIN_LEVELS;
 }
 static int raw_to_level(int raw)
 {
-	/* A register left somewhere past the usable floor by another program reads
-	 * as level 0 rather than as a negative one. */
-	if (raw >= GAIN_RAW_USABLE) return 0;
-	return ((GAIN_RAW_USABLE - raw) * GAIN_LEVELS + GAIN_RAW_USABLE / 2)
-	     / GAIN_RAW_USABLE;
+	int top = gain_top(), bot = gain_bot(), span = bot - top;
+
+	/* A register left past this window by another program reads as an end of
+	 * the scale rather than as a level outside it. Both ends need clamping now
+	 * that the top is not always 0: with a plug in, anything louder than raw 8
+	 * was set by something that was not us. */
+	if (raw >= bot) return 0;
+	if (raw <= top) return GAIN_LEVELS;
+	return ((bot - raw) * GAIN_LEVELS + span / 2) / span;
 }
 
 static int ctl_io(const char *name, long *val, int write)
@@ -346,10 +427,31 @@ static void gain_ensure(void)
 	g_level = raw_to_level((int)v);
 }
 
+/* Re-apply if the plug went in or came out since the last write.
+ *
+ * Without this the level only moves to the right window at the next volume
+ * press, so plugging in mid-game leaves the old register in place - which is
+ * the exact moment the difference is 9 dB and being worn on your head. One
+ * ioctl on an already-open fd, and it writes nothing unless the state moved.
+ *
+ * The launcher does the same on its side, from plat_input_poll. Whichever
+ * process is pumping input owns the level, so the two never write over each
+ * other: the launcher stops polling while a game runs, and this stops when the
+ * game ends. */
+static int g_jack_was = -1;                /* last state written; -1 = never */
+static void gain_apply(void);
+
+static void gain_jack_poll(void)
+{
+	if (jack_present() == g_jack_was || g_level < 0) return;
+	gain_apply();
+}
+
 static void gain_apply(void)
 {
 	long v = level_to_raw(g_level);
 
+	g_jack_was = jack_present();
 	if (gain_io(&v, 1) < 0) return;
 
 	/* Zero has to cut the path, not just attenuate it. The control advertises
@@ -694,6 +796,7 @@ bool diatom_port_init(diatom_port_caps *out)
 	g_mixer_fd = open("/dev/snd/controlC0", O_RDWR);
 	g_disp_fd  = open("/dev/disp", O_RDWR);
 	mixer_defaults();
+	jack_open();
 	g_input_debug   = getenv("DIATOM_INPUT_DEBUG") != NULL;
 	g_present_debug = getenv("DIATOM_PRESENT_DEBUG") != NULL;
 
@@ -1328,6 +1431,11 @@ void diatom_port_input_poll(void)
 {
 	SDL_Event ev;
 	size_t i;
+
+	/* The jack, checked once a frame here for the same reason the launcher
+	 * checks it in plat_input_poll: whoever is pumping input owns the level,
+	 * and this stops being called the moment the game ends. */
+	gain_jack_poll();
 
 	while (SDL_PollEvent(&ev)) {
 		switch (ev.type) {
