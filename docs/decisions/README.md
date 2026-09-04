@@ -77,3 +77,4 @@ never started.
 | [0026](0026-achievements-on-the-launcher-protocol.md) | Achievements on the launcher protocol: the console is declared and the set is a file | Proposed |
 | [0027](0027-an-overlay-the-port-composites.md) | An overlay the port composites, because only one process can present | Proposed |
 | [0028](0028-turbo-is-a-property-of-a-binding.md) | Turbo is a property of a binding, and the host owns it | Accepted |
+| [0029](0029-audio-output-is-a-state.md) | Audio output is a state, owned by the launcher | Accepted |

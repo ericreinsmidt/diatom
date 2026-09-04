@@ -791,6 +791,13 @@ Two levers the spike discovered:
       instrument already existed - the per-display-mode line below it is
       per-frame and was never affected.
 
+- [x] **[OPEN]** **Where does audio go when the device has more than one
+      output?** → **[ADR-0029](decisions/0029-audio-output-is-a-state.md)**
+      *(Accepted)*. A fifth state on ADR-0020's plane: the launcher owns which
+      device, the port owns opening it, and a failed or lost sink falls back to
+      the default rather than ending the game. Raised by TortOS gaining a
+      working Bluetooth sink on 2026-09-03 with nothing to route to it.
+
 ---
 
 ## 8. Input
