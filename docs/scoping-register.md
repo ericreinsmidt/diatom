@@ -793,10 +793,17 @@ Two levers the spike discovered:
 
 - [x] **[OPEN]** **Where does audio go when the device has more than one
       output?** → **[ADR-0029](decisions/0029-audio-output-is-a-state.md)**
-      *(Accepted)*. A fifth state on ADR-0020's plane: the launcher owns which
-      device, the port owns opening it, and a failed or lost sink falls back to
-      the default rather than ending the game. Raised by TortOS gaining a
-      working Bluetooth sink on 2026-09-03 with nothing to route to it.
+      *(Superseded by 0030)*. A fifth state on ADR-0020's plane: the launcher
+      owns which device, the port owns opening it, and a failed or lost sink
+      falls back to the default rather than ending the game. Raised by TortOS
+      gaining a Bluetooth sink on 2026-09-03 with nothing to route to it.
+
+- [x] **[OPEN]** **Can SDL drive the sink it is handed?** →
+      **[ADR-0030](decisions/0030-audio-output-remeasured.md)** *(Accepted)*.
+      Not a `bluealsa:DEV=...` string - SDL opens it and never writes, and the
+      close never returns. A named PCM drains and closes in ~105 ms. 0029's
+      decision survives; three of its facts did not, and volume for a sink
+      returns as a third window (0..127, not inverted). Not implemented.
 
 ---
 
