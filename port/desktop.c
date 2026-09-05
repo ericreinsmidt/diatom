@@ -38,7 +38,12 @@ bool diatom_port_init(diatom_port_caps *out)
 {
 	SDL_AudioSpec want, have;
 
-	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_EVENTS) != 0) {
+	/* Audio is initialised SEPARATELY and is allowed to fail. A subsystem that
+	 * will not come up must not take the rest of the port with it - see the
+	 * open below for why silence beats refusing to start. Rolled into one
+	 * SDL_Init, a missing or busy audio device is indistinguishable from a
+	 * missing display and kills both. */
+	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) != 0) {
 		fprintf(stderr, "SDL_Init: %s\n", SDL_GetError());
 		return false;
 	}
@@ -69,14 +74,34 @@ bool diatom_port_init(diatom_port_caps *out)
 	want.format   = AUDIO_S16SYS;
 	want.channels = 2;
 	want.samples  = 1024;
-	g_audio = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
-	if (!g_audio) { fprintf(stderr, "SDL_OpenAudioDevice: %s\n", SDL_GetError()); return false; }
-	SDL_PauseAudioDevice(g_audio, 0);
+	/* NOT fatal. A port that cannot open a sound device can still put pixels
+	 * where the device wants them, and refusing to start costs far more than
+	 * silence does: Diatom is resident, so a failed open here leaves the
+	 * launcher with no emulator at all and every launch then pays the cold
+	 * cost (~1100 ms) instead of the warm one (~15 ms). That is the worst
+	 * outcome available and it happened by accident - see ADR-0029, which
+	 * needs this to be true before a sink can be chosen at runtime, since
+	 * anything settable while a game runs can fail while a game runs.
+	 *
+	 * capacity 0 is how the silence is reported rather than hidden: it turns
+	 * off dynamic rate control, which would otherwise read a permanently empty
+	 * queue as a permanent deficit and hold the resampler at its deviation
+	 * limit forever, correcting for a buffer that does not exist. */
+	if (SDL_InitSubSystem(SDL_INIT_AUDIO) == 0) {
+		g_audio = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
+		if (g_audio) SDL_PauseAudioDevice(g_audio, 0);
+	}
+	if (!g_audio)
+		fprintf(stderr, "audio unavailable (%s); continuing without sound\n",
+		        SDL_GetError());
 
 	out->surface_w          = WINDOW_W;
 	out->surface_h          = WINDOW_H;
-	out->audio_rate         = have.freq;
-	out->audio_buffer_frames = AUDIO_BUFFER_FRAMES;
+	/* `have` is untouched when the open failed, so the rate comes from what
+	 * was asked for: the resampler still needs a target to convert into,
+	 * and a zero here would divide. */
+	out->audio_rate         = g_audio ? have.freq : AUDIO_RATE;
+	out->audio_buffer_frames = g_audio ? AUDIO_BUFFER_FRAMES : 0;
 	out->present_blocks     = false;
 	return true;
 }
