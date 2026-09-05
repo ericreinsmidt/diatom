@@ -796,9 +796,73 @@ static void *flip_worker(void *arg)
 	return arg;
 }
 
-bool diatom_port_init(diatom_port_caps *out)
+/* ---------- the audio sink (ADR-0029) ------------------------------------- */
+
+/* What is open now. Empty means the default device; it is also what the host
+ * is told, so "" reads as "wherever this device sends sound by default" rather
+ * than as a name nobody recognises. */
+static char g_audio_dev[128];
+
+/* On ALSA a device is named by the environment, not by SDL's device list:
+ * SDL_GetAudioDeviceName enumerates PCMs SDL knows about, and a bluealsa sink
+ * configured in an asoundrc is not one of them. AUDIODEV is what SDL's ALSA
+ * backend reads, and it is how the sink was reached when this was measured on
+ * hardware (ADR-0029, finding 1).
+ *
+ * Closes first. Two opens of the same hardware PCM is the one thing ALSA will
+ * not do, and the failure looks like a device that is simply busy. */
+static bool audio_open(const char *name)
 {
 	SDL_AudioSpec want, have;
+
+	if (g_audio) { SDL_CloseAudioDevice(g_audio); g_audio = 0; }
+	if (name && *name) setenv("AUDIODEV", name, 1);
+	else               unsetenv("AUDIODEV");
+
+	SDL_memset(&want, 0, sizeof want);
+	want.freq     = AUDIO_RATE;
+	want.format   = AUDIO_S16SYS;
+	want.channels = 2;
+	want.samples  = 1024;
+
+	if (SDL_WasInit(SDL_INIT_AUDIO) == 0 && SDL_InitSubSystem(SDL_INIT_AUDIO) != 0)
+		return false;
+	/* allowed_changes 0: SDL hands back exactly this spec and converts behind
+	 * it, so a sink running at another rate never reaches the resampler and
+	 * caps.audio_rate stays true across a reopen. */
+	g_audio = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
+	if (!g_audio) return false;
+	SDL_PauseAudioDevice(g_audio, 0);
+	return true;
+}
+
+bool diatom_port_audio_set(const char *name, char *actual, size_t cap)
+{
+	bool ok = audio_open(name);
+
+	if (!ok) {
+		char msg[192];
+
+		snprintf(msg, sizeof msg, "audio: %s unavailable (%s); using the default",
+		         name && *name ? name : "the default device", SDL_GetError());
+		diatom_port_log(DIATOM_LOG_WARN, msg);
+		/* The default, and if even that will not open, silence - which the
+		 * write path already handles. Never a reason to stop. */
+		if (audio_open(NULL)) g_audio_dev[0] = '\0';
+	} else {
+		snprintf(g_audio_dev, sizeof g_audio_dev, "%s", name ? name : "");
+	}
+	diatom_port_audio_get(actual, cap);
+	return ok;
+}
+
+void diatom_port_audio_get(char *out, size_t cap)
+{
+	if (out && cap) snprintf(out, cap, "%s", g_audio_dev);
+}
+
+bool diatom_port_init(diatom_port_caps *out)
+{
 
 	g_mixer_fd = open("/dev/snd/controlC0", O_RDWR);
 	g_disp_fd  = open("/dev/disp", O_RDWR);
@@ -863,11 +927,6 @@ bool diatom_port_init(diatom_port_caps *out)
 	}
 	g_front = 0;
 
-	SDL_memset(&want, 0, sizeof want);
-	want.freq     = AUDIO_RATE;
-	want.format   = AUDIO_S16SYS;
-	want.channels = 2;
-	want.samples  = 1024;
 	/* NOT fatal. A port that cannot open a sound device can still put pixels
 	 * where the device wants them, and refusing to start costs far more than
 	 * silence does: Diatom is resident, so a failed open here leaves the
@@ -881,11 +940,7 @@ bool diatom_port_init(diatom_port_caps *out)
 	 * off dynamic rate control, which would otherwise read a permanently empty
 	 * queue as a permanent deficit and hold the resampler at its deviation
 	 * limit forever, correcting for a buffer that does not exist. */
-	if (SDL_InitSubSystem(SDL_INIT_AUDIO) == 0) {
-		g_audio = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
-		if (g_audio) SDL_PauseAudioDevice(g_audio, 0);
-	}
-	if (!g_audio)
+	if (!audio_open(NULL))
 		fprintf(stderr, "audio unavailable (%s); continuing without sound\n",
 		        SDL_GetError());
 
@@ -905,7 +960,7 @@ bool diatom_port_init(diatom_port_caps *out)
 		         g_vinfo.xres, g_vinfo.yres, g_finfo.line_length, g_pages,
 		         g_vinfo.red.offset, g_vinfo.green.offset, g_vinfo.blue.offset,
 		         g_vinfo.transp.offset, g_vinfo.transp.length,
-		         have.freq, g_joy ? SDL_JoystickName(g_joy) : "none");
+		         AUDIO_RATE, g_joy ? SDL_JoystickName(g_joy) : "none");
 		diatom_port_log(DIATOM_LOG_INFO, msg);
 	}
 
@@ -914,7 +969,7 @@ bool diatom_port_init(diatom_port_caps *out)
 	/* `have` is untouched when the open failed, so the rate comes from what
 	 * was asked for: the resampler still needs a target to convert into,
 	 * and a zero here would divide. */
-	out->audio_rate          = g_audio ? have.freq : AUDIO_RATE;
+	out->audio_rate          = AUDIO_RATE;
 	out->audio_buffer_frames = g_audio ? AUDIO_BUFFER_FRAMES : 0;
 	out->present_blocks      = false;
 	return true;
@@ -1382,6 +1437,22 @@ size_t diatom_port_audio_write(const int16_t *frames, size_t n)
 	 * Clamping rather than refusing the batch outright loses less: the frames
 	 * that do not fit are dropped either way, and there is no reason to discard
 	 * the ones that would have. */
+	/* A sink can die under the port - a headset switched off, or carried out
+	 * of range. SDL reports the device STOPPED; falling back happens here
+	 * rather than in a poll of its own because this already runs every frame,
+	 * and the host finds out through diatom_port_audio_get, which is the only
+	 * way it can (ADR-0007: the port cannot announce anything).
+	 *
+	 * Only when a name was asked for. If the DEFAULT device dies there is
+	 * nowhere better to go, and retrying it every frame would be a reopen
+	 * storm in place of silence. */
+	if (g_audio && g_audio_dev[0] &&
+	    SDL_GetAudioDeviceStatus(g_audio) == SDL_AUDIO_STOPPED) {
+		diatom_port_log(DIATOM_LOG_WARN,
+		                "audio: the sink went away; falling back to the default");
+		g_audio_dev[0] = '\0';
+		audio_open(NULL);
+	}
 	if (!g_audio || !frames || !n) return 0;
 	queued = diatom_port_audio_queued();
 	room   = queued >= (size_t)AUDIO_BUFFER_FRAMES

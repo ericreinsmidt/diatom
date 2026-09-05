@@ -170,6 +170,38 @@ void diatom_port_present_stop(diatom_park park);
 size_t diatom_port_audio_write(const int16_t *frames, size_t n);
 size_t diatom_port_audio_queued(void);
 
+/* WHERE the sound goes, named the way this port's audio system names a device -
+ * an ALSA device string on the Brick, an SDL device name on the desktop.
+ *
+ * ADR-0029: the host says WHICH, the port knows HOW. The string crosses here
+ * exactly as a core path does, and the port never learns what kind of thing it
+ * names. "bluetooth" is not a word this interface knows, for the same reason
+ * Diatom keeps no core list - which output to use is the host application's
+ * decision, and a port that answered it would be holding a device list.
+ *
+ * NULL or empty is the default device.
+ *
+ * FALLS BACK rather than failing. A named device that will not open leaves the
+ * port on the default and still running, because a sink that can be set while a
+ * game runs can fail while a game runs, and ending the game is never the better
+ * answer. Returns true when it opened what was asked for and false when it fell
+ * back, filling `actual` either way - the host reports where the sound IS, not
+ * where it asked for it to be.
+ *
+ * Reopening does not change caps.audio_rate: the port asks SDL for a fixed rate
+ * and lets it convert, so a sink that runs at another rate is the port's problem
+ * and never the resampler's. */
+bool diatom_port_audio_set(const char *name, char *actual, size_t cap);
+
+/* Where the sound actually is now.
+ *
+ * Polled, like the level pair below and for the same reason: the port must not
+ * know the launcher protocol exists (ADR-0007), so it cannot announce anything.
+ * A sink that dies under the port - a headset switched off, or walking out of
+ * range - is noticed here, because the port falls back on its own and the answer
+ * changes. The host reads it beside the input bitfield it already polls. */
+void diatom_port_audio_get(char *out, size_t cap);
+
 void     diatom_port_input_poll(void);
 uint32_t diatom_port_input_state(void);
 
