@@ -68,7 +68,20 @@ static bool audio_open(const char *name)
 
 bool diatom_port_audio_set(const char *name, char *actual, size_t cap)
 {
-	bool ok = audio_open(name);
+	const char *want = name ? name : "";
+	bool ok;
+
+	/* Already there. A write on the state plane is idempotent, so re-stating
+	 * the current device must not close and reopen a working sink: that drops
+	 * whatever is queued and costs a fresh A2DP stream setup. Repeated writes
+	 * are not hypothetical - a launcher that recomputes its routing on a timer
+	 * sends one whenever it thinks the answer might have moved. */
+	if (g_audio && !strcmp(want, g_audio_dev)) {
+		diatom_port_audio_get(actual, cap);
+		return true;
+	}
+
+	ok = audio_open(name);
 
 	if (!ok) {
 		char msg[192];

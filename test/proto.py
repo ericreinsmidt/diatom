@@ -111,6 +111,18 @@ def main():
         d.send("SETAUDIO\tdevice=")
         ck(d.line("AUDIO") == "AUDIO\tdevice=", "an empty device means the default")
 
+        # Idempotent. A write on the state plane re-states as often as a
+        # launcher likes, and re-stating the CURRENT device must not close and
+        # reopen a working sink - that drops whatever is queued and costs a
+        # fresh stream setup. Measured 2026-09-05: a launcher flapping between
+        # two routes reopened the device nine times in one game and dropped
+        # 407236 audio frames. (That the queue survives is a port-level
+        # property this cannot see; here it only has to keep answering.)
+        d.send("SETAUDIO\tdevice=")
+        r = d.line()
+        ck(r == "AUDIO\tdevice=", "re-stating the same device answers the same")
+        ck(r is not None and not r.startswith("ERROR"), "and is not an error")
+
         # ADR-0009's forward-compatibility promise, which is what lets a verb
         # be added at all. If this ever fails, adding one stops being safe.
         d.send("NOSUCHVERB\tdevice=x")
