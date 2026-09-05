@@ -1,9 +1,17 @@
 # 0029. Audio output is a state, owned by the launcher
 
-- **Status:** Accepted
+- **Status:** Superseded by [0030](0030-audio-output-remeasured.md)
 - **Date:** 2026-09-03
 - **Supersedes:** -
-- **Superseded by:** -
+- **Superseded by:** [0030](0030-audio-output-remeasured.md)
+
+> Its decision survives and is implemented; three of its facts did not. Finding
+> (1) concluded that in-process ALSA can drive bluealsa, and SDL demonstrably
+> cannot drive a bluealsa device string - only a named PCM. Finding (4) says
+> Diatom holds the hardware PCM exclusively, and it holds the dmix-backed
+> default. The "Not in scope" note rules out volume for a sink on reasoning that
+> does not hold, because the headset's own control is reachable. Left unedited,
+> because what was believed and why is the record.
 
 Extends [ADR-0020](0020-shared-state-plane.md), which is unchanged: this adds a
 fifth state to the plane it defines and bends none of its rules.
