@@ -89,7 +89,7 @@ ifeq ($(PORT),brick)
   LDFLAGS += -lSDL2 -lm -ldl -lpthread
 endif
 
-.PHONY: all clean check check-seam check-register check-register-diff \
+.PHONY: all clean check check-seam check-proto check-register check-register-diff \
         check-corefacts check-cheevos stub run-stub tools probes
 
 all: $(BIN)
@@ -177,7 +177,7 @@ $(BUILD)/%.o: %.c
 # fails when it is broken. check-seam has held since day one for exactly that
 # reason; the register drifted 418 -> 992 lines in three days because nothing
 # ever complained.
-check: check-seam check-register check-corefacts check-rates check-cheevos
+check: check-seam check-register check-corefacts check-rates check-cheevos check-proto
 
 # Does a RetroAchievements address reach the byte it names? Offline, needs no
 # core and no ROM, and links only cheevos.c plus the vendored runtime - so it
@@ -204,6 +204,17 @@ $(CHEEVOS_TEST): test/cheevos_test.c src/cheevos.c $(RC_OBJ)
 conform-check: $(BIN)
 	@python3 test/conform.py
 .PHONY: conform-check
+
+# The state plane is a promise to a launcher in ANOTHER repository, and no
+# compiler here can see it: a verb can be in the enum, parsed and dispatched and
+# still never reach a socket. So this one speaks the protocol.
+#
+# It is in `check` despite starting a process, because it costs about a second
+# and needs no core, no ROM and no network - and it SKIPS rather than builds
+# when build/desktop/diatom is absent, so `check` keeps its promise of being
+# instant and offline for someone who has not built yet.
+check-proto:
+	@python3 test/proto.py
 
 check-register:
 	@python3 tools/check-register.py

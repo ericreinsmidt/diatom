@@ -817,6 +817,63 @@ static void levels_emit_all(void)
 			level_emit(k, idx, cnt);
 }
 
+/* ---- audio output, ADR-0029 --------------------------------------------- */
+
+/* What was last reported, so a change can be told from a restatement. Empty is
+ * a real value here - the default device - so `said` carries "reported at all"
+ * rather than overloading the empty string with it. */
+static char g_audio_said[128];
+static bool g_audio_ever;
+
+/* Restated on the next tick rather than assumed to be still known. Called at
+ * game start beside levels_forget, for the same reason: a launcher that has
+ * just connected, or just launched, should be told where sound is going
+ * without having to ask. Unlike the levels there is no invalidate to pair with
+ * it - the port's sink can only be moved through SETAUDIO, which Diatom
+ * handles itself, so it cannot change behind this process's back. */
+static void audio_forget(void)
+{
+	g_audio_ever = false;
+	g_audio_said[0] = '\0';
+}
+
+static void audio_emit(void)
+{
+	char dev[128];
+
+	diatom_port_audio_get(dev, sizeof dev);
+	snprintf(g_audio_said, sizeof g_audio_said, "%s", dev);
+	g_audio_ever = true;
+	diatom_proto_send("AUDIO\tdevice=%s", dev);
+}
+
+/* Polled beside the levels, and for the identical reason: the port cannot send
+ * anything itself (ADR-0007), so this is the whole path by which a sink that
+ * died under it - a headset switched off mid-game - reaches a launcher that is
+ * not drawing and cannot see it. */
+static void audio_tick(void)
+{
+	char dev[128];
+
+	if (!diatom_proto_connected()) return;
+	diatom_port_audio_get(dev, sizeof dev);
+	if (g_audio_ever && !strcmp(dev, g_audio_said)) return;
+	audio_emit();
+}
+
+/* No ERROR branch, deliberately. A device that will not open is not a refusal:
+ * the port falls back, keeps the game running, and AUDIO then says where the
+ * sound actually ended up. Answering with an error as well would describe the
+ * same event twice and invite a launcher to treat it as fatal, which is the
+ * behaviour ADR-0029 exists to remove. */
+static void audio_set(const diatom_msg *m)
+{
+	char actual[128];
+
+	diatom_port_audio_set(m->device, actual, sizeof actual);
+	audio_emit();
+}
+
 static void level_set(const diatom_msg *m)
 {
 	int k, idx, cnt;
@@ -880,6 +937,8 @@ static bool state_plane_msg(const diatom_msg *m)
 		return true;
 	case DIATOM_MSG_LEVELS:   levels_emit_all(); return true;
 	case DIATOM_MSG_SETLEVEL: level_set(m);      return true;
+	case DIATOM_MSG_AUDIO:    audio_emit();      return true;
+	case DIATOM_MSG_SETAUDIO: audio_set(m);      return true;
 	case DIATOM_MSG_DISPLAY:
 		/* apply_display is what emits, so ask it to restate the current one
 		 * rather than growing a second path that could disagree with it. */
@@ -918,6 +977,7 @@ static int run_session_inner(const diatom_session *sn)
 	 * levels actually are without being asked. ADR-0020. */
 	diatom_input_reset_map();
 	levels_forget();
+	audio_forget();
 	diatom_port_level_invalidate();
 	long frames = 0, geom_changes = 0, resyncs = 0;
 	size_t q_min = (size_t)-1, q_max = 0;
@@ -1270,6 +1330,7 @@ static int run_session_inner(const diatom_session *sn)
 		}
 
 		levels_tick();
+		audio_tick();
 
 		buttons = diatom_port_input_state();
 		idle_note_input(buttons != 0);

@@ -139,6 +139,8 @@ typedef enum {
 	DIATOM_MSG_OVERLAY,    /* composite `path` over the game for `count` ms */
 	DIATOM_MSG_CHEEVOS,    /* report the achievement set and what has fired */
 	DIATOM_MSG_SETCHEEVOS, /* load a set from `path`; empty unloads */
+	DIATOM_MSG_AUDIO,      /* report where sound is going */
+	DIATOM_MSG_SETAUDIO,   /* send it to `device`; empty means the default */
 	DIATOM_MSG_HANGUP      /* launcher went away; the game keeps running */
 } diatom_msg_kind;
 
@@ -164,6 +166,10 @@ typedef struct {
 	char value[128];       /* SETOPT */
 	char map[512];         /* SETMAP */
 	char lkind[32];        /* SETLEVEL: volume | brightness */
+	/* SETAUDIO, ADR-0029. An output device named the way the PORT names one,
+	 * passed straight through: the host's business is which, the port's is
+	 * how, and nothing in between reads it. Empty means the default. */
+	char device[128];
 	char dmode[32];        /* SETDISPLAY: a name from diatom_modes[] */
 	char dfilter[16];      /* SETDISPLAY: nearest | sharp */
 	int  index, count;     /* SETLEVEL: `count` is POSITIONS, not a max index.

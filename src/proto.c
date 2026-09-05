@@ -176,6 +176,8 @@ static void parse_line(char *line, diatom_msg *out)
 	else if (!strcmp(field, "OVERLAY"))    out->kind = DIATOM_MSG_OVERLAY;
 	else if (!strcmp(field, "CHEEVOS"))    out->kind = DIATOM_MSG_CHEEVOS;
 	else if (!strcmp(field, "SETCHEEVOS")) out->kind = DIATOM_MSG_SETCHEEVOS;
+	else if (!strcmp(field, "AUDIO"))      out->kind = DIATOM_MSG_AUDIO;
+	else if (!strcmp(field, "SETAUDIO"))   out->kind = DIATOM_MSG_SETAUDIO;
 	else {
 		log_(DIATOM_LOG_WARN, "proto: ignoring unknown verb '%s'", field);
 		out->kind = DIATOM_MSG_NONE;
@@ -188,7 +190,9 @@ static void parse_line(char *line, diatom_msg *out)
 		if (!eq) continue;
 		*eq = '\0';
 		v = eq + 1;
-		if      (!strcmp(field, "core")) snprintf(out->core, sizeof out->core, "%s", v);
+		if      (!strcmp(field, "device"))
+			snprintf(out->device, sizeof out->device, "%s", v);
+		else if (!strcmp(field, "core")) snprintf(out->core, sizeof out->core, "%s", v);
 		else if (!strcmp(field, "rom"))  snprintf(out->rom,  sizeof out->rom,  "%s", v);
 		/* ADR-0017. A key ADR-0009 did not define, which costs nothing to add
 		 * because unknown keys are ignored: an older Diatom drops it and fails
@@ -302,7 +306,14 @@ diatom_msg_kind diatom_proto_poll(diatom_msg *out, int timeout_ms, bool running)
 		 * `a~3` as a button name nobody has and rejects the whole map per
 		 * ADR-0020, so an old pairing loses turbo rather than getting a wrong
 		 * map - but a launcher should not have to discover that by trying. */
-		diatom_proto_send("READY\tproto=3\tstate=%s", running ? "running" : "idle");
+		/* proto=4 adds ADR-0029's audio output. Purely additive, so the
+		 * ignore-unknown promise covers an old launcher completely - the bump
+		 * is for the NEW one, which needs to know whether asking is worth it.
+		 * Without it, a launcher that sent SETAUDIO to a Diatom without the
+		 * state would get silence back and could not tell that from a sink
+		 * that failed to open, which is precisely the confusion the fallback
+		 * exists to prevent. */
+		diatom_proto_send("READY\tproto=4\tstate=%s", running ? "running" : "idle");
 		return DIATOM_MSG_NONE;
 	}
 
