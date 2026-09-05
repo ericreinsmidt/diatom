@@ -1629,6 +1629,10 @@ void diatom_port_level_invalidate(void)
 {
 	g_level  = -1;
 	g_bright = -1;
+	/* And the jack, for the reason in the header: a transition that happened
+	 * while the launcher was driving is invisible here, so the remembered
+	 * state is a memory of a world this process was not watching. */
+	g_jack_was = -1;
 }
 
 /* `*count` is positions, not a maximum index, so it is one MORE than the

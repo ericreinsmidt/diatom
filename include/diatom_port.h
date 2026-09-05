@@ -227,13 +227,26 @@ typedef enum {
 	DIATOM_LEVEL_COUNT
 } diatom_level_kind;
 
-/* Forget any cached level and re-read the hardware on the next get.
+/* Forget everything the port remembers about the output state, and re-read the
+ * hardware on the next get.
  *
  * Needed because Diatom is RESIDENT: the port caches its level to avoid an
  * ioctl per frame, and the launcher owns levels whenever Diatom is not
  * presenting (ADR-0020). So between games, and across a menu, the value in the
  * port can be overwritten underneath it. Without this the first press after a
- * handover steps from a level nobody is at. */
+ * handover steps from a level nobody is at.
+ *
+ * That includes the LAST HEADPHONE JACK STATE the port acted on, and forgetting
+ * it is not an extra: a port re-maps the level between the speaker and
+ * headphone windows on a transition IT observes, and it observes none while the
+ * launcher is driving. A cable pulled out between games therefore leaves a
+ * headphone-window value in the register that neither side re-maps, because
+ * each sees its own remembered state already agreeing with the hardware. On
+ * this device that reads as a working speaker at almost no volume. Measured
+ * 2026-09-05: the register held 29 with a speaker window whose quiet end is 39.
+ *
+ * So this is called at every handover, and the next poll re-applies rather than
+ * trusting a memory formed while something else was driving. */
 void diatom_port_level_invalidate(void);
 
 bool diatom_port_level_get(diatom_level_kind kind, int *index, int *count);
