@@ -132,7 +132,8 @@ endif
 #
 #   tools/brick-make.sh probes
 PROBE_SRC := savprobe wprobe sigprobe pantest holdfb warmprobe protodrive blitprobe
-PROBES    := $(addprefix $(TOOLS_DIR)/,$(PROBE_SRC)) $(TOOLS_DIR)/eglpresent
+PROBES    := $(addprefix $(TOOLS_DIR)/,$(PROBE_SRC)) $(TOOLS_DIR)/eglpresent \
+             $(TOOLS_DIR)/btaudio
 
 probes: $(PROBES)
 
@@ -145,6 +146,14 @@ $(TOOLS_DIR)/%: tools/%.c
 	$(CC) $(TOOL_CFLAGS) -o $@ $<
 
 $(TOOLS_DIR)/eglpresent: tools/eglpresent.c
+	@mkdir -p $(TOOLS_DIR)
+	$(CC) $(TOOL_CFLAGS) $(CFLAGS) -o $@ $< $(LDFLAGS)
+
+# Does SDL's audio path drive a named ALSA sink on this device? The frontend
+# opens a bluealsa PCM cleanly and it then carries nothing, while aplay to the
+# same device works - so this is the smallest thing that separates SDL from the
+# sink. It also times the close, which is where the frame loop hung.
+$(TOOLS_DIR)/btaudio: tools/btaudio.c
 	@mkdir -p $(TOOLS_DIR)
 	$(CC) $(TOOL_CFLAGS) $(CFLAGS) -o $@ $< $(LDFLAGS)
 
