@@ -12,6 +12,7 @@
  * directory on the include path, and this is the form SDL documents. */
 #include <SDL.h>
 #include <stdio.h>
+#include <pthread.h>
 #include <string.h>
 
 #include "diatom_port.h"
@@ -39,6 +40,42 @@ static uint32_t      g_buttons;
 /* Empty means the default device. */
 static char g_audio_dev[128];
 
+/* Closing an SDL audio device JOINS its audio thread, and that thread can be
+ * blocked inside a write to a sink that has stopped draining - a Bluetooth
+ * headset carried out of range, or a bluealsa transport that is alive but no
+ * longer consuming. The join then never returns.
+ *
+ * That is not theoretical. On 2026-09-05 the recovery below called this from
+ * diatom_port_audio_write, which runs every frame: SDL's audio thread was stuck
+ * on a stalled A2DP PCM, the close waited for it, and Diatom's main thread
+ * parked in futex_wait_queue_me with the emulation still running behind a
+ * frozen picture. The game had already dropped 8353754 audio frames by then,
+ * so the very condition the recovery exists to handle is the one that makes
+ * closing dangerous.
+ *
+ * So the close is handed to a detached thread. If it wedges, one thread wedges
+ * and the game keeps running; SDL is happy to have the replacement device open
+ * while the old one is still being torn down. A leaked thread per sink death is
+ * a bad trade only against a close that always returns, and this one does not.
+ */
+static void *audio_close_worker(void *p)
+{
+	SDL_CloseAudioDevice((SDL_AudioDeviceID)(uintptr_t)p);
+	return NULL;
+}
+
+static void audio_close_async(SDL_AudioDeviceID dev)
+{
+	pthread_t t;
+
+	if (!dev) return;
+	if (pthread_create(&t, NULL, audio_close_worker,
+	                   (void *)(uintptr_t)dev) == 0)
+		pthread_detach(t);
+	/* If the thread will not start, leave the device open rather than closing
+	 * it here: a leaked device is recoverable, a hung frame loop is not. */
+}
+
 /* Here a name is an SDL device name - what SDL_GetAudioDeviceName returns -
  * rather than the Brick's ALSA string. That difference IS the seam: the host
  * passes a name it got from its own configuration and never has to know which
@@ -47,7 +84,7 @@ static bool audio_open(const char *name)
 {
 	SDL_AudioSpec want, have;
 
-	if (g_audio) { SDL_CloseAudioDevice(g_audio); g_audio = 0; }
+	if (g_audio) { audio_close_async(g_audio); g_audio = 0; }
 
 	SDL_memset(&want, 0, sizeof want);
 	want.freq     = AUDIO_RATE;
