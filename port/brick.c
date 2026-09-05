@@ -841,6 +841,19 @@ static bool audio_open(const char *name)
 	g_audio = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
 	if (!g_audio) return false;
 	SDL_PauseAudioDevice(g_audio, 0);
+	/* What SDL actually negotiated, not what was asked for. A sink can open
+	 * cleanly and then not carry sound, and when that happened on 2026-09-05
+	 * there was no way to tell from outside whether SDL had agreed to
+	 * something the device could not service. */
+	{
+		char msg[192];
+
+		snprintf(msg, sizeof msg,
+		         "audio: opened %s at %d Hz, %d ch, %d frames/period, %u byte buffer",
+		         name && *name ? name : "the default device",
+		         have.freq, have.channels, have.samples, have.size);
+		diatom_port_log(DIATOM_LOG_INFO, msg);
+	}
 	return true;
 }
 

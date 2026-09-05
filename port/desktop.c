@@ -76,6 +76,19 @@ static bool audio_open(const char *name)
 	                              &want, &have, 0);
 	if (!g_audio) return false;
 	SDL_PauseAudioDevice(g_audio, 0);
+	/* What SDL actually negotiated, not what was asked for. A device can open
+	 * cleanly and then carry no sound - that is exactly what a bluealsa sink
+	 * did on 2026-09-05 - and without this there is no way to tell from
+	 * outside whether SDL agreed to something the device cannot service. */
+	{
+		char msg[192];
+
+		snprintf(msg, sizeof msg,
+		         "audio: opened %s at %d Hz, %d ch, %d frames/period, %u byte buffer",
+		         name && *name ? name : "the default device",
+		         have.freq, have.channels, have.samples, have.size);
+		diatom_port_log(DIATOM_LOG_INFO, msg);
+	}
 	return true;
 }
 
