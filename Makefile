@@ -89,7 +89,7 @@ ifeq ($(PORT),brick)
   LDFLAGS += -lSDL2 -lm -ldl -lpthread
 endif
 
-.PHONY: all clean check check-seam check-proto check-register check-register-diff \
+.PHONY: all clean check check-seam check-proto check-port check-register check-register-diff \
         check-corefacts check-cheevos stub run-stub tools probes
 
 all: $(BIN)
@@ -177,7 +177,7 @@ $(BUILD)/%.o: %.c
 # fails when it is broken. check-seam has held since day one for exactly that
 # reason; the register drifted 418 -> 992 lines in three days because nothing
 # ever complained.
-check: check-seam check-register check-corefacts check-rates check-cheevos check-proto
+check: check-seam check-register check-corefacts check-rates check-cheevos check-proto check-port
 
 # Does a RetroAchievements address reach the byte it names? Offline, needs no
 # core and no ROM, and links only cheevos.c plus the vendored runtime - so it
@@ -215,6 +215,22 @@ conform-check: $(BIN)
 # instant and offline for someone who has not built yet.
 check-proto:
 	@python3 test/proto.py
+
+# The port's audio contract: falls back, is idempotent, and ALWAYS returns.
+# The last one is the reason this exists - a close that joins a stuck audio
+# thread is a hang, not a wrong answer, so the test arms an alarm and lets the
+# timeout be the failure. Driven against port/desktop.c with SDL's dummy
+# drivers: no device, no display, no sound.
+PORT_TEST := $(BUILD)/port-test
+
+check-port: $(PORT_TEST)
+	@./$(PORT_TEST)
+
+$(PORT_TEST): test/port_test.c port/desktop.c include/diatom_port.h
+	@mkdir -p $(BUILD)
+	$(CC) -std=gnu11 -Wall -Wextra -Wno-unused-parameter -O1 -g \
+	      -Iinclude -Isrc -o $@ test/port_test.c port/desktop.c \
+	      $(SDL_CFLAGS) $(SDL_LIBS)
 
 check-register:
 	@python3 tools/check-register.py

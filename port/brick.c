@@ -804,54 +804,26 @@ static void *flip_worker(void *arg)
 static char g_audio_dev[128];
 
 /* Closing an SDL audio device JOINS its audio thread, and that thread can be
- * blocked inside a write to a sink that has stopped draining - a Bluetooth
- * headset carried out of range, or a bluealsa transport that is alive but no
- * longer consuming. The join then never returns.
+ * blocked writing to a sink that has stopped draining. So this call can fail to
+ * return, and on 2026-09-05 a stalled A2DP sink did exactly that.
  *
- * That is not theoretical. On 2026-09-05 the recovery below called this from
- * diatom_port_audio_write, which runs every frame: SDL's audio thread was stuck
- * on a stalled A2DP PCM, the close waited for it, and Diatom's main thread
- * parked in futex_wait_queue_me with the emulation still running behind a
- * frozen picture. The game had already dropped 8353754 audio frames by then,
- * so the very condition the recovery exists to handle is the one that makes
- * closing dangerous.
+ * The obvious fix - close on a detached thread - was tried and REVERTED the
+ * same day. SDL is not safe against opening a device while a close of another
+ * is in flight: test/port_test.c fails three ways with it, the first being that
+ * the fallback open after a refused device stops working. A frontend that
+ * cannot reopen its audio is worse than one that can hang on a dead headset.
  *
- * So the close is handed to a detached thread. If it wedges, one thread wedges
- * and the game keeps running; SDL is happy to have the replacement device open
- * while the old one is still being torn down. A leaked thread per sink death is
- * a bad trade only against a close that always returns, and this one does not.
+ * The hang is also not really here. The frame loop calls SDL_QueueAudio and
+ * SDL_GetQueuedAudioSize every frame, and those take the same device lock the
+ * audio thread holds while it writes - so a stalled sink stops the loop whether
+ * or not anything closes. Fixing that means not letting the write stall, which
+ * is the sink question, not the teardown question.
  */
-static void *audio_close_worker(void *p)
-{
-	SDL_CloseAudioDevice((SDL_AudioDeviceID)(uintptr_t)p);
-	return NULL;
-}
-
-static void audio_close_async(SDL_AudioDeviceID dev)
-{
-	pthread_t t;
-
-	if (!dev) return;
-	if (pthread_create(&t, NULL, audio_close_worker,
-	                   (void *)(uintptr_t)dev) == 0)
-		pthread_detach(t);
-	/* If the thread will not start, leave the device open rather than closing
-	 * it here: a leaked device is recoverable, a hung frame loop is not. */
-}
-
-/* On ALSA a device is named by the environment, not by SDL's device list:
- * SDL_GetAudioDeviceName enumerates PCMs SDL knows about, and a bluealsa sink
- * configured in an asoundrc is not one of them. AUDIODEV is what SDL's ALSA
- * backend reads, and it is how the sink was reached when this was measured on
- * hardware (ADR-0029, finding 1).
- *
- * Closes first. Two opens of the same hardware PCM is the one thing ALSA will
- * not do, and the failure looks like a device that is simply busy. */
 static bool audio_open(const char *name)
 {
 	SDL_AudioSpec want, have;
 
-	if (g_audio) { audio_close_async(g_audio); g_audio = 0; }
+	if (g_audio) { SDL_CloseAudioDevice(g_audio); g_audio = 0; }
 	if (name && *name) setenv("AUDIODEV", name, 1);
 	else               unsetenv("AUDIODEV");
 
