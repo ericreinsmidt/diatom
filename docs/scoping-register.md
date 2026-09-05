@@ -587,6 +587,29 @@ Two amendments ADR-0007 makes to the table above:
       row cache made it 2.1-2.3x faster. The hardware scaler was measured
       *unnecessary* rather than rejected on taste: the blit was never
       write-bound, framebuffer memory and heap both at 418 MB/s.
+- [ ] **[OPEN]** **GBA drawn twice, left and right halves.** Reported
+      2026-08-31 on Sigma Star Saga while cycling display modes, after a card
+      wipe. **Not reproduced** - every mode renders correctly, halves measurably
+      different. Nothing in the scaler explains it, and these were ruled out:
+
+      - map index overflow: `diatom_tap` is `{ int idx; int w; }`, no 8-bit wrap
+      - pitch misread: `cache_row` does `src + row*pitch` in BYTES and reads
+        `src_w` PIXELS, so the units are right
+      - stale maps: `ensure_maps` rebuilds on src, dst and filter
+      - panel wrap: the blit clamps x1 to xres and the fb has no horizontal
+        virtual space (stride 4096 = 1024 * 4)
+      - a cross-thread race: SETDISPLAY is handled by `diatom_proto_poll` AFTER
+        present on the same thread, so maps cannot be freed under a blit
+
+      What was actually wrong is that it left no trace: `present:` logged only
+      on a dst change while `ensure_maps` also rebuilds on src w/h and filter,
+      so a mid-run geometry change rebuilt them silently. Fixed - it fires on
+      any of the three and prints pitch and format.
+
+      Measured while doing it: mGBA reports **pitch 512 for a 240-wide frame**,
+      a padded buffer, legal and handled. Only a stride SHORTER than the width
+      could double a row. Next occurrence will have a log line saying what the
+      port was handed.
 - [ ] **[LATER]** Shaders/overlays - **a one-word decision waiting on taste,
       not on facts.** The facts: UI belongs to the launcher
       ([ADR-0009](decisions/0009-launcher-protocol.md)); the on-screen overlay
@@ -1160,6 +1183,20 @@ pad attached, which is why the real pad has a Mode switch.
       before EXIT. Verified on hardware: two Contra sessions, the second
       resuming the first's state, artifacts at TortOS's exact paths.
 - [ ] **[LB]** Rewind: support or drop? Real RAM cost on a 1GB device.
+- [ ] **[OPEN]** **NGPC has no battery saves, only states.** Measured
+      2026-09-01 on Dark Arms and Metal Slug - 1st Mission, both of which save
+      on real hardware: `mednafen_ngp` reports `retro_get_memory_size(SAVE_RAM)`
+      as **0**, so Diatom logs "no battery in this game" and writes no `.srm`.
+      The core writes nothing of its own either - nothing appeared under
+      `Saves/` after a session. Not player-visible today, because autosave
+      writes a state on every exit; it bites only when someone loads an older
+      manual slot, which rewinds the cartridge save with everything else.
+
+      Open before this is called settled: **does RACE expose SAVE_RAM?** It is
+      the other NGP/NGPC core, equally GPLv2 and equally on the buildbot, passed
+      over for Beetle NeoPop on accuracy grounds when saves were not yet known
+      to differ. The only way to find out is to point a host at it and launch
+      the same two carts.
 - [x] **[OPEN]** **Zipped content loads** - one ROM per archive, extracted by
       the host (largest entry, stored or deflate, zlib by dlopen so nothing
       links it); need_fullpath cores get it staged to tmpfs. Found by the
@@ -1510,6 +1547,29 @@ operation never occurs.
 
       Wants a device-side hash check that runs before any measurement is
       believed, not a note telling people to be careful.
+- [ ] **[DEFERRED]** **The Pocket cores are measured nowhere.** A host ships
+      `mednafen_ngp` for both Pocket shelves; `CORES.md` pins neither it nor a
+      row in `core-facts.md`, so those two systems are the only ones whose core
+      is unpinned and whose numbers live in a log line. Consistent rather than
+      broken - `check-corefacts.py` fails on "CORES.md pins X but core-facts.md
+      never measured it", so pinning without measuring would correctly break
+      `make check` - but the matrix stops at nine systems.
+
+      What is known, measured 2026-09-01 from `mednafen_ngp` sha256 a2015668 and
+      verified identical on device and host: 160x152 base and max, aspect
+      1.0526, 60.2500 fps, 44100 Hz. Deliberately NOT hand-written into
+      core-facts.md, which says "generated, do not edit".
+
+      **Deferred 2026-09-01, blocked on ROMs rather than work.**
+      `tools/corefacts.sh` re-measures every row and six of its ten fixtures are
+      absent from the test set. The exposure this would catch - a core changing
+      under a measurement - is already covered for this core by a host pinning
+      it by sha256, verified byte-identical on the card. What is missing is
+      completeness, and nothing depends on the row.
+
+      **Trigger: swapping either Pocket core.** The RACE question in §9 is the
+      likely cause. Nothing would report that geometry, fps or rate had moved,
+      so measure before the swap lands.
 - [x] **[OPEN]** C standard and toolchain →
       **[ADR-0012](decisions/0012-independent-toolchain.md)** *(Accepted)*.
       `gnu11`, and Diatom builds its own pinned cross-toolchain rather than
@@ -1522,11 +1582,3 @@ operation never occurs.
       twice. A third target arrives with the Miniloong port, which is [NOT
       PLANNED] (§4).
 
----
-
-## Open questions needing Eric, not analysis
-
-1. What systems are actually on your card - Brick and Miniloong?
-2. What do the controls physically allow on each device?
-3. Same curation on both devices, or different per device?
-4. Is integer-scale-only a principle, or a Brick luxury?
