@@ -92,7 +92,14 @@ endif
 .PHONY: all clean check check-seam check-proto check-port check-register check-register-diff \
         check-corefacts check-cheevos stub run-stub tools probes hooks
 
-# A worktree is a checkout of TRACKED files, so CLAUDE.md stays behind in the
+all: $(BIN)
+
+# BELOW `all`, not above it: the first target in a makefile is the default
+# goal, and putting this at the top quietly made `make` mean `make hooks`.
+# It runs git, which the build container has no copy of, so the device build
+# failed with "git: No such file or directory" and nothing pointed at why.
+#
+# A worktree is a checkout of TRACKED files of TRACKED files, so CLAUDE.md stays behind in the
 # main tree and a worktree session starts without the working agreement at all.
 # git runs post-checkout after `git worktree add`, and hooks come from the
 # shared common dir, so this is a one-time install per clone.
@@ -100,7 +107,6 @@ hooks:
 	git config core.hooksPath tools/hooks
 	@echo "hooks: post-checkout will copy CLAUDE.md into new worktrees"
 
-all: $(BIN)
 
 # Measurement instruments (tools/). Not part of the frontend, never linked into
 # it, and deliberately not built by `all`. Cores and ROMs are supplied locally;
