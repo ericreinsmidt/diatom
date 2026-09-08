@@ -74,6 +74,10 @@ void diatom_core_stop(diatom_core *c);
  * repeat launch skips dlopen and retro_init. Never unloaded. */
 diatom_core *diatom_core_resident(const char *path);
 int          diatom_core_resident_count(void);
+/* Map every *_libretro.so in `dir`, returning how many are now resident. For
+ * the boot path: it costs less than reading them to warm the cache did, and
+ * leaves the dynamic linker's work done as well. */
+int          diatom_core_premap(const char *dir);
 
 /* env.c */
 void diatom_env_bind(diatom_core *c, diatom_policy *p, diatom_port_caps *caps);

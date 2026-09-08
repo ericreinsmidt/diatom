@@ -463,6 +463,7 @@ static void usage(void)
 		"              [--firmware <name>]  required in --system, checked first\n"
 		"              [--frames <n>] [--shot <file.bmp>] [--preview-on-exit <file.bmp>]\n"
 		"              [--socket <path>]   launcher protocol, ADR-0009\n"
+		"              [--cores <dir>]     map every core there before listening\n"
 		"              [--core-option key=value] ...   repeatable\n"
 		"              [--list-options]    what this core offers, then exit\n"
 		"\n--firmware names a file the content needs, e.g. syscard3.pce for a PC\n"
@@ -1566,6 +1567,7 @@ int main(int argc, char **argv)
 	const char *state_load = NULL, *state_exit = NULL, *firmware = NULL, *tap = NULL;
 	const char *preview_path = NULL, *cheevos_path = NULL;
 	const char *sock = getenv("DIATOM_SOCKET");
+	const char *cores_dir = NULL;
 	bool list_options = false;
 	diatom_filter start_filter;
 	long limit = 0;
@@ -1592,6 +1594,7 @@ int main(int argc, char **argv)
 			console = (int)strtol(argv[++i], NULL, 10);
 		else if (!strcmp(argv[i], "--tap-audio") && i + 1 < argc) tap = argv[++i];
 		else if (!strcmp(argv[i], "--socket") && i + 1 < argc) sock = argv[++i];
+		else if (!strcmp(argv[i], "--cores") && i + 1 < argc) cores_dir = argv[++i];
 		else if (!strcmp(argv[i], "--list-options")) list_options = true;
 		else if (!strcmp(argv[i], "--core-option") && i + 1 < argc) {
 			/* Recorded now, applied when the core declares its options - the
@@ -1672,6 +1675,16 @@ int main(int argc, char **argv)
 	 * game, so SDL init and every core dlopen are paid once at boot rather
 	 * than per launch. Measured: ~35 ms warm against 625-750 ms cold. */
 	if (sock) {
+		/* Before the socket exists, not after. The launcher is built to find
+		 * no socket in the first second after boot and run a game standalone;
+		 * it is not built for a socket that answers slowly. So either every
+		 * core is ready or there is nothing to connect to yet. */
+		if (cores_dir) {
+			int n = diatom_core_premap(cores_dir);
+
+			fprintf(stderr, "diatom: premapped %d core(s) from %s\n",
+			        n, cores_dir);
+		}
 		if (!diatom_proto_listen(sock)) return 5;
 		terminate_init();
 

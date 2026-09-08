@@ -147,13 +147,18 @@ endif
 #   tools/brick-make.sh probes
 PROBE_SRC := savprobe wprobe sigprobe pantest holdfb warmprobe protodrive blitprobe
 PROBES    := $(addprefix $(TOOLS_DIR)/,$(PROBE_SRC)) $(TOOLS_DIR)/eglpresent \
-             $(TOOLS_DIR)/btaudio
+             $(TOOLS_DIR)/btaudio $(TOOLS_DIR)/coreprobe
 
 probes: $(PROBES)
 
 $(TOOLS_DIR)/savprobe: tools/savprobe.c
 	@mkdir -p $(TOOLS_DIR)
 	$(CC) $(TOOL_CFLAGS) -o $@ $< $(TOOL_LDFLAGS)
+
+# Needs libdl: the whole point is dlopen.
+$(TOOLS_DIR)/coreprobe: tools/coreprobe.c
+	@mkdir -p $(TOOLS_DIR)
+	$(CC) $(TOOL_CFLAGS) -o $@ $< -ldl
 
 $(TOOLS_DIR)/%: tools/%.c
 	@mkdir -p $(TOOLS_DIR)

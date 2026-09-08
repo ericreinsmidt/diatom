@@ -7,7 +7,9 @@
  * including a complete static zlib. RTLD_GLOBAL would let its crc32 answer for
  * everyone, silently.
  */
+#include <dirent.h>
 #include <dlfcn.h>
+#include <time.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -29,12 +31,42 @@ static bool bind_sym(void *h, void *slot, const char *name)
 #define BIND(field, name) \
 	if (!bind_sym(c->handle, &c->field, name)) return false
 
+/* What a core costs to open, logged rather than remembered.
+ *
+ * Timed separately because they are separate costs and only one of them is
+ * large: measured on the device 2026-09-08, a COLD dlopen runs 10-179 ms
+ * depending on the core - genesis_plus_gx is the big one - against 0.8-26 ms
+ * warm, while retro_init is under 3 ms for five of the six. The README's
+ * "~170 ms" was right and never said it was cold, which is how it read as
+ * wrong for a year.
+ *
+ * Kept because these are the numbers that decide whether premapping is worth
+ * doing, and they will drift when a core is repinned. */
+static double dbg_now_ms(void)
+{
+	struct timespec t;
+
+	clock_gettime(CLOCK_MONOTONIC, &t);
+	return t.tv_sec * 1000.0 + t.tv_nsec / 1e6;
+}
+
+static const char *dbg_base(const char *p)
+{
+	const char *s = strrchr(p, '/');
+	return s ? s + 1 : p;
+}
+
 bool diatom_core_open(diatom_core *c, const char *path)
 {
+	double t0;
+
 	memset(c, 0, sizeof *c);
 	c->path = path;
 
+	t0 = dbg_now_ms();
 	c->handle = dlopen(path, RTLD_NOW | RTLD_LOCAL);   /* ADR-0010 */
+	fprintf(stderr, "diatom: dlopen %-28s %6.1f ms\n",
+	        dbg_base(path), dbg_now_ms() - t0);
 	if (!c->handle) {
 		fprintf(stderr, "diatom: dlopen %s: %s\n", path, dlerror());
 		return false;
@@ -104,6 +136,41 @@ diatom_core *diatom_core_resident(const char *path)
 
 int diatom_core_resident_count(void) { return g_nresident; }
 
+/* Map every core in `dir` before anyone asks for one.
+ *
+ * launch.sh used to warm the page cache by reading the cores with cat during
+ * the boot animation - 480 ms cold to read every byte, and it bought only the
+ * I/O. This does the same work in the same idle seconds for less: dlopen maps
+ * what it needs rather than reading the file through, measured 382 ms cold,
+ * and it also pays the dynamic linker so a first launch does not.
+ *
+ * Called before the socket exists, so the launcher either finds no socket and
+ * runs a game standalone - which it is already built to do in the first second
+ * after boot - or finds one with every core ready. It never finds a socket
+ * that answers slowly.
+ *
+ * A core that fails here is not fatal: it will be tried again by name when a
+ * RUN asks for it, and fail there with the launcher listening. */
+int diatom_core_premap(const char *dir)
+{
+	DIR *d = opendir(dir);
+	struct dirent *e;
+	int n = 0;
+
+	if (!d) return 0;
+	while ((e = readdir(d))) {
+		char path[1024];
+		size_t len = strlen(e->d_name);
+
+		if (len < 12 || strcmp(e->d_name + len - 12, "_libretro.so") != 0)
+			continue;
+		snprintf(path, sizeof path, "%s/%s", dir, e->d_name);
+		if (diatom_core_resident(path)) n++;
+	}
+	closedir(d);
+	return n;
+}
+
 /* Cores that set need_fullpath want a path and read the file themselves;
  * the rest want the bytes. Getting this backwards is a silent load failure. */
 static bool read_file(const char *path, void **out, size_t *len)
@@ -145,7 +212,14 @@ bool diatom_core_start(diatom_core *c, const char *rom_path)
 	 * memory that core has since freed - ADR-0025. */
 	diatom_cheevos_reset();
 
-	if (!c->initialized) { c->init(); c->initialized = true; }
+	if (!c->initialized) {
+		double t0 = dbg_now_ms();
+
+		c->init();
+		c->initialized = true;
+		fprintf(stderr, "diatom: retro_init %-25s %6.1f ms\n",
+		        dbg_base(c->path), dbg_now_ms() - t0);
+	}
 
 	/* A core that declared SET_SUPPORT_NO_GAME expects NULL, not a path. */
 	if (!rom_path) {
