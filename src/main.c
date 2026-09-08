@@ -1675,17 +1675,20 @@ int main(int argc, char **argv)
 	 * game, so SDL init and every core dlopen are paid once at boot rather
 	 * than per launch. Measured: ~35 ms warm against 625-750 ms cold. */
 	if (sock) {
-		/* Before the socket exists, not after. The launcher is built to find
-		 * no socket in the first second after boot and run a game standalone;
-		 * it is not built for a socket that answers slowly. So either every
-		 * core is ready or there is nothing to connect to yet. */
+		if (!diatom_proto_listen(sock)) return 5;
+		/* AFTER listening, not before. Mapping first delayed the socket by
+		 * the best part of 400ms, and the launcher probes early: it found no
+		 * socket, fell back to running the game standalone, and every launch
+		 * paid a dlopen the premap existed to avoid. A connection arriving
+		 * during the mapping waits in the backlog instead, which costs the
+		 * launcher nothing - it connects at startup and does not send a RUN
+		 * until somebody picks a game, seconds later. */
 		if (cores_dir) {
 			int n = diatom_core_premap(cores_dir);
 
 			fprintf(stderr, "diatom: premapped %d core(s) from %s\n",
 			        n, cores_dir);
 		}
-		if (!diatom_proto_listen(sock)) return 5;
 		terminate_init();
 
 		while (!g_quit_requested && !g_terminate) {
