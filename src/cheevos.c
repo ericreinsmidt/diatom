@@ -262,9 +262,75 @@ static const kept_descriptor *desc_for(uint32_t real_address, size_t *offset)
 	return NULL;
 }
 
-static void map_from_descriptors(const rc_memory_regions_t *regions)
+/* Defined below, beside the other libretro accessors. */
+static void core_memory(diatom_core *c, unsigned retro_type,
+                        uint8_t **data, size_t *size);
+
+/* The core's own blocks, gathered once so the descriptor loop does not ask
+ * the core the same three questions for every region it walks. */
+typedef struct {
+	uint8_t *base[3];
+	size_t   size[3];
+} core_blocks;
+
+static void blocks_of(diatom_core *c, core_blocks *b)
 {
+	static const unsigned kind[3] = {
+		RETRO_MEMORY_SYSTEM_RAM, RETRO_MEMORY_SAVE_RAM, RETRO_MEMORY_VIDEO_RAM
+	};
+	int i;
+
+	for (i = 0; i < 3; i++) core_memory(c, kind[i], &b->base[i], &b->size[i]);
+}
+
+/* How many bytes really exist behind a descriptor's pointer.
+ *
+ * A DESCRIPTOR'S `len` IS ITS ADDRESS WINDOW, NOT ITS ALLOCATION, and nothing
+ * requires a core to make them the same. Reading to `len` therefore reads off
+ * the end of the block whenever they differ, and the addresses in between are
+ * a hole rather than a short read - they are still claimed by the descriptor,
+ * so they have to be spanned or every later address shifts.
+ *
+ * MBC2 is the case that makes the gap concrete rather than theoretical: the
+ * Game Boy's cartridge RAM window is 8KB and mGBA allocates 256 bytes for it,
+ * because the mapper keeps 512 nibbles internally instead of driving a RAM
+ * chip. That is a window thirty-two times its allocation, in a shipped core.
+ *
+ * BE CLEAR THAT THIS FIXED NOTHING WE HAVE SEEN. The MBC2 crash chased on
+ * 2026-09-09 was inside mGBA, on its own sramBank, and no clamp here would
+ * have stopped it.
+ *
+ * Whether an MBC2 cart even reaches this function turns on something
+ * unrelated to the mapper: whether RetroAchievements knows the title. X
+ * resolves as Unknown and takes the retro_get_memory_data path; Kirby's
+ * Pinball Land resolves as GameBoy and maps twelve spans through here. So
+ * this code IS exercised by an MBC2 cart. What is NOT established is the
+ * clamp ever firing, which needs a span measured shorter than its descriptor
+ * claims, and no build carrying this code has run on the device yet.
+ *
+ * The three blocks retro_get_memory_data answers for are the only memory
+ * whose true size can be asked for, so a pointer inside one of them is
+ * clamped to the end of it. A pointer belonging to none is left alone rather
+ * than rejected: cores describe memory through their map that they expose by
+ * no other route, and refusing to read it would break every core whose map is
+ * honest to fix a hypothetical one whose window overruns. */
+static size_t bytes_behind(const core_blocks *b, const uint8_t *p)
+{
+	int i;
+
+	for (i = 0; i < 3; i++)
+		if (b->base[i] && p >= b->base[i] && p < b->base[i] + b->size[i])
+			return (size_t)(b->base[i] + b->size[i] - p);
+	return (size_t)-1;                       /* not ours to bound */
+}
+
+static void map_from_descriptors(diatom_core *c,
+                                 const rc_memory_regions_t *regions)
+{
+	core_blocks blocks;
 	uint32_t i;
+
+	blocks_of(c, &blocks);
 
 	for (i = 0; i < regions->num_regions; i++) {
 		const rc_memory_region_t *r = &regions->region[i];
@@ -274,7 +340,7 @@ static void map_from_descriptors(const rc_memory_regions_t *regions)
 
 		while (remaining > 0) {
 			const kept_descriptor *d;
-			size_t   offset = 0, run;
+			size_t   offset = 0, run, lim;
 			uint8_t *at;
 
 			d = desc_for(real, &offset);
@@ -293,8 +359,24 @@ static void map_from_descriptors(const rc_memory_regions_t *regions)
 				break;
 			}
 
-			at  = d->ptr ? d->ptr + offset : NULL;
-			run = d->len - offset;
+			/* Measured from the descriptor's BASE, not from the address
+			 * this iteration reached: clamping the running pointer would
+			 * shorten one span and then let the next iteration start at the
+			 * end of the block, where it belongs to no block at all and the
+			 * clamp would not fire. Bounding the window once is stable for
+			 * every pass over it. */
+			lim = d->len;
+			if (d->ptr) {
+				const size_t cap = bytes_behind(&blocks, d->ptr);
+
+				if (cap < lim) lim = cap;
+			}
+
+			/* Past what the core allocated is a hole, not a short read. The
+			 * addresses are still claimed by this descriptor, so they have to
+			 * be spanned or every later address shifts. */
+			at  = (d->ptr && offset < lim) ? d->ptr + offset : NULL;
+			run = offset < lim ? lim - offset : d->len - offset;
 
 			if (d->disconnect && run > d->disconnect) {
 				/* The longest run we can read straight through ends where the
@@ -425,7 +507,7 @@ static size_t resolve_now(diatom_core *c)
 	}
 
 	if (g_ndesc > 0) {
-		map_from_descriptors(regions);
+		map_from_descriptors(c, regions);
 		g_used_map = true;
 
 		/* A map that maps nothing is not a map. snes9x2010 declares one whose
