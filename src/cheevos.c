@@ -412,7 +412,17 @@ static void core_memory(diatom_core *c, unsigned retro_type,
 {
 	*data = NULL;
 	*size = 0;
-	if (!c || !c->get_memory_data || !c->get_memory_size) return;
+	/* game_loaded IS PART OF THE GUARD, not a nicety. g_core here can be the
+	 * PREVIOUS game's core: diatom_cheevos_set_console re-resolves the moment
+	 * the launcher names a new console, and that happens before
+	 * diatom_cheevos_reset clears g_core, which does not run until
+	 * diatom_core_start. Asking a core for its memory after its game has been
+	 * unloaded is asking it to dereference something it has freed. Measured
+	 * 2026-09-10: SIGSEGV inside mGBA on the first NES launch after a GBA one,
+	 * every time, because the clamp made this the first code to call into a
+	 * core from a path that only ever walked descriptors before. */
+	if (!c || !c->game_loaded || !c->get_memory_data || !c->get_memory_size)
+		return;
 
 	*data = c->get_memory_data(retro_type);
 	*size = *data ? c->get_memory_size(retro_type) : 0;

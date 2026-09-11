@@ -88,8 +88,11 @@ static int failures;
 static uint8_t g_ram[0x800];     /* NES work RAM */
 static uint8_t g_sram[0x2000];   /* cartridge RAM */
 
+static int mem_calls;          /* so a test can assert the core was NOT asked */
+
 static void *mem_data(unsigned id)
 {
+	mem_calls++;
 	if (id == RETRO_MEMORY_SYSTEM_RAM) return g_ram;
 	if (id == RETRO_MEMORY_SAVE_RAM)   return g_sram;
 	return NULL;
@@ -111,6 +114,10 @@ static void console_reset(void)
 	memset(&g_core, 0, sizeof g_core);
 	g_core.get_memory_data = mem_data;
 	g_core.get_memory_size = mem_size;
+	/* This stub stands in for a core with content loaded, and says so: nothing
+	 * may ask a core for its memory otherwise. See the test below. */
+	g_core.game_loaded = true;
+	mem_calls = 0;
 
 	diatom_cheevos_reset();
 	diatom_cheevos_set_console(RC_CONSOLE_NINTENDO);
@@ -513,6 +520,43 @@ static void measure_cost(void)
 	       SET, FRAMES, us, us / 16742.0 * 100.0);
 }
 
+/* A core with no game loaded is never asked for its memory.
+ *
+ * REGRESSION, 2026-09-10. g_core here can be the PREVIOUS game's core:
+ * diatom_cheevos_set_console re-resolves as soon as the launcher names a new
+ * console, and that runs before diatom_cheevos_reset clears g_core, which does
+ * not happen until diatom_core_start. The span clamp added the first call into
+ * a core from that path - it had only ever walked descriptors - and the first
+ * NES launch after a GBA one segfaulted inside mGBA, every time, because a core
+ * whose game has been unloaded dereferences what it has already freed.
+ *
+ * The bug is invisible from the launcher's side: TortOS sees the resident die,
+ * falls back to running the game standalone, and the player just notices that
+ * turbo stopped working. */
+static void test_no_game_no_questions(void)
+{
+	printf("a core with no game loaded:\n");
+	console_reset();
+
+	/* Resolve once with content, so cheevos.c is holding this core - that
+	 * pointer is what outlives the game. */
+	diatom_cheevos_resolve(&g_core);
+
+	/* Now exactly what a core switch leaves behind: the pointer still live,
+	 * the core still answering its function pointers, and the game gone. */
+	g_core.game_loaded = false;
+	mem_calls = 0;
+	diatom_cheevos_set_console(RC_CONSOLE_GAMEBOY);
+	CHECK(mem_calls == 0,
+	      "changing console does not ask an unloaded core for memory");
+
+	/* And the guard is not just refusing everything. */
+	g_core.game_loaded = true;
+	mem_calls = 0;
+	diatom_cheevos_set_console(RC_CONSOLE_NINTENDO);
+	CHECK(mem_calls > 0, "and it does ask once the game is loaded");
+}
+
 int main(void)
 {
 	printf("cheevos: address space and evaluation\n");
@@ -522,6 +566,7 @@ int main(void)
 	test_set_file();
 	test_end_to_end();
 	test_runtime_reset();
+	test_no_game_no_questions();
 	measure_cost();
 	if (g_set_path[0]) unlink(g_set_path);
 
