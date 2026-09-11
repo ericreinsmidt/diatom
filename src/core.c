@@ -211,6 +211,9 @@ bool diatom_core_start(diatom_core *c, const char *rom_path)
 	 * on every load, and a pointer kept from the previous game points into
 	 * memory that core has since freed - ADR-0025. */
 	diatom_cheevos_reset();
+	/* Same reason, one declaration further: forget the last game's pixel
+	 * format so this load's silence can be told from its agreement. */
+	diatom_env_pixfmt_begin();
 
 	if (!c->initialized) {
 		double t0 = dbg_now_ms();
@@ -228,6 +231,7 @@ bool diatom_core_start(diatom_core *c, const char *rom_path)
 			return false;
 		}
 		c->game_loaded = true;
+		diatom_env_pixfmt_settle(c);
 		diatom_cheevos_resolve(c);
 		return true;
 	}
@@ -293,6 +297,10 @@ bool diatom_core_start(diatom_core *c, const char *rom_path)
 		return false;
 	}
 	c->game_loaded = true;
+	/* Before the first frame can be presented, and after the core has had
+	 * every chance to speak: whatever it declared is this core's, and its
+	 * silence means it is still what it said the first time. */
+	diatom_env_pixfmt_settle(c);
 
 	/* Now, and not before: a core declares its memory map during load, and
 	 * retro_get_memory_data has nothing to hand back until there is a game.

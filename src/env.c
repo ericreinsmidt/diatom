@@ -590,6 +590,55 @@ static void cb_audio_sample(int16_t l, int16_t r)
 	diatom_on_audio_batch_store(f, 1);
 }
 
+/* THE PIXEL FORMAT IS THE ONE THING A CORE DOES NOT RE-DECLARE.
+ *
+ * A core announces it from retro_init, which runs ONCE for the life of the
+ * process: ADR-0006 keeps every core dlopen'd and never unloads it, so the
+ * second game on a core skips straight to load_game. Everything else a core
+ * says about itself it says again every load, which is why
+ * diatom_cheevos_reset can simply throw the old answer away. The format is the
+ * exception, and it is the one piece of that state which is process-global.
+ *
+ * So the format belongs to whichever core initialized LAST, and a core that
+ * already spent its retro_init cannot take it back. Read off the device log
+ * 2026-09-10, in play order:
+ *
+ *   retro_init mgba              declares RGB565, GBA correct
+ *   retro_init mednafen_pce_fast declares RGB565, PC Engine correct
+ *   retro_init fceumm            declares XRGB8888  <- everything flips here
+ *   present 240x160 pitch 512    GBA now read 4 bytes to the pixel
+ *
+ * A 240 pixel row in a 512 byte buffer became a 128 pixel stride, so each row
+ * pulled in the next one: every GBA and PC Engine game drew twice across the
+ * screen in scrambled color, and stayed that way. genesis_plus_gx was
+ * unaffected only because it initialized after the flip.
+ *
+ * Reported 2026-08-31 and unreproducible for ten days because it needs a
+ * specific order - play a core, play a core that disagrees, go back to the
+ * first. Nothing about it is rare once you know to do that. */
+void diatom_env_pixfmt_begin(void)
+{
+	if (!g_policy) return;
+	/* Back to the default rather than left on the last game's answer, so a
+	 * core that has never declared one gets something documented instead of
+	 * something inherited. libretro's own default is 0RGB1555, which ADR-0007
+	 * refuses. */
+	g_policy->pixfmt     = DIATOM_PIX_RGB565;
+	g_policy->pixfmt_set = false;
+}
+
+void diatom_env_pixfmt_settle(diatom_core *c)
+{
+	if (!g_policy || !c) return;
+
+	if (g_policy->pixfmt_set) {          /* it spoke: believe it, and record it */
+		c->pixfmt       = g_policy->pixfmt;
+		c->pixfmt_known = true;
+	} else if (c->pixfmt_known) {        /* it did not: it has not changed its mind */
+		g_policy->pixfmt = c->pixfmt;
+	}
+}
+
 void diatom_env_bind(diatom_core *c, diatom_policy *p, diatom_port_caps *caps)
 {
 	g_policy = p;

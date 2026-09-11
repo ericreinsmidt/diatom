@@ -37,6 +37,10 @@ typedef struct {
 	const char *path;
 	bool        initialized;     /* retro_init has run */
 	bool        game_loaded;
+	/* What THIS core declared for its frames, kept because it will not say
+	 * again. See diatom_env_pixfmt_settle. */
+	diatom_pixfmt pixfmt;
+	bool          pixfmt_known;
 
 	void   (*set_environment)(retro_environment_t);
 	void   (*set_video_refresh)(retro_video_refresh_t);
@@ -81,6 +85,14 @@ int          diatom_core_premap(const char *dir);
 
 /* env.c */
 void diatom_env_bind(diatom_core *c, diatom_policy *p, diatom_port_caps *caps);
+
+/* Bracket a game load so a core that declares its pixel format once, at
+ * retro_init, still gets its frames read correctly on every later load.
+ * _begin forgets any declaration from the previous game; _settle either
+ * records what this core just declared or puts back what it declared the first
+ * time. */
+void diatom_env_pixfmt_begin(void);
+void diatom_env_pixfmt_settle(diatom_core *c);
 bool diatom_env_geometry_changed(void);
 bool diatom_env_new_geometry(int *w, int *h, double *aspect);   /* consumes the flag */
 
