@@ -587,10 +587,11 @@ Two amendments ADR-0007 makes to the table above:
       row cache made it 2.1-2.3x faster. The hardware scaler was measured
       *unnecessary* rather than rejected on taste: the blit was never
       write-bound, framebuffer memory and heap both at 418 MB/s.
-- [ ] **[OPEN]** **GBA drawn twice, left and right halves.** Reported
+- [x] **[OPEN]** **GBA drawn twice, left and right halves. FIXED 2026-09-10 in
+      b6141b5: the pixel format was wrong, not the pitch.** Reported
       2026-08-31 on Sigma Star Saga while cycling display modes, after a card
-      wipe. **Not reproduced** - every mode renders correctly, halves measurably
-      different. Nothing in the scaler explains it, and these were ruled out:
+      wipe. **Not reproduced for ten days** - every mode renders correctly,
+      halves measurably different. Nothing in the scaler explains it, and these were ruled out:
 
       - map index overflow: `diatom_tap` is `{ int idx; int w; }`, no 8-bit wrap
       - pitch misread: `cache_row` does `src + row*pitch` in BYTES and reads
@@ -610,6 +611,33 @@ Two amendments ADR-0007 makes to the table above:
       a padded buffer, legal and handled. Only a stride SHORTER than the width
       could double a row. Next occurrence will have a log line saying what the
       port was handed.
+
+      **It did, and that is how it was caught.** 2026-09-10, on Advance Guardian
+      Heroes:
+
+          present: src 240x160 pitch 512 (128 px) fmt 1 -> dst 1024x768
+                                                  <-- STRIDE SHORTER THAN WIDTH
+
+      `fmt 1` is XRGB8888, so the same 512-byte pitch that is 256 pixels at
+      RGB565 became **128 pixels at four bytes each**, under a 240-pixel width.
+      Every row pulled in the next one. The pitch was right the whole time and
+      the ruling-out above was correct: `cache_row`'s units are right, and they
+      are right per pixel, of the wrong size.
+
+      The format is process-global and announced from `retro_init`, which runs
+      once per core per process (ADR-0006). A core that has already spent it
+      cannot take the format back, so whichever core initialized last owns it.
+      In play order that day: mgba declared RGB565, PC Engine agreed, then
+      fceumm declared XRGB8888 and every GBA and PC Engine frame after it was
+      read four bytes to the pixel. genesis_plus_gx was unaffected only because
+      it initialized after the flip. That is why it needed a specific order -
+      play a core, play a core that disagrees, go back to the first - and why
+      ten days of trying the obvious thing never hit it.
+
+      Fixed by recording what each core declares and restoring it on every
+      load. Verified on the device in the order that triggers it: Advance
+      Guardian Heroes launched after an NES game reads at `fmt 0`, 256 px
+      against 240, no warning and no doubling.
 - [ ] **[LATER]** Shaders/overlays - **a one-word decision waiting on taste,
       not on facts.** The facts: UI belongs to the launcher
       ([ADR-0009](decisions/0009-launcher-protocol.md)); the on-screen overlay
