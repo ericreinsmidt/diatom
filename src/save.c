@@ -288,6 +288,59 @@ bool diatom_state_save(diatom_core *c, const char *path)
 	return ok;
 }
 
+/* ============================================================================
+ * DELETE THIS THE DAY LIBRETRO SYNCS ITS mGBA FORK.
+ * ============================================================================
+ *
+ * Two builds that write interchangeable states. This is the ONLY thing in
+ * Diatom that knows a particular core by name and version, and it is here
+ * against its own scope on purpose and temporarily.
+ *
+ * WHY IT EXISTS. libretro's mGBA segfaults on every MBC2 Game Boy cartridge -
+ * a regression in mgba a1b2b23, reported as mgba-emu/mgba#3859 and fixed
+ * upstream the same day in 543a1975. That fix is in no downloadable core:
+ * libretro builds from its own fork, unsynced since 2026-08-06. TortOS
+ * therefore ships a bridge build - libretro's tree at the pinned commit plus
+ * upstream's own one-hunk fix - and it reports `0.11.0` rather than
+ * `0.11-219-e31759b` only because there is no git in the build container.
+ *
+ * WHY IT IS SAFE, which is a claim about these two binaries and not a general
+ * one. They are the same commit. The patch touches GBMBCSwitchSramBank, which
+ * is mapper code; mGBA's state stores sramCurrentBank as an integer and
+ * re-derives the pointer on load, so the fix makes loading MORE correct rather
+ * than incompatible. Nothing about the serialized layout differs.
+ *
+ * WHAT IT BUYS. Without it, swapping between the two rejects every save state
+ * - gracefully, the game just starts normally - so the day the official core
+ * becomes usable again, every player silently loses their resume points.
+ * Battery saves are unaffected either way; .srm is raw cartridge RAM with no
+ * version in it.
+ *
+ * WHEN TO REMOVE IT: as soon as github.com/libretro/mgba carries 543a1975 and
+ * TortOS goes back to the fetched core. Then this table is not merely dead, it
+ * is WRONG - it would let a genuinely foreign state through. Delete the table,
+ * delete version_twins, and restore the plain strcmp above. See TortOS's
+ * MGBA-MBC2.md and mk/build-mgba-bridge.sh, which are deleted at the same
+ * time. */
+static const struct { const char *a, *b; } STATE_TWINS[] = {
+	{ "0.11.0", "0.11-219-e31759b" },   /* the MBC2 bridge, and what it patches */
+};
+
+static bool version_twins(const char *have, const char *want)
+{
+	size_t i;
+
+	if (strcmp(have, want) == 0) return true;
+	for (i = 0; i < sizeof STATE_TWINS / sizeof STATE_TWINS[0]; i++) {
+		const char *a = STATE_TWINS[i].a, *b = STATE_TWINS[i].b;
+
+		if ((strcmp(have, a) == 0 && strcmp(want, b) == 0) ||
+		    (strcmp(have, b) == 0 && strcmp(want, a) == 0))
+			return true;
+	}
+	return false;
+}
+
 bool diatom_state_load(diatom_core *c, const char *path)
 {
 	struct state_header h;
@@ -314,7 +367,8 @@ bool diatom_state_load(diatom_core *c, const char *path)
 	 * undefined behavior. */
 	c->get_system_info(&si);
 	if (strcmp(h.core_name, si.library_name ? si.library_name : "?") != 0 ||
-	    strcmp(h.core_version, si.library_version ? si.library_version : "?") != 0) {
+	    !version_twins(h.core_version,
+	                   si.library_version ? si.library_version : "?")) {
 		logf_(DIATOM_LOG_WARN, "state: %s was written by %s %s, this is %s %s",
 		      path, h.core_name, h.core_version,
 		      si.library_name ? si.library_name : "?",
