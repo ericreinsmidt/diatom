@@ -725,6 +725,27 @@ Two levers the spike discovered:
       (~26 ms once per launch, down from 86 ms). Priming fills to half of 4096,
       leaving ~2 frames of headroom; a quarter would leave 3 and trade against
       underrun. A tuning question that wants someone listening, not a number.
+- [ ] **[OPEN]** **The resident plays silence while no game is loaded.**
+      Measured on the Brick 2026-09-13: with nothing loaded, the resident
+      Diatom used **4% of a core** - 46 ticks in a 10s window - against the
+      launcher's 25% beside it. port/brick.c opens the device with
+      `SDL_OpenAudioDevice` and unpauses it on the next line, and nothing pauses
+      it again: it is only closed at shutdown or when the sink changes. An open,
+      unpaused SDL device fed by `SDL_QueueAudio` keeps SDL's audio thread
+      waking every buffer period to pull from an empty queue, so the codec is
+      held awake emitting silence for as long as the process lives.
+
+      **Attributed by elimination, not sampled per thread.** The main thread
+      sits in `poll(-1)`, and the flip and SRAM writer threads both wait on
+      condition variables, which leaves SDL's audio thread as the remaining
+      candidate. Worth confirming per thread before acting on.
+
+      **It may be deliberate, and that is the decision.** A device that stays
+      open is what makes a launch start sound without a reopen, and the item
+      directly above is the startup transient that a cold open produces.
+      Pausing while idle and unpausing on load would save the thread and the
+      codec, at the risk of bringing back a click or latency on every launch
+      rather than once. Measure the transient both ways before choosing.
 - [x] **[OPEN]** **Output gain on the Brick, two traps.** `digital volume`
       (0-63) is the speaker level and is **INVERTED** - lower is louder - while
       the driver advertises `step=+1.16dB`, the opposite. `Headphone Volume` is
