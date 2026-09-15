@@ -51,7 +51,8 @@ check() {   # check <output> <source>...
 }
 
 check "$ROOT/build/brick/diatom" \
-      "$ROOT"/src/*.c "$ROOT"/src/*.h "$ROOT"/include/*.h "$ROOT"/port/brick.c
+      "$ROOT"/src/*.c "$ROOT"/src/*.h "$ROOT"/include/*.h "$ROOT"/port/brick.c \
+      "$ROOT"/port/port_clock.h
 # The stub was missed the first time round and cost an hour on 2026-08-25: a
 # source change did not rebuild, so a fixture that had been fixed was still the
 # broken one on the device, and the device disagreeing with the desktop looked

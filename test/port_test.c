@@ -20,6 +20,9 @@
  * Runs against port/desktop.c with the dummy audio driver: no device, no
  * sound, no network. The Brick's port is the same code shape and cannot be
  * driven from here.
+ *
+ * Also the arithmetic under both ports' clock, which is shared and so can be
+ * checked from here for the Brick too: port_clock.h, and why it exists.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -27,6 +30,7 @@
 #include <unistd.h>
 
 #include "diatom_port.h"
+#include "port_clock.h"
 
 static int fails;
 
@@ -60,7 +64,7 @@ int main(void)
 	memset(buf, 0, sizeof buf);
 
 	if (!diatom_port_init(&caps)) {
-		printf("  FAIL  the port would not initialise\n");
+		printf("  FAIL  the port would not initialize\n");
 		return 1;
 	}
 
@@ -105,6 +109,17 @@ int main(void)
 		diatom_port_audio_set(i % 2 ? BOGUS : "", at, sizeof at);
 	ck(1, "20 switches completed without hanging");
 	ck(diatom_port_audio_write(buf, 512) > 0, "and audio still flows after");
+
+	/* The first counter is the one the Brick reported 2026-09-15, which the old
+	 * ticks * 1000000 / freq read as 4650.5 s; the old formula fails all three. */
+	printf("the clock, past where it used to wrap:\n");
+	ck(diatom_ticks_to_us(23097236972388ull, 1000000000ull) == 23097236972ull,
+	   "the Brick's counter at 23097.2 s reads 23097.2 s");
+	ck(diatom_ticks_to_us(18446744074000ull, 1000000000ull) >
+	   diatom_ticks_to_us(18446744073000ull, 1000000000ull),
+	   "and counts forward across 18446.7 s instead of starting over");
+	ck(diatom_ticks_to_us(72000012000000ull, 24000000ull) == 3000000500000ull,
+	   "a Mac's 24 MHz counter reads right past its 8.9-day wrap");
 
 	diatom_port_shutdown();
 

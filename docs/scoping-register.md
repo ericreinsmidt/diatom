@@ -1566,6 +1566,12 @@ operation never occurs.
 - [x] **[OPEN]** TortOS's power-off failsafe - answered in §3: the launcher
       stays alive as supervisor and `SIGUSR1` is retained as the escape hatch
       for a core wedged inside `retro_run`.
+- [x] **[OPEN]** **The port clock started over every 5 h 7 min of uptime. FIXED
+      2026-09-15.** `counter * 1000000 / freq` overflowed, so a deadline set
+      before a wrap was live again after it: a 01:38 notice drew over every
+      game after the 02:08 wrap. Frame pacing waits on the same clock, and the
+      fix held there: Contra ran 9 h 6 min across two wraps, 1,970,019 frames at
+      60.10 fps against 60.0998. Why and how: `port/port_clock.h`, `check-port`.
 
 ---
 

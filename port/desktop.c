@@ -16,6 +16,7 @@
 #include <string.h>
 
 #include "diatom_port.h"
+#include "port_clock.h"
 
 #define WINDOW_W 960
 #define WINDOW_H 720
@@ -423,8 +424,8 @@ bool diatom_port_capture(const char *path)
 
 uint64_t diatom_port_now_us(void)
 {
-	return (uint64_t)(SDL_GetPerformanceCounter() * 1000000ULL
-	                  / SDL_GetPerformanceFrequency());
+	return diatom_ticks_to_us(SDL_GetPerformanceCounter(),
+	                          SDL_GetPerformanceFrequency());
 }
 
 void diatom_port_log(diatom_log_level lvl, const char *msg)

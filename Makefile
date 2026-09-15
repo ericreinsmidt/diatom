@@ -248,16 +248,17 @@ check-proto:
 # The last one is the reason this exists - a close that joins a stuck audio
 # thread is a hang, not a wrong answer, so the test arms an alarm and lets the
 # timeout be the failure. Driven against port/desktop.c with SDL's dummy
-# drivers: no device, no display, no sound.
+# drivers: no device, no display, no sound. Also the clock arithmetic both
+# ports share, which is the one piece of the Brick's port this can reach.
 PORT_TEST := $(BUILD)/port-test
 
 check-port: $(PORT_TEST)
 	@./$(PORT_TEST)
 
-$(PORT_TEST): test/port_test.c port/desktop.c include/diatom_port.h
+$(PORT_TEST): test/port_test.c port/desktop.c port/port_clock.h include/diatom_port.h
 	@mkdir -p $(BUILD)
 	$(CC) -std=gnu11 -Wall -Wextra -Wno-unused-parameter -O1 -g \
-	      -Iinclude -Isrc -o $@ test/port_test.c port/desktop.c \
+	      -Iinclude -Isrc -Iport -o $@ test/port_test.c port/desktop.c \
 	      $(SDL_CFLAGS) $(SDL_LIBS)
 
 check-register:
