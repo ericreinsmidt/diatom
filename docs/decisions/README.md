@@ -79,3 +79,4 @@ never started.
 | [0028](0028-turbo-is-a-property-of-a-binding.md) | Turbo is a property of a binding, and the host owns it | Accepted |
 | [0029](0029-audio-output-is-a-state.md) | Audio output is a state, owned by the launcher | Superseded by 0030 |
 | [0030](0030-audio-output-remeasured.md) | Audio output, re-measured: SDL cannot drive a bluealsa device string | Accepted |
+| [0031](0031-mute-is-a-state-the-launcher-owns.md) | Mute is the launcher's, and no producer may undo it | Accepted |

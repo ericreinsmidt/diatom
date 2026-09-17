@@ -877,6 +877,13 @@ Two levers the spike discovered:
       decision survives; three of its facts did not, and volume for a sink
       returns as a third window (0..127, not inverted). Not implemented.
 
+- [x] **[LB]** **Who owns the hardware mute switch, and who may undo it?** →
+      **[ADR-0031](decisions/0031-mute-is-a-state-the-launcher-owns.md)**
+      *(Accepted)*. The launcher cuts `HpSpeaker Switch`, which is below the
+      mixer and silences every producer. This port may cut it for its own level
+      0 and must never re-enable it while muted; `SETMUTE` says which. Measured,
+      and not implemented here yet - the exit path re-enables it today.
+
 ---
 
 ## 8. Input
