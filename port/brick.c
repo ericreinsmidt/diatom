@@ -241,6 +241,10 @@ struct dm_ctl_elem_value {
 
 #define GAIN_LEVELS  20         /* what the USER moves in: 20 steps of 5% */
 #define SPEAKER_CTL  "HpSpeaker Switch"   /* the only true mute on this codec */
+
+/* Set by the launcher over the state plane, never read from hardware here:
+ * what the switch is and what it means are the launcher's, ADR-0031. */
+static bool g_muted;
 #define HP_CTL       "Headphone Volume"   /* 0-7, 6 dB a step, INVERTED */
 #define SWAP_CTL     "DAC Swap"           /* 1 crosses left and right */
 
@@ -466,8 +470,14 @@ static void gain_apply(void)
 	 * `mute=0`, meaning its minimum is maximum attenuation - about -74 dB -
 	 * and not silence. Measured: with an ear against the speaker, level 0 is
 	 * still audible, and a mic across the room cannot tell it from the room.
-	 * So the speaker switch carries the last step. */
-	v = (g_level > 0);
+	 * So the speaker switch carries the last step.
+	 *
+	 * AND NEVER BACK ON WHILE MUTED - ADR-0031. This line is where the
+	 * launcher's mute used to die: with the switch down and a game muted, one
+	 * volume press re-enabled the stage and the sound returned. The cut for
+	 * level 0 is still ours; turning it on again is not, while somebody else
+	 * is holding it off. */
+	v = (g_level > 0) && !g_muted;
 	ctl_io(SPEAKER_CTL, &v, 1);
 }
 
@@ -1021,18 +1031,24 @@ void diatom_port_shutdown(void)
 	}
 	free(g_colmap);
 	free(g_rowmap);
-	/* Always hand the speaker back on, whatever the level was.
+	/* Hand the speaker back on, unless somebody is holding it off.
 	 *
 	 * Muting at level 0 switches HpSpeaker off, and that is device state which
-	 * outlives this process. Leaving it off strands the device: the launcher
-	 * drives `digital volume`, NOT this switch, so turning the volume up there
-	 * cannot undo it and the machine simply appears to have lost its speaker.
+	 * outlives this process. Leaving it off used to strand the device, because
+	 * nothing else drove this switch - the launcher drove `digital volume` and
+	 * turning the volume up there could not undo it, so the machine simply
+	 * appeared to have lost its speaker.
 	 *
-	 * The volume LEVEL is deliberately not restored - that is a user setting
-	 * and belongs wherever they left it. The switch is a mechanism, and nothing
-	 * above this port knows it exists. */
+	 * THAT REASONING EXPIRED on 2026-09-16. TortOS reads a hardware mute switch
+	 * and drives this control itself (ADR-0031), so the device is no longer
+	 * stranded by an off speaker - and handing it back unconditionally would
+	 * un-mute a device whose switch is still down, at the exact moment a game
+	 * ends and the launcher's shelf comes back.
+	 *
+	 * The volume LEVEL is still deliberately not restored - that is a user
+	 * setting and belongs wherever they left it. */
 	if (g_mixer_fd >= 0) {
-		long on = 1;
+		long on = !g_muted;
 		ctl_io(SPEAKER_CTL, &on, 1);
 		close(g_mixer_fd);
 		g_mixer_fd = -1;
@@ -1765,3 +1781,15 @@ void diatom_port_log(diatom_log_level lvl, const char *msg)
 	static const char *tag[] = { "debug", "info", "warn", "error" };
 	fprintf(stderr, "[%s] %s\n", tag[lvl], msg);
 }
+
+void diatom_port_mute_set(bool on)
+{
+	if (on == g_muted) return;
+	g_muted = on;
+	/* Straight away rather than at the next level change: the whole point is
+	 * that a player flipping a switch hears it now. gain_apply re-writes the
+	 * gain too, which is harmless - it writes what is already there. */
+	if (g_mixer_fd >= 0) gain_apply();
+}
+
+bool diatom_port_mute_get(void) { return g_muted; }

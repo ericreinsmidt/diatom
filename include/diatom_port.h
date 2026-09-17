@@ -193,6 +193,24 @@ size_t diatom_port_audio_queued(void);
  * and never the resampler's. */
 bool diatom_port_audio_set(const char *name, char *actual, size_t cap);
 
+/* MUTE, which this port OBEYS rather than owns - ADR-0031.
+ *
+ * The launcher reads a hardware switch and cuts the analog stage, which sits
+ * below the mixer and silences every producer at once. Nothing about the pin,
+ * the polarity, or what the switch MEANS belongs here.
+ *
+ * What the port must do is narrow: while this is set, never turn the output
+ * back ON. It may still cut the path for its OWN silence - on this codec the
+ * gain control's minimum is about -74 dB rather than nothing, so level 0 has
+ * to switch the stage off as well - and that stays the port's business.
+ *
+ * The fault this exists for was demonstrated, not guessed: with the launcher
+ * muted and a game running, a volume press brought the sound straight back,
+ * because applying a level writes the same control. A port with no such stage
+ * implements this as a no-op and is correct. */
+void diatom_port_mute_set(bool on);
+bool diatom_port_mute_get(void);
+
 /* Where the sound actually is now.
  *
  * Polled, like the level pair below and for the same reason: the port must not

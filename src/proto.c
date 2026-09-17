@@ -178,6 +178,8 @@ static void parse_line(char *line, diatom_msg *out)
 	else if (!strcmp(field, "SETCHEEVOS")) out->kind = DIATOM_MSG_SETCHEEVOS;
 	else if (!strcmp(field, "AUDIO"))      out->kind = DIATOM_MSG_AUDIO;
 	else if (!strcmp(field, "SETAUDIO"))   out->kind = DIATOM_MSG_SETAUDIO;
+	else if (!strcmp(field, "MUTE"))       out->kind = DIATOM_MSG_MUTE;
+	else if (!strcmp(field, "SETMUTE"))    out->kind = DIATOM_MSG_SETMUTE;
 	else {
 		log_(DIATOM_LOG_WARN, "proto: ignoring unknown verb '%s'", field);
 		out->kind = DIATOM_MSG_NONE;
@@ -192,6 +194,11 @@ static void parse_line(char *line, diatom_msg *out)
 		v = eq + 1;
 		if      (!strcmp(field, "device"))
 			snprintf(out->device, sizeof out->device, "%s", v);
+		/* SETMUTE's only argument. Anything that is not "1" is off, so a
+		 * launcher that sends "true" gets a release rather than a hold - the
+		 * safe direction to be wrong in, because a device stuck ON can be
+		 * muted again by flipping the switch, and one stuck OFF looks broken. */
+		else if (!strcmp(field, "on")) out->on = (strcmp(v, "1") == 0);
 		else if (!strcmp(field, "core")) snprintf(out->core, sizeof out->core, "%s", v);
 		else if (!strcmp(field, "rom"))  snprintf(out->rom,  sizeof out->rom,  "%s", v);
 		/* ADR-0017. A key ADR-0009 did not define, which costs nothing to add
@@ -313,7 +320,12 @@ diatom_msg_kind diatom_proto_poll(diatom_msg *out, int timeout_ms, bool running)
 		 * state would get silence back and could not tell that from a sink
 		 * that failed to open, which is precisely the confusion the fallback
 		 * exists to prevent. */
-		diatom_proto_send("READY\tproto=4\tstate=%s", running ? "running" : "idle");
+		/* proto=5 adds ADR-0031's mute, and bumps for exactly 0029's reason.
+		 * Additive, so an old Diatom ignoring SETMUTE is safe in itself - but
+		 * it would leave the device LOUD with the switch down, and a launcher
+		 * could not tell that from a mute that worked. Knowing not to promise
+		 * the player something is the point of the number. */
+		diatom_proto_send("READY\tproto=5\tstate=%s", running ? "running" : "idle");
 		return DIATOM_MSG_NONE;
 	}
 

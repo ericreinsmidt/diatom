@@ -875,6 +875,22 @@ static void audio_set(const diatom_msg *m)
 	audio_emit();
 }
 
+/* ---- mute, ADR-0031 ------------------------------------------------------
+ *
+ * The one state on the plane this host does not own. The launcher reads a
+ * hardware switch; all this side does is hold the output off and, crucially,
+ * stop putting it back. See include/diatom_port.h. */
+static void mute_emit(void)
+{
+	diatom_proto_send("MUTE\ton=%d", diatom_port_mute_get() ? 1 : 0);
+}
+
+static void mute_set(const diatom_msg *m)
+{
+	diatom_port_mute_set(m->on != 0);
+	mute_emit();
+}
+
 static void level_set(const diatom_msg *m)
 {
 	int k, idx, cnt;
@@ -940,6 +956,8 @@ static bool state_plane_msg(const diatom_msg *m)
 	case DIATOM_MSG_SETLEVEL: level_set(m);      return true;
 	case DIATOM_MSG_AUDIO:    audio_emit();      return true;
 	case DIATOM_MSG_SETAUDIO: audio_set(m);      return true;
+	case DIATOM_MSG_MUTE:     mute_emit();       return true;
+	case DIATOM_MSG_SETMUTE:  mute_set(m);       return true;
 	case DIATOM_MSG_DISPLAY:
 		/* apply_display is what emits, so ask it to restate the current one
 		 * rather than growing a second path that could disagree with it. */

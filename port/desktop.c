@@ -458,3 +458,10 @@ void diatom_port_level_invalidate(void) { }
  * because the seam is part of the port interface, and a port that silently
  * lacked it would fail at link time on the day someone needed it. */
 void diatom_port_present_stop(diatom_park park) { (void)park; }
+
+/* No analog stage on a desktop, so there is nothing to hold off. Kept as state
+ * so the host half can be exercised without hardware: a port that answers what
+ * it was told is enough for test/stateplane.py. */
+static bool g_muted;
+void diatom_port_mute_set(bool on) { g_muted = on; }
+bool diatom_port_mute_get(void) { return g_muted; }

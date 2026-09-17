@@ -60,7 +60,7 @@ def check_that(name, cond, got):
     if not cond: fails.append(name)
 
 print("READY:", (r := drain(2.0)))
-check("proto version", [x for x in r if x.startswith("READY")][0].split("\t")[1], "proto=3")
+check("proto version", [x for x in r if x.startswith("READY")][0].split("\t")[1], "proto=5")
 
 # Before any RUN: identity must already be identity, not "everything unbound".
 send("MAP"); check("map is identity while idle", drain(), ["MAP\tmap=identity"])
@@ -277,6 +277,28 @@ send("RESUME"); drain(1.0)
 send("DISPLAY"); got = drain(2.0)
 check_that("the game is running again after RESUME",
            any(l.startswith("DISPLAY\t") for l in got), got)
+
+# Mute, ADR-0031. The one state this host obeys rather than owns, so what is
+# checked is that it answers honestly and remembers - not that anything went
+# quiet, which a desktop has no analog stage to do.
+send("MUTE"); got = drain(2.0)
+check_that("MUTE answers before anyone has set it",
+           any(l == "MUTE\ton=0" for l in got), got)
+
+send("SETMUTE\ton=1"); got = drain(2.0)
+check_that("SETMUTE is acknowledged with the new state",
+           any(l == "MUTE\ton=1" for l in got), got)
+
+send("MUTE"); got = drain(2.0)
+check_that("and it is still held on the next ask",
+           any(l == "MUTE\ton=1" for l in got), got)
+
+# The safe direction to be wrong in: anything that is not "1" releases, because
+# a device stuck ON can be muted again by flipping the switch, and one stuck
+# OFF looks broken.
+send("SETMUTE\ton=true"); got = drain(2.0)
+check_that("a value that is not 1 releases rather than holds",
+           any(l == "MUTE\ton=0" for l in got), got)
 
 send("STOP"); got = drain(3.0)
 check_that("the game still ends normally after all that",

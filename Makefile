@@ -205,7 +205,7 @@ $(BUILD)/%.o: %.c
 # fails when it is broken. check-seam has held since day one for exactly that
 # reason; the register drifted 418 -> 992 lines in three days because nothing
 # ever complained.
-check: check-seam check-register check-corefacts check-rates check-cheevos check-proto check-port
+check: check-seam check-register check-corefacts check-rates check-cheevos check-proto check-port check-stateplane
 
 # Does a RetroAchievements address reach the byte it names? Offline, needs no
 # core and no ROM, and links only cheevos.c plus the vendored runtime - so it
@@ -231,7 +231,7 @@ $(CHEEVOS_TEST): test/cheevos_test.c src/cheevos.c $(RC_OBJ)
 # quietly stop being run.
 conform-check: $(BIN)
 	@python3 test/conform.py
-.PHONY: conform-check
+.PHONY: conform-check check-stateplane
 
 # The state plane is a promise to a launcher in ANOTHER repository, and no
 # compiler here can see it: a verb can be in the enum, parsed and dispatched and
@@ -243,6 +243,16 @@ conform-check: $(BIN)
 # instant and offline for someone who has not built yet.
 check-proto:
 	@python3 test/proto.py
+
+# ADR-0020's state plane, end to end against the stub core. On the same terms
+# as check-proto: a second of wall time, no core, no ROM, no network.
+#
+# IT WAS NOT IN `check` UNTIL 2026-09-17, and the cost of that showed the day it
+# was added: it had been asserting `proto=3` since the audio state bumped the
+# number to 4, and nothing noticed because nothing ran it. A test outside the
+# suite is a test that rots while looking like coverage.
+check-stateplane:
+	@python3 test/stateplane.py
 
 # The port's audio contract: falls back, is idempotent, and ALWAYS returns.
 # The last one is the reason this exists - a close that joins a stuck audio
