@@ -1080,10 +1080,23 @@ static int run_session_inner(const diatom_session *sn)
 		return 0;
 	}
 
-	/* Genesis 3-button vs 6-button is a correctness issue, not a preference -
-	 * some early games misbehave with a 6-button pad attached, which is why the
-	 * real pad has a Mode switch. Digital-only (ADR-0003) removes axes, not
-	 * device types. */
+	/* THE PLAIN JOYPAD, WHICH IS NOT THE THREE-BUTTON PAD. This comment used
+	 * to say it was, and TortOS's backlog carried a whole item built on that
+	 * reading: Genesis six-button games were supposed to be playing with three
+	 * because of this line.
+	 *
+	 * They are not. Read out of genesis_plus_gx on 2026-09-17, after Eric
+	 * pressed L1 in a fighter and it threw a punch: RETRO_DEVICE_JOYPAD is a
+	 * case in its retro_set_controller_port_device, and it sets padtype to
+	 * DEVICE_PAD2B | DEVICE_PAD6B | DEVICE_PAD3B - every pad at once, which is
+	 * also what config_default() starts with. The core decides per game from
+	 * there, and it puts Genesis X, Y and Z on L1, X and R1.
+	 *
+	 * So this is "give me the core's ordinary pad", not a choice between pad
+	 * types, and it is the right call for every core here. A core that wants a
+	 * specific device type needs the controller_type field in diatom_policy,
+	 * which is still unused, and a launcher that knows to ask. Digital-only
+	 * (ADR-0003) removes axes, not device types. */
 	g_core->set_controller_port_device(0, RETRO_DEVICE_JOYPAD);
 
 	/* SRAM first: it is the game's own data and is not optional. A state, if
