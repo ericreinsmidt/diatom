@@ -159,7 +159,11 @@ typedef enum {
 	DIATOM_MSG_SETAUDIO,   /* send it to `device`; empty means the default */
 	DIATOM_MSG_MUTE,       /* report whether the output is being held off */
 	DIATOM_MSG_SETMUTE,    /* hold it off, or release it: `on` = 1 | 0 */
-	DIATOM_MSG_HANGUP      /* launcher went away; the game keeps running */
+	DIATOM_MSG_QUIET,      /* report whether the game's own sound is held silent */
+	DIATOM_MSG_SETQUIET,   /* hold it silent, or let it play: `on` = 1 | 0 */
+	/* The launcher went away - or was displaced by a newer one, ADR-0033,
+	 * which means the same thing. The game keeps running. */
+	DIATOM_MSG_HANGUP
 } diatom_msg_kind;
 
 typedef struct {
@@ -184,8 +188,9 @@ typedef struct {
 	char value[128];       /* SETOPT */
 	char map[512];         /* SETMAP */
 	char lkind[32];        /* SETLEVEL: volume | brightness */
-	/* SETMUTE, ADR-0031. A boolean rather than a level: the cut is inaudible
-	 * at both ends, measured on hardware, so there is nothing to ramp. */
+	/* SETMUTE, ADR-0031, and SETQUIET, ADR-0032. Both booleans. The mute
+	 * is a cut measured inaudible at both ends, so nothing ramps it; quiet is
+	 * a step in the samples, so audio.c fades it. */
 	int  on;
 	/* SETAUDIO, ADR-0029. An output device named the way the PORT names one,
 	 * passed straight through: the host's business is which, the port's is
@@ -277,10 +282,10 @@ typedef struct {
 extern const diatom_display_mode_info diatom_modes[];
 extern const int                      diatom_mode_count;
 
-/* audio.c - cores emit 32040..65536 Hz; the device runs at whatever it runs at.
- * Linear interpolation, with dynamic rate control holding the port's buffer near
- * half full. The resampler itself is still a placeholder; the control loop is
- * not, because a fixed ratio drifts until the buffer empties or overflows. */
+/* audio.c - cores emit 32040..131072 Hz; the device runs at whatever it runs at.
+ * A polyphase windowed sinc, with dynamic rate control holding the port's buffer
+ * near half full, because a fixed ratio drifts until the buffer empties or
+ * overflows. */
 void   diatom_audio_configure(double src_rate, int dst_rate, int capacity_frames);
 size_t diatom_audio_push(const int16_t *in, size_t frames);
 void   diatom_audio_prime(void);           /* fill to target before frame one */
@@ -304,5 +309,16 @@ double   diatom_audio_rms(void);
 double   diatom_audio_in_rms(void);
 uint64_t diatom_audio_nonzero(void);
 uint64_t diatom_audio_samples(void);
+
+/* QUIET, ADR-0032: the game's own sound replaced by silence, faded, after the
+ * resampler - so the stream, its timing and the device carry on untouched and
+ * the port never knows. Held across sessions, because it describes the
+ * launcher's situation rather than the game: a session starts at whatever it
+ * is set to, with no fade. */
+void     diatom_audio_quiet(bool on);
+bool     diatom_audio_quiet_get(void);
+/* Output frames this session that went out quiet, fades included - so a silent
+ * OUT line above can be told from a silent game. */
+uint64_t diatom_audio_quiet_frames(void);
 
 #endif /* DIATOM_H */

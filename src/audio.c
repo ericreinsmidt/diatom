@@ -91,9 +91,63 @@ static int      g_peak;
 static uint64_t g_nonzero, g_total;
 static double   g_sq;
 
+/* QUIET, ADR-0032: the game's sound replaced by silence while the launcher has
+ * something else playing, with the stream itself carrying on untouched.
+ *
+ * A gain walked one step a frame toward its target rather than a switch,
+ * because a switch is a step in the waveform, and a step is broadband energy -
+ * a click - whatever the waveform was doing. 10 ms is the usual length for a
+ * ramp nobody hears and a cut nobody waits for; the ADR leaves the number to
+ * the device, so it is set here and checked there.
+ *
+ * Applied last, after the resampler and after rate control, which therefore
+ * never know: the buffer fills and drains exactly as it would have. */
+#define QUIET_FADE_MS 10
+
+static bool     g_quiet;               /* what the launcher asked for */
+static float    g_gain = 1.0f;         /* where the output is, on the way there */
+static float    g_gain_step = 1.0f;    /* per frame; set from the device rate */
+static uint64_t g_quiet_frames;
+static int16_t  g_quiet_buf[OUT_CHUNK * 2];
+
+void diatom_audio_quiet(bool on)  { g_quiet = on; }
+bool diatom_audio_quiet_get(void) { return g_quiet; }
+uint64_t diatom_audio_quiet_frames(void) { return g_quiet_frames; }
+
+/* `n` frames of `in`, scaled by the quiet gain into g_quiet_buf, the gain
+ * moving one step a frame. Only called when there is something to do: at full
+ * gain with nothing asked, the frames go out as they came. */
+static const int16_t *quieten(const int16_t *in, size_t n)
+{
+	float target = g_quiet ? 0.0f : 1.0f;
+	size_t i;
+
+	g_quiet_frames += n;
+	if (g_gain == 0.0f && target == 0.0f) {
+		memset(g_quiet_buf, 0, n * 2 * sizeof(int16_t));
+		return g_quiet_buf;
+	}
+	for (i = 0; i < n; i++) {
+		if (g_gain > target) {
+			g_gain -= g_gain_step;
+			if (g_gain < target) g_gain = target;
+		} else if (g_gain < target) {
+			g_gain += g_gain_step;
+			if (g_gain > target) g_gain = target;
+		}
+		g_quiet_buf[i * 2]     = (int16_t)(in[i * 2] * g_gain);
+		g_quiet_buf[i * 2 + 1] = (int16_t)(in[i * 2 + 1] * g_gain);
+	}
+	return g_quiet_buf;
+}
+
 static void push(const int16_t *f, size_t n)
 {
 	size_t i, took;
+
+	/* Every caller hands over at most a chunk - the resampler flushes at
+	 * OUT_CHUNK and priming at 512 - so one scratch buffer is enough. */
+	if ((g_quiet || g_gain < 1.0f) && n <= OUT_CHUNK) f = quieten(f, n);
 
 	for (i = 0; i < n * 2; i++) {
 		int v = f[i] < 0 ? -f[i] : f[i];
@@ -143,6 +197,14 @@ uint64_t diatom_audio_dropped(void) { return g_dropped; }
 
 void diatom_audio_configure(double src_rate, int dst_rate, int capacity_frames)
 {
+	/* A session starts where quiet already is, with no fade: the launcher
+	 * sends it before RUN, so a game started during the music is silent from
+	 * its first sample rather than faded out of a first loud one. */
+	g_gain = g_quiet ? 0.0f : 1.0f;
+	g_gain_step = dst_rate > 0 ? 1000.0f / ((float)QUIET_FADE_MS * (float)dst_rate)
+	                           : 1.0f;
+	g_quiet_frames = 0;
+
 	if (src_rate <= 0.0 || dst_rate <= 0) {
 		g_base_ratio = g_ratio = 1.0;
 		build_kernel();

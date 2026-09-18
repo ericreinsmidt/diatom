@@ -89,8 +89,8 @@ def main():
     with Diatom() as d:
         ready = d.line("READY")
         print(f"  READY: {ready}")
-        ck(ready is not None and "proto=5" in ready,
-           "READY announces proto=5, so a launcher knows mute exists")
+        ck(ready is not None and "proto=6" in ready,
+           "READY announces proto=6, so a launcher knows quiet exists")
 
         # Query. Empty is a real value - the port's default device - and the
         # launcher has to be able to tell it from "no answer".
@@ -123,11 +123,90 @@ def main():
         ck(r == "AUDIO\tdevice=", "re-stating the same device answers the same")
         ck(r is not None and not r.startswith("ERROR"), "and is not an error")
 
+        # Quiet, ADR-0032: the launcher's to set and nobody else's, so it
+        # starts off, says what it was set to, and a value that is not "1"
+        # lets the game be heard rather than holding it silent.
+        d.send("QUIET")
+        ck(d.line("QUIET") == "QUIET\ton=0", "QUIET answers, off before anyone sets it")
+        d.send("SETQUIET\ton=1")
+        ck(d.line("QUIET") == "QUIET\ton=1", "SETQUIET answers with the new state")
+        d.send("QUIET")
+        ck(d.line("QUIET") == "QUIET\ton=1", "and still holds it on the next ask")
+        d.send("SETQUIET\ton=true")
+        ck(d.line("QUIET") == "QUIET\ton=0", "a value that is not 1 releases it")
+
         # ADR-0009's forward-compatibility promise, which is what lets a verb
         # be added at all. If this ever fails, adding one stops being safe.
         d.send("NOSUCHVERB\tdevice=x")
         d.send("AUDIO")
         ck(d.line("AUDIO") is not None, "an unknown verb is ignored, not fatal")
+
+    # ADR-0033: the newest connection wins. On 2026-09-18 a daemon the
+    # launcher had started inherited the launcher's end of this socket and kept
+    # it open after the launcher died. The connection never reached EOF, this
+    # process never looked at the listener while it had one, and the restarted
+    # launcher blocked in connect before its first frame - the Brick froze.
+    #
+    # So: hold a connection open and never read it again, the way that daemon
+    # did, then connect three more times, each while the one before is held.
+    # Every one has to be greeted - READY is what an accepted launcher hears
+    # first - which the old code never did for any of them.
+    def ready(c):
+        buf, deadline = b"", time.time() + 2.0
+        while time.time() < deadline:
+            try:
+                got = c.recv(4096)
+            except OSError:
+                return False
+            if not got: return False
+            buf += got
+            if b"READY" in buf: return True
+        return False
+
+    with Diatom() as d:
+        d.line("READY")
+        stale, newer, greeted = d.c, [], True
+        for _ in range(3):
+            c = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            c.settimeout(2.0)
+            try:
+                c.connect(SOCK)
+            except OSError:
+                c.close()
+                greeted = False
+                break
+            newer.append(c)
+            if not ready(c):
+                greeted = False
+                break
+        ck(greeted, "a connect while one is held is accepted, three times over")
+        if newer:
+            last, buf, ans = newer[-1], b"", None
+            last.sendall(b"AUDIO\n")
+            deadline = time.time() + 2.0
+            while ans is None and time.time() < deadline:
+                try:
+                    got = last.recv(4096)
+                except socket.timeout:
+                    break
+                if not got: break
+                buf += got
+                ans = next((l for l in buf.decode().split("\n")
+                            if l.startswith("AUDIO")), None)
+            ck(ans == "AUDIO\tdevice=", "the newest connection is the one answered")
+
+            def closed(c):
+                c.settimeout(2.0)
+                try:
+                    while True:
+                        got = c.recv(4096)
+                        if not got: return True
+                except OSError:
+                    return False
+            ck(closed(stale), "the connection that was held open is closed")
+            ck(all(closed(c) for c in newer[:-1]),
+               "and so is every one the newest displaced")
+        for c in newer: c.close()
 
     if fails:
         print(f"\n{len(fails)} protocol check(s) failed")

@@ -891,6 +891,22 @@ static void mute_set(const diatom_msg *m)
 	mute_emit();
 }
 
+/* ---- quiet, ADR-0032 -----------------------------------------------------
+ *
+ * The launcher decides - it knows what else is playing - and this host does
+ * it, in its own stream (audio.c). Never emitted unsolicited: nothing on this
+ * side ever changes it. */
+static void quiet_emit(void)
+{
+	diatom_proto_send("QUIET\ton=%d", diatom_audio_quiet_get() ? 1 : 0);
+}
+
+static void quiet_set(const diatom_msg *m)
+{
+	diatom_audio_quiet(m->on != 0);
+	quiet_emit();
+}
+
 static void level_set(const diatom_msg *m)
 {
 	int k, idx, cnt;
@@ -958,6 +974,8 @@ static bool state_plane_msg(const diatom_msg *m)
 	case DIATOM_MSG_SETAUDIO: audio_set(m);      return true;
 	case DIATOM_MSG_MUTE:     mute_emit();       return true;
 	case DIATOM_MSG_SETMUTE:  mute_set(m);       return true;
+	case DIATOM_MSG_QUIET:    quiet_emit();      return true;
+	case DIATOM_MSG_SETQUIET: quiet_set(m);      return true;
 	case DIATOM_MSG_DISPLAY:
 		/* apply_display is what emits, so ask it to restate the current one
 		 * rather than growing a second path that could disagree with it. */
@@ -1532,6 +1550,8 @@ static int run_session_inner(const diatom_session *sn)
 		       diatom_audio_peak(), diatom_audio_rms(), diatom_audio_peak() * 100.0 / 32767.0,
 		       (unsigned long long)diatom_audio_nonzero(),
 		       (unsigned long long)diatom_audio_samples());
+		printf("diatom: audio quiet for %llu frame(s), fades included\n",
+		       (unsigned long long)diatom_audio_quiet_frames());
 		printf("diatom: audio queued min %zu max %zu final %zu, target %d, capacity %d\n",
 		       q_min == (size_t)-1 ? 0 : q_min, q_max,
 		       diatom_port_audio_queued(),

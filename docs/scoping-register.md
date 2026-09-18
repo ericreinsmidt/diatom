@@ -345,6 +345,12 @@ others remain:
       The console id has to be declared because nobody on this side can infer
       it: an RA address is an offset into a per-console space, libretro has no
       call that asks, and `genesis_plus_gx` is three consoles anyway.
+- [x] **[LB]** **What happens to a second connection?** →
+      **[ADR-0033](decisions/0033-the-newest-connection-wins.md)**
+      *(Accepted)*. It displaces the first: a daemon held a dead launcher's
+      socket and the next one blocked in `connect` at boot. Built 2026-09-18;
+      on the Brick a second client was greeted mid-connection and the launcher
+      reconnected on its next launch. check-proto covers it.
 - [x] **[OPEN]** **The launcher can say something during a game** →
       **[ADR-0027](decisions/0027-an-overlay-the-port-composites.md)**
       *(Proposed)*. It renders pixels, `OVERLAY path= ms=` carries them, and
@@ -883,6 +889,13 @@ Two levers the spike discovered:
       mixer and silences every producer. This port may cut it for its own level
       0 and must never re-enable it while muted; `SETMUTE` says which. Measured,
       and not implemented here yet - the exit path re-enables it today.
+
+- [x] **[OPEN]** **Can the launcher silence the game and not the music?** →
+      **[ADR-0032](decisions/0032-quiet-the-game-in-its-own-stream.md)**
+      *(Accepted)*. `SETQUIET on=1|0`: faded silence in place of the game's
+      samples, after the resampler. Built 2026-09-18: on the Brick a game under
+      music sent 0 of 1360466 samples non-zero, and Eric heard no click at the
+      10 ms fade. check-stateplane reads the fade back from the tap.
 
 ---
 

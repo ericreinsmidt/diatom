@@ -23,7 +23,13 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SOCK = "/tmp/diatom-stateplane.sock"
 if os.path.exists(SOCK): os.unlink(SOCK)
 
-p = subprocess.Popen([f"{ROOT}/build/desktop/diatom", "--socket", SOCK],
+# What went to the device, for the quiet check at the end: the stub core's
+# tone as the port was handed it, after the resampler and after quiet.
+TAP = "/tmp/diatom-stateplane-tap"
+for ext in (".in.raw", ".out.raw"):
+    if os.path.exists(TAP + ext): os.unlink(TAP + ext)
+p = subprocess.Popen([f"{ROOT}/build/desktop/diatom", "--socket", SOCK,
+                      "--tap-audio", TAP],
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 for _ in range(100):
     if os.path.exists(SOCK): break
@@ -60,7 +66,7 @@ def check_that(name, cond, got):
     if not cond: fails.append(name)
 
 print("READY:", (r := drain(2.0)))
-check("proto version", [x for x in r if x.startswith("READY")][0].split("\t")[1], "proto=5")
+check("proto version", [x for x in r if x.startswith("READY")][0].split("\t")[1], "proto=6")
 
 # Before any RUN: identity must already be identity, not "everything unbound".
 send("MAP"); check("map is identity while idle", drain(), ["MAP\tmap=identity"])
@@ -300,11 +306,60 @@ send("SETMUTE\ton=true"); got = drain(2.0)
 check_that("a value that is not 1 releases rather than holds",
            any(l == "MUTE\ton=0" for l in got), got)
 
+# Quiet, ADR-0032. Unlike mute this one IS this host's to do, so the sound
+# itself is checked, below, once the process has gone and the tap is flushed.
+send("QUIET"); got = drain(1.0)
+check_that("QUIET answers before anyone has set it",
+           any(l == "QUIET\ton=0" for l in got), got)
+send("SETQUIET\ton=1"); got = drain(1.0)
+check_that("SETQUIET is acknowledged with the new state",
+           any(l == "QUIET\ton=1" for l in got), got)
+send("SETQUIET\ton=0"); got = drain(1.0)
+check_that("and released", any(l == "QUIET\ton=0" for l in got), got)
+
 send("STOP"); got = drain(3.0)
 check_that("the game still ends normally after all that",
            any(l.startswith("EXIT") for l in got), got)
 
 send("QUIT"); time.sleep(0.4)
 s.close(); p.terminate(); p.wait(timeout=5)
+
+# The quiet, as heard. The stub core plays an unbroken 440 Hz tone, so the one
+# long run of exact zeros in the tap is the quiet - sessions start with 43 ms
+# of primed silence, and nothing else is silent. Around it the tone has to
+# FADE: a step from full amplitude to nothing is broadband energy, which is a
+# click, and a 440 Hz sine at this level never moves more than about 130
+# between two samples at 48 kHz, where a step would move up to 2200.
+import array
+tone = array.array("h")
+with open(TAP + ".out.raw", "rb") as f: tone.frombytes(f.read())
+L = tone[0::2]
+run, i = (0, 0), 0
+while i < len(L):
+    if L[i] == 0:
+        j = i
+        while j < len(L) and L[j] == 0: j += 1
+        if j - i > run[1] - run[0]: run = (i, j)
+        i = j
+    else:
+        i += 1
+q0, q1 = run
+ms = 48                                    # frames per ms at the desktop's rate
+check_that("the tone went to exact silence for a while", q1 - q0 >= 200 * ms,
+           f"{(q1 - q0) / ms:.0f} ms of zeros")
+check_that("and came back afterwards",
+           any(L[k] != 0 for k in range(q1, min(len(L), q1 + 100 * ms))),
+           f"frames {q1}..{q1 + 100 * ms}")
+near = range(max(1, q0 - 50 * ms), min(len(L), q1 + 50 * ms))
+step = max(abs(L[k] - L[k - 1]) for k in near)
+check_that("no step going quiet or coming back - it fades", step <= 400,
+           f"largest sample-to-sample move {step}")
+def peak(a, b): return max(abs(v) for v in L[max(0, a):max(0, min(len(L), b))] or [0])
+check_that("the last 2 ms before the silence are already faded",
+           peak(q0 - 2 * ms, q0) < 0.3 * peak(q0 - 30 * ms, q0 - 20 * ms),
+           f"{peak(q0 - 2 * ms, q0)} against {peak(q0 - 30 * ms, q0 - 20 * ms)}")
+check_that("and the first 2 ms after it are still fading in",
+           peak(q1, q1 + 2 * ms) < 0.3 * peak(q1 + 20 * ms, q1 + 30 * ms),
+           f"{peak(q1, q1 + 2 * ms)} against {peak(q1 + 20 * ms, q1 + 30 * ms)}")
 print("\n" + ("ALL PASS" if not fails else f"{len(fails)} FAILED: {fails}"))
 sys.exit(1 if fails else 0)
