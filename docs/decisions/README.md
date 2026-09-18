@@ -57,7 +57,7 @@ never started.
 | [0006](0006-keep-all-cores-resident.md) | Keep all cores resident; never unload | Accepted |
 | [0007](0007-port-interface.md) | The port interface | Accepted |
 | [0008](0008-separate-long-lived-process.md) | Diatom runs as a separate, long-lived process | Accepted |
-| [0009](0009-launcher-protocol.md) | The launcher ↔ Diatom protocol | Accepted |
+| [0009](0009-launcher-protocol.md) | The launcher ↔ Diatom protocol | Accepted; its one-connection rule superseded by 0033 |
 | [0010](0010-rtld-local-is-mandatory.md) | `RTLD_LOCAL` is mandatory, and load-bearing | Accepted |
 | [0011](0011-lock-the-display-rect.md) | Lock the display rect at load from base geometry | Superseded by 0021 |
 | [0012](0012-independent-toolchain.md) | Build our own toolchain; depend on nothing from NextUI or MinUI | Accepted |
@@ -80,3 +80,5 @@ never started.
 | [0029](0029-audio-output-is-a-state.md) | Audio output is a state, owned by the launcher | Superseded by 0030 |
 | [0030](0030-audio-output-remeasured.md) | Audio output, re-measured: SDL cannot drive a bluealsa device string | Accepted |
 | [0031](0031-mute-is-a-state-the-launcher-owns.md) | Mute is the launcher's, and no producer may undo it | Accepted |
+| [0032](0032-quiet-the-game-in-its-own-stream.md) | Quiet the game in its own stream, when the launcher says so | Accepted |
+| [0033](0033-the-newest-connection-wins.md) | The newest connection wins, because a dead launcher's socket can outlive it | Accepted |

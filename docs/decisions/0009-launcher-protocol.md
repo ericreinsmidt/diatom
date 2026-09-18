@@ -3,7 +3,8 @@
 - **Status:** Accepted
 - **Date:** 2026-08-23
 - **Supersedes:** -
-- **Superseded by:** -
+- **Superseded by:** [0033](0033-the-newest-connection-wins.md), for the
+  one-connection rule only. The rest of this record stands.
 
 ## Context
 
