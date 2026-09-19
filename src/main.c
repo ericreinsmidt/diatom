@@ -866,7 +866,7 @@ static void audio_tick(void)
  * the port falls back, keeps the game running, and AUDIO then says where the
  * sound actually ended up. Answering with an error as well would describe the
  * same event twice and invite a launcher to treat it as fatal, which is the
- * behaviour ADR-0029 exists to remove. */
+ * behavior ADR-0029 exists to remove. */
 static void audio_set(const diatom_msg *m)
 {
 	char actual[128];

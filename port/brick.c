@@ -811,7 +811,7 @@ static void *flip_worker(void *arg)
 
 /* What is open now. Empty means the default device; it is also what the host
  * is told, so "" reads as "wherever this device sends sound by default" rather
- * than as a name nobody recognises. */
+ * than as a name nobody recognizes. */
 static char g_audio_dev[128];
 
 /* Closing an SDL audio device JOINS its audio thread, and that thread can be
