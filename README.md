@@ -1,8 +1,6 @@
 <p align="center">
-  <img src="docs/diatom.svg" alt="" height="96">
+  <img src="docs/diatom-card.png" alt="diatom: a minimal libretro frontend" width="100%">
 </p>
-
-# diatom
 
 A minimal libretro frontend for low-power ARM Linux handhelds (~1GB RAM). It is
 the emulator behind [TortOS](https://github.com/ericreinsmidt/TortOS), which
