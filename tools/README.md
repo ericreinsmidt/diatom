@@ -1,6 +1,6 @@
 # tools
 
-Measurement instruments, not part of Diatom's runtime and never linked into it.
+Measurement instruments, not part of diatom's runtime and never linked into it.
 
 They started as spikes. They are tracked because their own results are cited as
 evidence in `docs/spikes/`, and an unversioned instrument makes those claims
@@ -61,7 +61,7 @@ cannot be re-checked, and that is the drift this project exists to avoid.
 | `savprobe.c` | What does each core expose for saving - SRAM, RTC, state size - and what does `retro_serialize` cost? | [ADR-0016](../docs/decisions/0016-saves-and-save-states.md) |
 | `wprobe.c` | What does an atomic save write (write, fsync, rename) cost on the device's card? | [ADR-0016](../docs/decisions/0016-saves-and-save-states.md) |
 | `sigprobe.c` | On power-off, does a running process get a signal, and how long before it dies? | [ADR-0016](../docs/decisions/0016-saves-and-save-states.md) |
-| `protodrive.c` | A stand-in launcher: drives Diatom over the ADR-0009 socket and times RUN to RUNNING. Also exercises READY, STOP and QUIT, so a protocol regression fails here rather than on a device with a real launcher attached. | [protocol log](../docs/discussion/2026-08-25-protocol.md) |
+| `protodrive.c` | A stand-in launcher: drives diatom over the ADR-0009 socket and times RUN to RUNNING. Also exercises READY, STOP and QUIT, so a protocol regression fails here rather than on a device with a real launcher attached. | [protocol log](../docs/discussion/2026-08-25-protocol.md) |
 | `blitprobe.c` | Is the blit slow because of the pixels it computes or the memory it writes? | [blit-cost spike](../docs/spikes/2026-08-25-blit-cost.md) |
 | `warmprobe.c` | What does a launch cost with the process up and the core already resident? | [warm-launch spike](../docs/spikes/2026-08-25-warm-launch.md) |
 | `pantest.c` | What does `FBIOPAN_DISPLAY` cost, and does anything change it? | [ADR-0013](../docs/decisions/0013-brick-fbdev-flip-thread.md) |
@@ -74,15 +74,15 @@ the spike for the sequence.
 
 `protodrive` with `secs` of **0** does not send STOP: the session is left to end
 on its own. That is how the crash paths are watched, since the point there is
-that Diatom reports something nobody asked it to.
+that diatom reports something nobody asked it to.
 
 ## Making a core die on purpose
 
 `test/stubcore.c` reads `STUBCORE_CRASH` and kills itself on demand, which is
 the only way to exercise `EXIT reason=crash` against `ERROR code=crash`. It
-lives in the fixture rather than in Diatom deliberately - a frontend with a
+lives in the fixture rather than in diatom deliberately - a frontend with a
 `--crash` flag would be test code inside the shipped binary, and the whole point
-is that Diatom learns about the crash the way it will in the field, from a
+is that diatom learns about the crash the way it will in the field, from a
 signal it did not raise.
 
 | Value | What it does |
@@ -253,8 +253,8 @@ person in the room can answer:
     DIATOM_GAIN=15 tools/micprobe.sh ...      volume; INVERTED, lower is louder
 
 It records a baseline first, then records again while the thing under test
-plays, and reports the ratio. Four consecutive Diatom runs measured 686-702
-against a 25 baseline - which is what finally established that Diatom's audio
+plays, and reports the ratio. Four consecutive diatom runs measured 686-702
+against a 25 baseline - which is what finally established that diatom's audio
 worked, after hours of assuming it did not.
 
 **Why it exists.** On 2026-08-25 an evening went into "no sound" that was never
@@ -300,7 +300,7 @@ Linear interpolation is a lowpass and cannot add high frequencies; energy above
 
 ---
 
-## allocwatch.c - what does Diatom allocate, and when?
+## allocwatch.c - what does diatom allocate, and when?
 
 §11 is the section this project calls its own thesis, and its "no malloc in the
 frame loop" item read **Unverified. Believed true.** for three days. This is what
@@ -309,18 +309,18 @@ turned it into a number.
 Linked with `-Wl,--wrap=malloc` (and calloc, realloc, free), which rewrites those
 calls in the objects being *linked*. A core arrives by `dlopen` and binds its own
 malloc through libc, so it never appears here - and that is the right boundary,
-because the claim under test is that *Diatom* does not allocate per frame, not
+because the claim under test is that *diatom* does not allocate per frame, not
 that no code anywhere does. Cores allocate; several of them must.
 
 The measurement is **differential**: run N frames and 2N frames and compare.
 Start-up costs are identical in both, so anything the frame loop does is the
-difference. That is what lets the whole thing live outside Diatom - no counter to
+difference. That is what lets the whole thing live outside diatom - no counter to
 arm, no hook to call, nothing test-shaped in the shipped binary, for the same
 reason the crash fixture lives in `stubcore` rather than behind a `--crash` flag.
 
 Measured on a Brick, 2026-08-26, FCEUmm running Contra:
 
-| frames | Diatom's allocations | peak RSS |
+| frames | diatom's allocations | peak RSS |
 |---|---|---|
 | 300 | `malloc=2 calloc=0 realloc=1 free=3` | 8.24 MB |
 | 600 | `malloc=2 calloc=0 realloc=1 free=3` | 8.23 MB |

@@ -25,7 +25,7 @@ vendored under ADR-0025 so the build stays self-contained.
 - **Copyright (c) 2018 RetroAchievements.org**
 - **MIT licensed**, full text in `vendor/rcheevos/LICENSE`.
 
-MIT is the whole reason this is possible rather than a problem: it is Diatom's
+MIT is the whole reason this is possible rather than a problem: it is diatom's
 own license, so ADR-0002's founding goal - escaping GPL inheritance - is
 untouched. The networking halves (`rc_client`, `rapi`, `rurl`) are deliberately
 not vendored; `vendor/rcheevos/README.md` lists every omission and why.
@@ -36,5 +36,5 @@ not vendored; `vendor/rcheevos/README.md` lists every omission and why.
 it is handed at runtime. Cores keep their own licenses - commonly GPL - and are
 the responsibility of whoever distributes them.
 
-`test/stubcore.c` is Diatom's own code: a libretro core that is not an emulator,
+`test/stubcore.c` is diatom's own code: a libretro core that is not an emulator,
 so the frontend can be exercised with no third-party binary present.

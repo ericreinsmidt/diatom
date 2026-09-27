@@ -4,7 +4,7 @@ Pinned 2026-08-26. Generated from the table in
 `tools/fetch-cores.sh`, which is where the pin lives; this file is the
 readable copy of it, and the script fails rather than rewriting it.
 
-**Not part of Diatom.** These are third-party binaries; Diatom neither
+**Not part of diatom.** These are third-party binaries; diatom neither
 ships nor depends on them, and loads whatever core it is handed. This file
 exists so the measurements in `docs/` name the exact bytes that produced
 them. The binaries themselves are gitignored.
@@ -25,7 +25,7 @@ differences matter to anyone shipping an image - see
 | `genesis_plus_gx` | Non-commercial | 12589216 | `3673a22b906509461e23a5a118b1d1bec15cbda105f260cbcbc08a16b2124e48` |
 | `mednafen_pce_fast` | GPLv2 | 4465432 | `aca90a14b18108c86398da2267ef40d5145eaddbc1c1b310614d745b258552b1` |
 
-Each core also reports its own name and version, which Diatom logs at
+Each core also reports its own name and version, which diatom logs at
 load and which usually carries an upstream git hash. Those strings are
 recorded alongside the measurements that used them.
 
