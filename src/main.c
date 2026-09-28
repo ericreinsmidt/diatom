@@ -1181,6 +1181,16 @@ static int run_session_inner(const diatom_session *sn)
 	 * because no panel and no core will ever agree on a rate. */
 	frame_us = 1000000.0 / (av.timing.fps > 0 ? av.timing.fps : 60.0);
 
+	/* Idle reporting belongs to this game, and this game has not asked yet.
+	 * The launcher's SETIDLE comes behind SETLEVEL, SETMUTE and SETDISPLAY,
+	 * and the loop reads one message a frame, so the first frames checked the
+	 * LAST game's timeout against the last game's last press. Anyone who had
+	 * sat on the shelf longer than Auto Off had the device switch off seven
+	 * frames into the next game - measured on the device 2026-09-28, and seen
+	 * by a reviewer before that. Off until SETIDLE turns it back on. */
+	g_idle_after_ms = 0;
+	idle_restart();
+
 	/* The display handover, and the reason ADR-0009 separates ERROR from EXIT:
 	 * from here the launcher must stop drawing. Announced before the warmup,
 	 * because the warmup already puts frames on the panel. */
