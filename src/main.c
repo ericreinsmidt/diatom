@@ -402,14 +402,9 @@ static double        g_base_aspect;
 static int           g_mode;
 static diatom_filter g_filter;
 
-/* Per-combination measurement, so a mode that looks best can be checked
- * against what it costs. Printed on every change and again at exit. */
-#define SLOT(m, f) ((m) * 2 + (int)(f))
-static struct {
-	long     frames;
-	uint64_t present_us;
-	long     resyncs;
-} g_stat[32];
+/* What presenting cost this session, for the summary at exit. */
+static long     g_present_frames;
+static uint64_t g_present_us;
 
 /* Called from inside retro_run. Copy and return; do not present here. */
 void diatom_on_video(const void *data, unsigned w, unsigned h, size_t pitch)
@@ -471,8 +466,7 @@ static void usage(void)
 		"learn - it has no core list - so whoever launches it says (ADR-0017).\n"
 		"\nSRAM is automatic: read at load, written when it changes, flushed on\n"
 		"exit and on SIGTERM. Save states take paths, never slot numbers - slots\n"
-		"belong to the launcher (ADR-0016).\n"
-		"\non device: SELECT+R1 / SELECT+L1 changes mode, SELECT+A toggles filter\n\n");
+		"belong to the launcher (ADR-0016).\n\n");
 	for (i = 0; i < diatom_mode_count; i++)
 		fprintf(stderr, "  %-10s %s\n",
 		        diatom_modes[i].name, diatom_modes[i].note);
@@ -495,29 +489,13 @@ static void apply_display(int mode, diatom_filter filter)
 	fflush(stdout);
 
 	/* Reported from the ONE place the mode ever changes, so a launcher hears
-	 * about it whether it asked, the user cycled it with a chord, or the rect
-	 * settled underneath it (ADR-0021). `rect=` is free here and is what a
+	 * about it whether it asked or the rect settled underneath it (ADR-0021). `rect=` is free here and is what a
 	 * launcher would otherwise have to recompute from geometry it does not
 	 * have. ADR-0022. */
 	if (diatom_proto_connected())
 		diatom_proto_send("DISPLAY\tmode=%s\tfilter=%s\trect=%dx%d+%d+%d",
 		                  diatom_modes[mode].name, filter_name(filter),
 		                  g_dst.w, g_dst.h, g_dst.x, g_dst.y);
-}
-
-/* Report what a combination cost, so the look and the price are read together.
- * A mode that is prettier and misses frames is a trade, not a win. */
-static void report_slot(int mode, diatom_filter filter)
-{
-	int  s = SLOT(mode, filter);
-	long f = g_stat[s].frames;
-
-	if (f <= 0) return;
-	printf("diatom:   %-10s %-7s %5ld frames, present avg %5.2f ms, %ld resync(s)\n",
-	       diatom_modes[mode].name, filter_name(filter), f,
-	       (double)g_stat[s].present_us / (double)f / 1000.0,
-	       g_stat[s].resyncs);
-	fflush(stdout);
 }
 
 /* The in-game menu handover - ADR-0016.
@@ -709,53 +687,6 @@ static bool menu_pause(const diatom_session *sn)
 	 * loop then ends the session the same way STOP does - which is the right
 	 * reading of a termination arriving with the menu open. */
 	return false;
-}
-
-/* SELECT is the modifier: SELECT+R1 and SELECT+L1 step the mode, SELECT+A
- * toggles the filter, all edge-triggered. The keys involved are hidden from
- * the core while SELECT is held; the very first frame of the press still
- * leaks, because the core reads input inside retro_run before this runs.
- * Harmless here and not worth a pre-run poll to fix.
- *
- * Returns what the core must not see this frame, and no longer sets it. There
- * are two reasons to hide a button and they have different lifetimes: this one
- * is recomputed from the pad every frame, the resume hold-off below is latched
- * until release. They shared one variable and this function is the one that
- * runs every frame, so `suppress(0)` on the first frame SELECT was not held
- * silently cleared the other. Composing them is now the caller's job, which is
- * also the only place that can see both. */
-static uint32_t display_chord(uint32_t buttons, uint32_t prev)
-{
-	static const uint32_t chord = DIATOM_BIT(DIATOM_BTN_SELECT);
-	uint32_t pressed = buttons & ~prev;
-	uint32_t mask;
-
-	if (!(buttons & chord)) return 0;
-
-	mask = chord | DIATOM_BIT(DIATOM_BTN_L1)
-	             | DIATOM_BIT(DIATOM_BTN_R1)
-	             | DIATOM_BIT(DIATOM_BTN_A);
-
-	/* Each of these returns rather than falling through, so one press cannot
-	 * perform two actions in a frame. */
-	if (pressed & DIATOM_BIT(DIATOM_BTN_R1)) {
-		report_slot(g_mode, g_filter);
-		apply_display((g_mode + 1) % diatom_mode_count, g_filter);
-		return mask;
-	}
-	if (pressed & DIATOM_BIT(DIATOM_BTN_L1)) {
-		report_slot(g_mode, g_filter);
-		apply_display((g_mode + diatom_mode_count - 1) % diatom_mode_count,
-		              g_filter);
-		return mask;
-	}
-	if (pressed & DIATOM_BIT(DIATOM_BTN_A)) {
-		report_slot(g_mode, g_filter);
-		apply_display(g_mode, g_filter == DIATOM_FILTER_SHARP
-		                    ? DIATOM_FILTER_NEAREST : DIATOM_FILTER_SHARP);
-		return mask;
-	}
-	return mask;
 }
 
 /* One game, start to finish. Extracted so the protocol loop (ADR-0009) can run
@@ -1019,10 +950,10 @@ static int run_session_inner(const diatom_session *sn)
 	long frames = 0, geom_changes = 0, resyncs = 0;
 	size_t q_min = (size_t)-1, q_max = 0;
 	bool stop = false;
-	int i;
 
 	/* Per-game state that must not carry over from the previous session. */
-	memset(g_stat, 0, sizeof g_stat);
+	g_present_frames = 0;
+	g_present_us = 0;
 	g_frame_w = g_frame_h = 0;
 	g_frame_pitch = 0;
 	g_frame_fresh = false;
@@ -1333,13 +1264,10 @@ static int run_session_inner(const diatom_session *sn)
 			                    g_frame_w, g_frame_h, g_frame_pitch,
 			                    g_policy.pixfmt, g_dst,
 			                    g_filter);
-			g_stat[SLOT(g_mode, g_filter)].present_us
-				+= diatom_port_now_us() - p0;
-			g_stat[SLOT(g_mode, g_filter)].frames++;
+			g_present_us += diatom_port_now_us() - p0;
+			g_present_frames++;
 		}
 
-		/* Display switching lives after present, so the timing above covers
-		 * exactly one combination's work. */
 		diatom_save_tick();
 
 		if (diatom_proto_active()) {
@@ -1402,10 +1330,9 @@ static int run_session_inner(const diatom_session *sn)
 		 * physically down stays latched. */
 		held_at_entry &= buttons;
 
-		/* The single writer. Both reasons to hide a button end up here, so
-		 * neither can clear the other. */
-		diatom_env_suppress(display_chord(buttons, prev_buttons)
-		                    | held_at_entry);
+		/* The single writer. Every reason to hide a button from the core is
+		 * composed here, so no reason can clear another. */
+		diatom_env_suppress(held_at_entry);
 
 		/* MENU is Diatom's own key and the ports no longer act on it, because
 		 * what it means is host policy: standalone it ends the session, under
@@ -1499,7 +1426,6 @@ static int run_session_inner(const diatom_session *sn)
 			 * lying about its frame rate. */
 			next_us = (double)now;
 			resyncs++;
-			g_stat[SLOT(g_mode, g_filter)].resyncs++;
 		}
 		/* Otherwise keep the debt and let the next short sleep repay it. */
 	}
@@ -1544,11 +1470,10 @@ static int run_session_inner(const diatom_session *sn)
 		printf("diatom: %ld geometry change(s), last rect %dx%d at %d,%d\n",
 		       geom_changes, g_dst.w, g_dst.h, g_dst.x, g_dst.y);
 		printf("diatom: %ld resync(s)\n", resyncs);
-		printf("diatom: per display mode:\n");
-		for (i = 0; i < diatom_mode_count; i++) {
-			report_slot(i, DIATOM_FILTER_NEAREST);
-			report_slot(i, DIATOM_FILTER_SHARP);
-		}
+		if (g_present_frames)
+			printf("diatom: present avg %.2f ms over %ld frames\n",
+			       (double)g_present_us / (double)g_present_frames / 1000.0,
+			       g_present_frames);
 		printf("diatom: audio dropped %llu frame(s)\n",
 		       (unsigned long long)diatom_audio_dropped());
 		printf("diatom: audio IN  peak %d rms %.0f, %llu of %llu non-zero\n",

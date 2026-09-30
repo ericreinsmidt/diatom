@@ -93,9 +93,7 @@ case "$*" in
     *)        set -- --core "$CORE" --rom "$ROM" "$@" ;;
 esac
 
-echo "diatom: SELECT+R1 / SELECT+L1  next / previous display mode"
-echo "diatom: SELECT+A             toggle nearest <-> sharp filter"
-echo "diatom: MENU                 exit and restore the device UI"
+echo "diatom: MENU  exit and restore the device UI"
 
 cd "$HERE" || restore 1
 LD_LIBRARY_PATH=/usr/trimui/lib ./diatom "$@"

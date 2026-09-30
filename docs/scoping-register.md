@@ -497,14 +497,12 @@ Two amendments ADR-0007 makes to the table above:
       modes; +7.3ms on `aspect`, the only geometry with two fractional axes and
       the only combination that has ever dropped a frame. Nothing visible was
       gained at these factors, so `nearest` is the default.
-- [ ] **[OPEN]** **Remove the display chords and the per-combination timing
-      table** from `src/main.c`. Decided 2026-09-30 (Eric): delete them. They
-      were the instruments for the mode comparison, and they still work in
-      every game - SELECT+R1/L1 cycle the mode, SELECT+A flips the filter to
-      sharp, the one setting that has dropped frames - and while SELECT is
-      held L1, R1 and A never reach the game. TortOS's menu sets the mode;
-      nothing sets the filter, so `nearest` stands. Do before fast forward
-      (§8), which adds a reason of its own to `diatom_env_suppress`.
+- [x] **[OPEN]** **The display chords and the per-combination timing table
+      are gone** (2026-09-30, Eric). Instruments for the mode comparison, they
+      still worked in every game: SELECT+R1/L1 cycled the mode, SELECT+A set
+      the `sharp` filter, and L1, R1 and A never reached a game while SELECT
+      was held. TortOS's menu sets the mode and `nearest` stands. The exit
+      summary keeps one line for what presenting cost.
 - [x] **[OPEN]** Rotation → **the port hides it entirely.** `surface_w/h` are
       logical and always landscape; a core asking `SET_ROTATION` is declined
       because honoring it would rotate twice. **Designed, not proven** - the
