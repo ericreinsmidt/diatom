@@ -147,7 +147,7 @@ endif
 #   tools/brick-make.sh probes
 PROBE_SRC := savprobe wprobe sigprobe pantest holdfb warmprobe protodrive blitprobe
 PROBES    := $(addprefix $(TOOLS_DIR)/,$(PROBE_SRC)) $(TOOLS_DIR)/eglpresent \
-             $(TOOLS_DIR)/btaudio $(TOOLS_DIR)/coreprobe
+             $(TOOLS_DIR)/btaudio $(TOOLS_DIR)/coreprobe $(TOOLS_DIR)/ffprobe
 
 probes: $(PROBES)
 
@@ -159,6 +159,11 @@ $(TOOLS_DIR)/savprobe: tools/savprobe.c
 $(TOOLS_DIR)/coreprobe: tools/coreprobe.c
 	@mkdir -p $(TOOLS_DIR)
 	$(CC) $(TOOL_CFLAGS) -o $@ $< -ldl
+
+# How fast each core runs unpaced: the ceiling for fast forward. dlopen again.
+$(TOOLS_DIR)/ffprobe: tools/ffprobe.c
+	@mkdir -p $(TOOLS_DIR)
+	$(CC) $(TOOL_CFLAGS) -Iinclude -o $@ $< -ldl
 
 $(TOOLS_DIR)/%: tools/%.c
 	@mkdir -p $(TOOLS_DIR)

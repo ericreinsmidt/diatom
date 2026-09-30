@@ -497,14 +497,14 @@ Two amendments ADR-0007 makes to the table above:
       modes; +7.3ms on `aspect`, the only geometry with two fractional axes and
       the only combination that has ever dropped a frame. Nothing visible was
       gained at these factors, so `nearest` is the default.
-- [ ] **[DEFERRED]** **Remove the display chords and the per-combination timing
-      table** from `src/main.c`. Both were built for the mode comparison and
-      both are still the instruments for the last open display question (Game
-      Boy at +20% and `integer-vertical`, on the panel). **Trigger: that look is
-      done.** Then either delete them, or justify runtime mode changes on their
-      own merits once ADR-0009's protocol exists - ADR-0014 leaves hotkey
-      ownership open. Recorded so they cannot persist by inertia; the on-screen
-      overlay from the same session was already removed (commit `b7f1258`).
+- [ ] **[OPEN]** **Remove the display chords and the per-combination timing
+      table** from `src/main.c`. Decided 2026-09-30 (Eric): delete them. They
+      were the instruments for the mode comparison, and they still work in
+      every game - SELECT+R1/L1 cycle the mode, SELECT+A flips the filter to
+      sharp, the one setting that has dropped frames - and while SELECT is
+      held L1, R1 and A never reach the game. TortOS's menu sets the mode;
+      nothing sets the filter, so `nearest` stands. Do before fast forward
+      (§8), which adds a reason of its own to `diatom_env_suppress`.
 - [x] **[OPEN]** Rotation → **the port hides it entirely.** `surface_w/h` are
       logical and always landscape; a core asking `SET_ROTATION` is declined
       because honoring it would rotate twice. **Designed, not proven** - the
@@ -1227,6 +1227,17 @@ host decision and only means re-running the spike, which is cheap.
       A puts nothing in the game, and the conservative latch strands nothing.
       Not instrumented, for the same reason as the resume fix above.
 
+- [ ] **[OPEN]** **Fast forward, and in-game hotkeys** - ADR-0014 left their
+      owner open. Decided with Eric 2026-09-30: MENU+R2 steps 1x, 2x, 3x, 4x, back to 1x, so MENU opens the menu
+      on RELEASE, and R2 is hidden from the game while MENU is held. Not R2
+      alone: on GB/GBC/GBA it is mGBA's own Turbo R, which works and is kept.
+      Each presented frame gets a ~12 ms budget and runs as many core frames
+      as fit, up to the step; audio is muted. Reported as a new `SPEED` line
+      so the launcher can render the toast (ADR-0027 overlay). `tools/ffprobe`,
+      unpaced from gameplay states: SNES 3.6x at p95 is the floor (DKC);
+      Genesis 4.9x, GBA 4.6x, NGPC 4.8x, NES 7.1x, PCE 7.7x (Rondo, CD).
+      Wants an ADR before code: it settles hotkey ownership and adds a message.
+
 **Genesis note:** launched 3-button in 1988; the 6-button pad arrived 1993 and
 most of the library predates it. Both fit 4 face + L1/R1. Requires
 `retro_set_controller_port_device` - some early games misbehave with a 6-button
@@ -1251,7 +1262,10 @@ pad attached, which is why the real pad has a Mode switch.
       frame (172 KB, not 2.3 MB of panel), written at pause and exit, announced
       before EXIT. Verified on hardware: two Contra sessions, the second
       resuming the first's state, artifacts at TortOS's exact paths.
-- [ ] **[LB]** Rewind: support or drop? Real RAM cost on a 1GB device.
+- [ ] **[LB]** Rewind: support or drop? Real RAM cost on a 1GB device. Eric,
+      2026-09-30: maybe never; fast forward first (§8). If it comes, L2 is not
+      free: pce_fast's Mode Switch (2/6-button pad) and mGBA's Turbo L are on it.
+      Resume states run 22 KB (NES) to 1.0 MB (Genesis Plus GX, on Master System).
 - [ ] **[OPEN]** **NGPC has no battery saves, only states.** Measured
       2026-09-01 on Dark Arms and Metal Slug - 1st Mission, both of which save
       on real hardware: `mednafen_ngp` reports `retro_get_memory_size(SAVE_RAM)`
