@@ -240,12 +240,13 @@ struct dm_ctl_elem_value {
 #define HP_RAW_BOTTOM   61
 
 #define GAIN_LEVELS  20         /* what the USER moves in: 20 steps of 5% */
-#define SPEAKER_CTL  "HpSpeaker Switch"   /* the only true mute on this codec */
+#define SPEAKER_CTL  "HpSpeaker Switch"   /* the speaker's only true mute */
 
 /* Set by the launcher over the state plane, never read from hardware here:
  * what the switch is and what it means are the launcher's, ADR-0031. */
 static bool g_muted;
 #define HP_CTL       "Headphone Volume"   /* 0-7, 6 dB a step, INVERTED */
+#define HP_CTL_QUIET 7                    /* its quiet end, for the cut */
 #define SWAP_CTL     "DAC Swap"           /* 1 crosses left and right */
 
 /* Backlight. This device has no /sys/class/backlight; the panel is driven by
@@ -461,10 +462,13 @@ static void gain_jack_poll(void)
 
 static void gain_apply(void)
 {
-	long v = level_to_raw(g_level);
+	bool cut = g_level <= 0 || g_muted;
+	long v = cut ? GAIN_RAW_MAX : level_to_raw(g_level);
+	long quiet = cut ? HP_CTL_QUIET : 0;
 
 	g_jack_was = jack_present();
 	if (gain_io(&v, 1) < 0) return;
+	ctl_io(HP_CTL, &quiet, 1);
 
 	/* Zero has to cut the path, not just attenuate it. The control advertises
 	 * `mute=0`, meaning its minimum is maximum attenuation - about -74 dB -
@@ -477,8 +481,15 @@ static void gain_apply(void)
 	 * volume press re-enabled the stage and the sound returned. The cut for
 	 * level 0 is still ours; turning it on again is not, while somebody else
 	 * is holding it off. */
-	v = (g_level > 0) && !g_muted;
+	v = !cut;
 	ctl_io(SPEAKER_CTL, &v, 1);
+	/* The switch cuts the speaker only, so with headphones in neither the
+	 * mute nor level 0 silenced them until 2026-09-30. They are cut by level
+	 * instead: GAIN_CTL and HP_CTL both at their quiet ends, silent by ear
+	 * that day. Not "Headphone Switch", tried the same day: with it and
+	 * SPEAKER_CTL both off the codec stops taking samples, and the audio
+	 * thread waits on it - a game froze switching to a headset until the
+	 * mute came off. */
 }
 
 static void osd_show(int kind, int level, int max)
@@ -1787,9 +1798,14 @@ void diatom_port_mute_set(bool on)
 	if (on == g_muted) return;
 	g_muted = on;
 	/* Straight away rather than at the next level change: the whole point is
-	 * that a player flipping a switch hears it now. gain_apply re-writes the
-	 * gain too, which is harmless - it writes what is already there. */
-	if (g_mixer_fd >= 0) gain_apply();
+	 * that a player flipping a switch hears it now. gain_apply writes the
+	 * gain too, which is now part of the cut.
+	 *
+	 * Not with no level, though. Out of a game the level is -1 and the codec
+	 * is the launcher's; applying -1 switched the speaker off under it and,
+	 * with headphones in, wrote a gain past the register's end that wrapped
+	 * around to full volume. Found 2026-09-30. */
+	if (g_mixer_fd >= 0 && g_level >= 0) gain_apply();
 }
 
 bool diatom_port_mute_get(void) { return g_muted; }
