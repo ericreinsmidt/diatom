@@ -7,6 +7,8 @@
 #   make                 desktop build (SDL2), the development target
 #   make PORT=brick      device build for the TrimUI Brick (TG3040); needs the
 #                        cross toolchain, so run it as  tools/brick-make.sh
+#   make PORT=pixel2     device build for the GKD Pixel 2; built by TortOS-px2's
+#                        Buildroot, which supplies CC and the libraries
 
 PORT ?= desktop
 
@@ -66,9 +68,11 @@ ifeq ($(PORT),desktop)
   CFLAGS  += $(SDL_CFLAGS)
   LDFLAGS += $(SDL_LIBS)
   # dlopen lives in libc on macOS and on modern glibc; -ldl is harmless where
-  # it exists and absent where it does not.
+  # it exists and absent where it does not. libm is separate on Linux, and
+  # macOS links it anyway: the resampler's cos() failed to link in a Linux
+  # build on 2026-10-01 without it.
   ifeq ($(shell uname -s),Linux)
-    LDFLAGS += -ldl -lpthread
+    LDFLAGS += -ldl -lpthread -lm
   endif
 endif
 
@@ -87,6 +91,17 @@ ifeq ($(PORT),brick)
   # Explicit -ldl/-lpthread: the toolchain's glibc 2.31 predates their merge
   # into libc proper (2.34).
   LDFLAGS += -lSDL2 -lm -ldl -lpthread
+endif
+
+ifeq ($(PORT),pixel2)
+  # GKD Pixel 2 - ADR-0035. Built inside TortOS-px2's Buildroot, which sets CC
+  # and puts a pkg-config on PATH that answers for the device system's own
+  # libraries: its SDL2 (audio and the clock), and Mesa's EGL, GLES and GBM
+  # with libdrm for the display.
+  PKG_CONFIG ?= pkg-config
+  PIXEL2_PKGS := sdl2 egl glesv2 gbm libdrm
+  CFLAGS  += $(shell $(PKG_CONFIG) --cflags $(PIXEL2_PKGS))
+  LDFLAGS += $(shell $(PKG_CONFIG) --libs $(PIXEL2_PKGS)) -lm -ldl -lpthread
 endif
 
 .PHONY: all clean check check-seam check-proto check-port check-register check-register-diff \

@@ -83,3 +83,6 @@ never started.
 | [0032](0032-quiet-the-game-in-its-own-stream.md) | Quiet the game in its own stream, when the launcher says so | Accepted |
 | [0033](0033-the-newest-connection-wins.md) | The newest connection wins, because a dead launcher's socket can outlive it | Accepted |
 | [0034](0034-fast-forward-on-a-menu-chord.md) | Fast forward on MENU+R1, drawn at half rate and muted | Accepted |
+| [0035](0035-pixel2-presents-through-kms-with-gles.md) | The GKD Pixel 2 presents through KMS with OpenGL ES, on a presenting thread | Accepted |
+| [0036](0036-kms-handover-by-drm-master.md) | On KMS, the display is handed over by DRM master, at present and present_stop | Accepted |
+| [0037](0037-a-level-key-under-menu-is-a-chord.md) | A level key pressed while MENU is held is a chord | Accepted |

@@ -375,6 +375,12 @@ others remain:
 
 ---
 
+- [x] **[LB]** **The display handover on a KMS device** →
+      **[ADR-0036](decisions/0036-kms-handover-by-drm-master.md)**
+      *(Accepted)*. DRM master passes at `present` and `present_stop`, the
+      protocol unchanged. On the Pixel 2, 100 handovers between stand-ins
+      were clean: 33 ms to Diatom, 17 back. TortOS needs the matching change.
+
 ## 4. Port interface (the most important seam)
 
 Candidate surface - deliberately small:
@@ -517,8 +523,10 @@ Two amendments ADR-0007 makes to the table above:
 - [x] **[OPEN]** Geometry changes mid-run are **common, not exotic** - 3/6 cores
       call `SET_GEOMETRY` during `run`. Snes9x `max 604×478` vs `base 256×224`;
       Beetle PCE `max 512×243`. Confirms recompute-on-change.
-- [ ] **[NOT PLANNED]** **PC Engine breaks integer scale on one device but not
-      the other.** 256x**243** at 3x is 768x**729** - over the Miniloong's 720
+- [ ] **[LATER]** **PC Engine breaks integer scale on one device but not
+      the other.** *(Reopened 2026-10-01: the GKD Pixel 2 has 480 lines, so
+      256x243 fits only at 1x there, 486 > 480. Real on a device being built
+      for; nothing decided yet.)* 256x**243** at 3x is 768x**729** - over the Miniloong's 720
       lines, inside the Brick's 768, so the same content gets 2x on one and 3x
       on the other. Parked with the Miniloong port (§4): it cannot bite a device
       nothing builds for. Real again the moment that port is.
@@ -650,6 +658,13 @@ Two amendments ADR-0007 makes to the table above:
       headroom exists. Nothing needs it and nothing blocks on it.
 
 ---
+
+- [x] **[LB]** **How the GKD Pixel 2 presents** →
+      **[ADR-0035](decisions/0035-pixel2-presents-through-kms-with-gles.md)**
+      *(Accepted)*. OpenGL ES on a presenting thread: the CPU blit measured
+      7.7 ms a frame there against SNES at 10.5. Its portrait panel is the
+      rotation design's second implementation, proven once a game comes up
+      the right way round with nothing above the port changed.
 
 ## 6. Audio - expect this to be the hard part
 
@@ -1242,6 +1257,11 @@ most of the library predates it. Both fit 4 face + L1/R1. Requires
 pad attached, which is why the real pad has a Mode switch.
 
 ---
+
+- [x] **[LB]** **Brightness on a device with no brightness keys** →
+      **[ADR-0037](decisions/0037-a-level-key-under-menu-is-a-chord.md)**
+      *(Accepted)*. MENU plus the volume keys on the Pixel 2; a level that
+      moves while MENU is held makes MENU's release a chord, as MENU+R1 does.
 
 ## 9. State and storage
 

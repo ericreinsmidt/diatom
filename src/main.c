@@ -767,6 +767,23 @@ static void levels_tick(void)
 	}
 }
 
+/* Did any level change since the last call? Separate from levels_tick, which
+ * runs only with a launcher connected: the MENU chord it serves (ADR-0037)
+ * matters standalone too, where MENU's release ends the session. */
+static bool levels_moved(void)
+{
+	static int seen[DIATOM_LEVEL_COUNT] = { -1, -1 };
+	bool moved = false;
+	int k, idx, cnt;
+
+	for (k = 0; k < DIATOM_LEVEL_COUNT; k++) {
+		if (!diatom_port_level_get((diatom_level_kind)k, &idx, &cnt)) continue;
+		if (seen[k] >= 0 && idx != seen[k]) moved = true;
+		seen[k] = idx;
+	}
+	return moved;
+}
+
 static void levels_emit_all(void)
 {
 	int k, idx, cnt, n = 0;
@@ -1436,6 +1453,13 @@ static int run_session_inner(const diatom_session *sn)
 				menu_armed = true;
 				menu_chorded = false;
 			}
+			/* A level that moves while MENU is held made MENU a modifier
+			 * too: the Pixel 2's brightness is MENU plus the volume keys,
+			 * and letting go of MENU afterwards must not open the menu.
+			 * Read every frame so `levels_moved` stays current. ADR-0037. */
+			if (levels_moved() && (buttons & DIATOM_BIT(DIATOM_BTN_MENU)))
+				menu_chorded = true;
+
 			if ((buttons & DIATOM_BIT(DIATOM_BTN_MENU)) &&
 			    (pressed & DIATOM_BIT(DIATOM_BTN_R1))) {
 				step_report(g_speed, step_frames, step_periods,
