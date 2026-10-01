@@ -621,6 +621,22 @@ static void clear_gain_bar(uint8_t *base, diatom_rect dst)
 	}
 }
 
+/* The picture under the notice, in ordinary memory.
+ *
+ * Blending needs what is underneath, and reading it back out of the page was
+ * the whole cost of a notice: framebuffer memory is slow to READ, and a notice
+ * is almost all part-transparent pixels - 25,543 of 28,884 in an achievements
+ * notice. Measured 2026-09-30 in Aladdin: 5.85 ms a frame to draw the notice
+ * over a 4.14 ms picture, and in Sonic, whose picture costs 6.6 ms, enough to
+ * miss frames. So while a notice is up, blit puts the rows it covers here as
+ * it draws them, and the blend reads this instead of the page. */
+static uint32_t *g_ov_under;
+static size_t    g_ov_under_cap;     /* in pixels */
+static bool      g_ov_live;          /* drawn this frame: decided once, in present */
+
+static int ov_x0(void) { return ((int)g_vinfo.xres - g_ov_w) / 2; }
+static int ov_y0(void) { return (int)g_vinfo.yres - g_ov_h - (int)g_vinfo.yres / 24; }
+
 void diatom_port_overlay(const uint8_t *bgra, int w, int h, unsigned ms)
 {
 	if (!bgra || ms == 0 || w <= 0 || h <= 0) {
@@ -633,6 +649,13 @@ void diatom_port_overlay(const uint8_t *bgra, int w, int h, unsigned ms)
 	if (w > (int)g_vinfo.xres || h > (int)g_vinfo.yres) {
 		diatom_port_log(DIATOM_LOG_WARN, "overlay larger than the panel; ignored");
 		return;
+	}
+	if ((size_t)w * (size_t)h > g_ov_under_cap) {
+		uint32_t *u = realloc(g_ov_under, (size_t)w * (size_t)h * sizeof *u);
+
+		/* Without it the notice still draws, by reading the page back -
+		 * slowly, which is the cost this buffer exists to avoid. */
+		if (u) { g_ov_under = u; g_ov_under_cap = (size_t)w * (size_t)h; }
 	}
 	g_ov = bgra;
 	g_ov_w = w;
@@ -647,8 +670,8 @@ static void draw_overlay(uint8_t *base)
 {
 	const unsigned ro = g_vinfo.red.offset, go = g_vinfo.green.offset;
 	const unsigned bo = g_vinfo.blue.offset;
-	const int x0 = ((int)g_vinfo.xres - g_ov_w) / 2;
-	const int y0 = (int)g_vinfo.yres - g_ov_h - (int)g_vinfo.yres / 24;
+	const int x0 = ov_x0();
+	const int y0 = ov_y0();
 	int y, x;
 
 	if (!g_ov || y0 < 0 || x0 < 0) return;
@@ -656,6 +679,8 @@ static void draw_overlay(uint8_t *base)
 	for (y = 0; y < g_ov_h; y++) {
 		uint32_t *row = (uint32_t *)(base + (size_t)(y0 + y) * g_finfo.line_length);
 		const uint8_t *src = g_ov + (size_t)y * (size_t)g_ov_w * 4;
+		const uint32_t *under = g_ov_under ? g_ov_under + (size_t)y * (size_t)g_ov_w
+		                                   : NULL;
 
 		for (x = 0; x < g_ov_w; x++) {
 			const unsigned a = src[x * 4 + 3];
@@ -663,7 +688,7 @@ static void draw_overlay(uint8_t *base)
 			unsigned r, g, b;
 
 			if (a == 0) continue;
-			p = row[x0 + x];
+			p = under ? under[x] : row[x0 + x];
 			if (a == 255) {
 				r = src[x * 4 + 2];
 				g = src[x * 4 + 1];
@@ -677,6 +702,50 @@ static void draw_overlay(uint8_t *base)
 			}
 			row[x0 + x] = (r << ro) | (g << go) | (b << bo) | g_opaque;
 		}
+	}
+}
+
+/* Where a notice was last drawn on each page, so it can be taken off again.
+ *
+ * The picture is redrawn every frame; the letterbox bars are not - they are
+ * painted once, when the mode changes. So the part of a notice that falls on
+ * a bar stays there after it comes down, which Eric saw in integer mode on
+ * 2026-09-30: clear_gain_bar's bug, for the notice. Per page, because each of
+ * the three carries its own copy, and per rect, because the next notice may
+ * be a different size. */
+static diatom_rect g_ov_painted[FB_PAGES];
+
+/* Black wherever `r` lies outside the picture. Inside it, the next blit has
+ * already redrawn it. Writes only - the page is never read. */
+static void clear_overlay(uint8_t *base, diatom_rect r, diatom_rect dst)
+{
+	int y, x;
+
+	for (y = r.y; y < r.y + r.h; y++) {
+		uint32_t *row = (uint32_t *)(base + (size_t)y * g_finfo.line_length);
+		bool covered = y >= dst.y && y < dst.y + dst.h;
+
+		for (x = r.x; x < r.x + r.w; x++) {
+			if (covered && x >= dst.x && x < dst.x + dst.w) continue;
+			row[x] = g_opaque;
+		}
+	}
+}
+
+/* The notice's part of one page's present: draw it, or take off what an
+ * earlier one left. */
+static void overlay_page(uint8_t *base, int page, diatom_rect dst)
+{
+	diatom_rect now = { ov_x0(), ov_y0(), g_ov_w, g_ov_h };
+	diatom_rect *was = &g_ov_painted[page];
+
+	if (was->w > 0 && (!g_ov_live || memcmp(was, &now, sizeof now) != 0)) {
+		clear_overlay(base, *was, dst);
+		was->w = 0;
+	}
+	if (g_ov_live && now.x >= 0 && now.y >= 0) {
+		draw_overlay(base);
+		*was = now;
 	}
 }
 
@@ -1042,6 +1111,9 @@ void diatom_port_shutdown(void)
 	}
 	free(g_colmap);
 	free(g_rowmap);
+	free(g_ov_under);
+	g_ov_under = NULL;
+	g_ov_under_cap = 0;
 	/* Hand the speaker back on, unless somebody is holding it off.
 	 *
 	 * Muting at level 0 switches HpSpeaker off, and that is device state which
@@ -1251,6 +1323,10 @@ static inline diatom_rgb mix(diatom_rgb a, diatom_rgb b, int w)
 	return v;
 }
 
+/* One panel row in ordinary memory, for the rows under a notice. */
+#define UNDER_ROW_MAX 4096
+static uint32_t g_under_row[UNDER_ROW_MAX];
+
 /* Scale-blit src into the destination rect of one page, converting to the
  * framebuffer's own channel order (offsets read from the driver, not assumed).
  *
@@ -1264,7 +1340,8 @@ static void blit(uint8_t *page, const void *src, int w, int h, size_t pitch,
 	const unsigned go = g_vinfo.green.offset;
 	const unsigned bo = g_vinfo.blue.offset;
 	const uint32_t opaque = g_opaque;
-	int x0, x1, y0, y1, y;
+	int x0, x1, y0, y1, y, uy0 = 0, ux0 = 0;
+	bool under;
 
 #define PACK(c) (opaque | ((uint32_t)(c).r << ro) \
                         | ((uint32_t)(c).g << go) \
@@ -1326,14 +1403,40 @@ static void blit(uint8_t *page, const void *src, int w, int h, size_t pitch,
 	/* The cache is per-frame: the source buffer is rewritten every time. */
 	g_rc_row[0] = g_rc_row[1] = -1;
 
+	/* Under a notice, keep what is drawn: see g_ov_under. Black where the
+	 * picture does not reach, as the page is there. */
+	under = g_ov_live && g_ov_under && g_ov && ov_x0() >= 0 && ov_y0() >= 0 &&
+	        (int)g_vinfo.xres <= UNDER_ROW_MAX;
+	if (under) {
+		size_t i, n = (size_t)g_ov_w * (size_t)g_ov_h;
+
+		uy0 = ov_y0();
+		ux0 = ov_x0();
+		for (i = 0; i < n; i++) g_ov_under[i] = opaque;
+	}
+
 	for (y = y0; y < y1; y++) {
 		diatom_tap ty = g_rowmap[y - dst.y];
-		uint32_t *out = (uint32_t *)(page + (size_t)y * g_finfo.line_length);
+		uint32_t *row = (uint32_t *)(page + (size_t)y * g_finfo.line_length);
+		bool band = under && y >= uy0 && y < uy0 + g_ov_h;
+		uint32_t *out = band ? g_under_row : row;
 		const uint32_t *c0 = cache_row(src, pitch, fmt, ty.idx, w);
 		const uint32_t *c1 = ty.w ? cache_row(src, pitch, fmt, ty.idx + 1, w) : NULL;
 
 		if (ty.w) BLIT_ROW_BLEND();
 		else      BLIT_ROW_NEAREST();
+
+		/* Drawn in ordinary memory, then copied to the page and to the
+		 * notice's slice of it - two writes, and never a read of the page. */
+		if (band) {
+			int a = x0 > ux0 ? x0 : ux0;
+			int b = x1 < ux0 + g_ov_w ? x1 : ux0 + g_ov_w;
+
+			memcpy(row + x0, g_under_row + x0, (size_t)(x1 - x0) * sizeof *row);
+			if (b > a)
+				memcpy(g_ov_under + (size_t)(y - uy0) * (size_t)g_ov_w + (a - ux0),
+				       g_under_row + a, (size_t)(b - a) * sizeof *row);
+		}
 	}
 
 	/* Letterbox bars are not repainted per frame: pages start opaque black and
@@ -1417,7 +1520,10 @@ void diatom_port_present(const void *src, int w, int h, size_t pitch,
 	if (rect_changed) {
 		clear_pages();
 		memset(g_osd_painted, 0, sizeof g_osd_painted);
+		memset(g_ov_painted, 0, sizeof g_ov_painted);
 	}
+
+	g_ov_live = g_ov && diatom_port_now_us() < g_ov_until;
 
 	if (g_pan_broken) {
 		blit(page_base(g_front), src, w, h, pitch, fmt, dst);
@@ -1428,7 +1534,7 @@ void diatom_port_present(const void *src, int w, int h, size_t pitch,
 			clear_gain_bar(page_base(g_front), dst);
 			g_osd_painted[g_front] = false;
 		}
-		if (diatom_port_now_us() < g_ov_until)  draw_overlay(page_base(g_front));
+		overlay_page(page_base(g_front), g_front, dst);
 		return;
 	}
 
@@ -1460,7 +1566,7 @@ void diatom_port_present(const void *src, int w, int h, size_t pitch,
 		clear_gain_bar(page_base(page), dst);
 		g_osd_painted[page] = false;
 	}
-	if (diatom_port_now_us() < g_ov_until)  draw_overlay(page_base(page));
+	overlay_page(page_base(page), page, dst);
 
 	pthread_mutex_lock(&g_flip_mx);
 	g_presented = true;
