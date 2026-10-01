@@ -188,6 +188,7 @@ static void parse_line(char *line, diatom_msg *out)
 	else if (!strcmp(field, "SETMUTE"))    out->kind = DIATOM_MSG_SETMUTE;
 	else if (!strcmp(field, "QUIET"))      out->kind = DIATOM_MSG_QUIET;
 	else if (!strcmp(field, "SETQUIET"))   out->kind = DIATOM_MSG_SETQUIET;
+	else if (!strcmp(field, "SPEED"))      out->kind = DIATOM_MSG_SPEED;
 	else {
 		log_(DIATOM_LOG_WARN, "proto: ignoring unknown verb '%s'", field);
 		out->kind = DIATOM_MSG_NONE;
@@ -346,7 +347,10 @@ diatom_msg_kind diatom_proto_poll(diatom_msg *out, int timeout_ms, bool running)
 		/* proto=6 adds ADR-0032's quiet, for the same reason again: an old
 		 * Diatom ignores SETQUIET and the game plays on under the music, which
 		 * a launcher could not tell from a quiet that worked. */
-		diatom_proto_send("READY\tproto=6\tstate=%s", running ? "running" : "idle");
+		/* proto=7 adds ADR-0034's fast forward. Additive - an old launcher
+		 * ignores SPEED - and bumped so a new one can tell whether MENU+R1
+		 * will answer before telling a player it does. */
+		diatom_proto_send("READY\tproto=7\tstate=%s", running ? "running" : "idle");
 		/* A displaced launcher is a vanished one, and every loop already
 		 * knows what that means - the in-game menu resumes the game. Said
 		 * after READY, so the new launcher hears where things stand first. */

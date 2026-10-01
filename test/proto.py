@@ -89,8 +89,8 @@ def main():
     with Diatom() as d:
         ready = d.line("READY")
         print(f"  READY: {ready}")
-        ck(ready is not None and "proto=6" in ready,
-           "READY announces proto=6, so a launcher knows quiet exists")
+        ck(ready is not None and "proto=7" in ready,
+           "READY announces proto=7, so a launcher knows fast forward exists")
 
         # Query. Empty is a real value - the port's default device - and the
         # launcher has to be able to tell it from "no answer".

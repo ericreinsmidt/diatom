@@ -155,6 +155,33 @@ with the toast's width - 3.88 ms for an 850-wide one.
 
 Forecloses nothing: Option D and Option E stay open, and so does rewind.
 
+## Measured in Diatom, 2026-10-01
+
+Built as decided and run on the Brick, each step held 10 to 20 seconds of real
+play. Each step's speed is frames run against pacing periods passed, from the
+`speed Nx held ..., reached ...` line Diatom now logs on every change:
+
+| step | Contra (NES) | Sonic (Genesis) | DKC (SNES) | Mario Kart (GBA) |
+|---|---|---|---|---|
+| 2x | 2.00x | 2.00x | 2.00x | 1.98x, 2.00x |
+| 3x | 3.00x | 3.00x | 2.52x | 2.50x, 2.47x |
+| 4x | 4.00x | 3.86x | 2.67x | 2.47x, 2.32x |
+
+No audio dropped in any step, one resync per session, and MENU+R1 never
+reached the game: no kart hopped in Mario Kart, where R hops.
+
+So 4x on a heavy SNES or GBA game is barely more than 3x, which half meets
+the third revisit condition below - and it stays, because the remedies buy
+little. Drawing at half rate already brings presenting down to about 2.5 ms a
+period; what limits these games now is the core plus Diatom's own work, about
+0.7 ms a frame over `ffprobe`'s figure. Every third refresh would give the
+core about 14.5 ms a period instead of 13.4, some 8%; scaling on another core
+at most about 15, some 13%. Neither reaches 3x on DKC. The steps are caps:
+exact on NES and Genesis, and on a heavy SNES or GBA game 3x and 4x both mean
+as fast as it goes, about 2.5x. The launcher's toast names the step, not the
+speed reached, which moves from scene to scene. Heat over minutes at 4x was
+not measured.
+
 ## Revisit if
 
 - The present cost drops below about 3 ms a frame - by scaling on another core

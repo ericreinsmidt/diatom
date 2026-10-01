@@ -1230,10 +1230,11 @@ host decision and only means re-running the spike, which is cheap.
       *(Accepted)*. Diatom owns the one hotkey: MENU+R1 steps 1x to 4x, MENU
       opens the menu on release, drawn every other refresh and muted while
       fast, `SPEED` on the state plane and re-sent on a fast resume.
-- [ ] **[OPEN]** **Build fast forward and measure it in Diatom.** The real speed
-      per core, Diatom's own share of a frame, and heat over minutes at 4x,
-      none of which `ffprobe` could see. The toast's cost came first and is
-      fixed (`9b66c86`).
+- [x] **[OPEN]** **Fast forward is built and measured** (2026-10-01): 2x
+      exact everywhere, 3x and 4x exact on NES and Genesis, about 2.5x either
+      way on heavy SNES and GBA games, where the core is the limit - figures
+      and why it stays in [ADR-0034](decisions/0034-fast-forward-on-a-menu-chord.md).
+      Not measured: heat over minutes at 4x.
 
 **Genesis note:** launched 3-button in 1988; the 6-button pad arrived 1993 and
 most of the library predates it. Both fit 4 face + L1/R1. Requires

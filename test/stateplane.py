@@ -66,7 +66,7 @@ def check_that(name, cond, got):
     if not cond: fails.append(name)
 
 print("READY:", (r := drain(2.0)))
-check("proto version", [x for x in r if x.startswith("READY")][0].split("\t")[1], "proto=6")
+check("proto version", [x for x in r if x.startswith("READY")][0].split("\t")[1], "proto=7")
 
 # Before any RUN: identity must already be identity, not "everything unbound".
 send("MAP"); check("map is identity while idle", drain(), ["MAP\tmap=identity"])
@@ -308,6 +308,9 @@ check_that("a value that is not 1 releases rather than holds",
 
 # Quiet, ADR-0032. Unlike mute this one IS this host's to do, so the sound
 # itself is checked, below, once the process has gone and the tap is flushed.
+send("SPEED"); got = drain(1.0)
+check_that("SPEED answers 1x before anyone has stepped it",
+           any(l == "SPEED\tx=1" for l in got), got)
 send("QUIET"); got = drain(1.0)
 check_that("QUIET answers before anyone has set it",
            any(l == "QUIET\ton=0" for l in got), got)

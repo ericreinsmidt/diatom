@@ -440,9 +440,13 @@ void diatom_on_video(const void *data, unsigned w, unsigned h, size_t pitch)
  * startup transient. Dropping this audio deliberately is more honest than
  * queueing it and then having the port refuse it. */
 static bool g_audio_warmup;
+/* Fast forward is muted - ADR-0034. The core's sound is dropped here, and the
+ * frame loop pushes silence for the time each fast turn stands for. */
+static bool g_audio_fast;
 
 void diatom_on_audio_batch_store(const int16_t *data, size_t frames)
 {
+	if (g_audio_fast) return;    /* the frame loop pushes silence instead */
 	diatom_audio_note_input(data, frames);
 	if (g_audio_warmup) return;
 	diatom_audio_push(data, frames);
@@ -567,6 +571,35 @@ static void idle_note_input(bool any)
 		g_idle_said = true;
 		diatom_proto_send("IDLE");
 	}
+}
+
+/* Fast forward - ADR-0034. The step the player chose with MENU+R1, 1 to 4,
+ * reset at every RUN and kept across the menu. A state on ADR-0020's plane
+ * that only Diatom writes: `SPEED x=N`, as the reply to `SPEED` and
+ * unsolicited on every change, so the launcher can say so on screen. */
+#define SPEED_MAX 4
+/* What a fast turn leaves spare, for the save tick, the socket and the pad. */
+#define FAST_MARGIN_US 1500.0
+/* Presenting's cost before the first present of a game has measured it: the
+ * exit summary's figure for stretch, 6.6 to 7.0 ms, rounded up. */
+#define FAST_PRESENT_GUESS_US 7000.0
+static int  g_speed = 1;
+
+/* One step's measurement: frames run against the pacing periods that passed,
+ * so a step that hit the budget says how far short it fell. Wall time
+ * includes the menu; the speed does not. */
+static void step_report(int step, long frames, long periods, uint64_t held_us,
+                        uint64_t dropped)
+{
+	printf("diatom: speed %dx held %.1fs, reached %.2fx, %llu audio frame(s) dropped\n",
+	       step, held_us / 1000000.0, periods ? (double)frames / (double)periods : 0.0,
+	       (unsigned long long)dropped);
+	fflush(stdout);
+}
+
+static void speed_emit(void)
+{
+	if (diatom_proto_connected()) diatom_proto_send("SPEED\tx=%d", g_speed);
 }
 
 static bool take_pause_request(void)
@@ -907,6 +940,7 @@ static bool state_plane_msg(const diatom_msg *m)
 	case DIATOM_MSG_SETMUTE:  mute_set(m);       return true;
 	case DIATOM_MSG_QUIET:    quiet_emit();      return true;
 	case DIATOM_MSG_SETQUIET: quiet_set(m);      return true;
+	case DIATOM_MSG_SPEED:    speed_emit();      return true;
 	case DIATOM_MSG_DISPLAY:
 		/* apply_display is what emits, so ask it to restate the current one
 		 * rather than growing a second path that could disagree with it. */
@@ -938,6 +972,13 @@ static int run_session_inner(const diatom_session *sn)
 	double   frame_us, next_us;
 	uint64_t t_start, paused_us = 0;   /* menu time, excluded from the rate */
 	uint32_t buttons = 0, prev_buttons = 0, held_at_entry = 0;
+	uint32_t chord_hold = 0;    /* R1, while it belongs to MENU+R1 */
+	bool     menu_armed = false, menu_chorded = false;
+	long     fast_frames = 0, fast_turns = 0;
+	/* The step in force, measured: what it reached, how long it was held, and
+	 * any audio dropped while it was - logged when it changes and at exit. */
+	long     step_frames = 0, step_periods = 0;
+	uint64_t step_t0 = 0, step_drop0 = 0;
 	long     locked_at = 0;     /* frame the current rect was computed on */
 
 	/* Every game starts from identity and from an unknown level, so a launcher
@@ -952,6 +993,8 @@ static int run_session_inner(const diatom_session *sn)
 	bool stop = false;
 
 	/* Per-game state that must not carry over from the previous session. */
+	g_speed = 1;
+	g_audio_fast = false;
 	g_present_frames = 0;
 	g_present_us = 0;
 	g_frame_w = g_frame_h = 0;
@@ -1192,20 +1235,64 @@ static int run_session_inner(const diatom_session *sn)
 
 	t_start = diatom_port_now_us();
 	next_us = (double)t_start;
+	step_t0 = t_start;
+	step_drop0 = diatom_audio_dropped();
 
 	while (!diatom_port_should_quit() && !g_terminate && !stop &&
 	       (sn->limit <= 0 || frames < sn->limit)) {
 		uint64_t now;
 
-		g_frame_fresh = false;
-		g_core->run();
-		frames++;
+		/* ADR-0034. At 1x a turn of this loop is one core frame and one pacing
+		 * period. Fast, a turn covers TWO periods and is drawn once: presenting
+		 * costs ~7 ms on this thread, so drawing every refresh would leave the
+		 * core too little of each. It runs core frames up to the step - two
+		 * periods' worth - or until the next one would not fit in the two
+		 * periods less what presenting costs, whichever comes first. The
+		 * present cost is the running average, so a cheaper display mode buys
+		 * speed by itself. */
+		const bool fast = g_speed > 1;
+		const int periods = fast ? 2 : 1;
+		const uint64_t batch_t0 = diatom_port_now_us();
+		const double budget = periods * frame_us - FAST_MARGIN_US -
+		                      (g_present_frames ? (double)g_present_us /
+		                                          (double)g_present_frames
+		                                        : FAST_PRESENT_GUESS_US);
+		int ran = 0;
 
-		/* Immediately after the frame the core produced, and before anything
-		 * else can touch memory. This is the whole of ADR-0025 in one line:
-		 * conditions compare against the previous frame, so they have to be
-		 * evaluated once per frame, here, and not over a socket at 10Hz. */
-		diatom_cheevos_frame();
+		g_frame_fresh = false;
+		g_audio_fast = fast;
+		for (;;) {
+			double spent;
+
+			g_core->run();
+			frames++;
+			ran++;
+
+			/* Immediately after the frame the core produced, and before
+			 * anything else can touch memory. This is the whole of ADR-0025 in
+			 * one line: conditions compare against the previous frame, so they
+			 * have to be evaluated once per frame, here, and not over a socket
+			 * at 10Hz. Every frame the game runs, fast or not. */
+			diatom_cheevos_frame();
+
+			if (!fast || ran >= periods * g_speed) break;
+			if (sn->limit > 0 && frames >= sn->limit) break;
+			spent = (double)(diatom_port_now_us() - batch_t0);
+			if (spent + spent / ran > budget) break;
+		}
+		step_frames += ran;
+		step_periods += periods;
+		if (fast) {
+			/* Silence for the time this turn stands for, so the queue holds
+			 * its target and the rate control never sees fast forward. */
+			static const int16_t quiet[2 * 4096];
+			size_t n = (size_t)(periods * av.timing.sample_rate / av.timing.fps);
+
+			if (n > 4096) n = 4096;
+			diatom_audio_push(quiet, n);
+			fast_frames += ran;
+			fast_turns++;
+		}
 
 		/* ADR-0011 locked the rect and never moved it. That is right when the
 		 * load-time geometry is the mode the game runs in and the change is an
@@ -1330,16 +1417,50 @@ static int run_session_inner(const diatom_session *sn)
 		 * physically down stays latched. */
 		held_at_entry &= buttons;
 
+		/* R1 belongs to MENU+R1 from the moment MENU is down - not from when
+		 * R1 is, so the frame R1 goes down cannot leak into the game - and
+		 * stays hidden after MENU is let go, until R1 is too. ADR-0034. */
+		if (buttons & DIATOM_BIT(DIATOM_BTN_MENU)) chord_hold = DIATOM_BIT(DIATOM_BTN_R1);
+		else                                       chord_hold &= buttons;
+
 		/* The single writer. Every reason to hide a button from the core is
 		 * composed here, so no reason can clear another. */
-		diatom_env_suppress(held_at_entry);
+		diatom_env_suppress(held_at_entry | chord_hold);
+
+		/* MENU+R1 steps the speed. MENU is a modifier, so it is armed by its
+		 * press and acts on its RELEASE - ADR-0034. */
+		{
+			uint32_t pressed = buttons & ~prev_buttons;
+
+			if (pressed & DIATOM_BIT(DIATOM_BTN_MENU)) {
+				menu_armed = true;
+				menu_chorded = false;
+			}
+			if ((buttons & DIATOM_BIT(DIATOM_BTN_MENU)) &&
+			    (pressed & DIATOM_BIT(DIATOM_BTN_R1))) {
+				step_report(g_speed, step_frames, step_periods,
+				            diatom_port_now_us() - step_t0,
+				            diatom_audio_dropped() - step_drop0);
+				g_speed = g_speed % SPEED_MAX + 1;
+				menu_chorded = true;
+				printf("diatom: speed %dx\n", g_speed);
+				fflush(stdout);
+				speed_emit();
+				step_frames = step_periods = 0;
+				step_t0 = diatom_port_now_us();
+				step_drop0 = diatom_audio_dropped();
+			}
+		}
 
 		/* MENU is Diatom's own key and the ports no longer act on it, because
 		 * what it means is host policy: standalone it ends the session, under
-		 * the launcher it opens the launcher's menu. Edge-triggered, or holding
-		 * it would re-enter the menu every frame. */
-		if (((buttons & ~prev_buttons) & DIATOM_BIT(DIATOM_BTN_MENU)) ||
+		 * the launcher it opens the launcher's menu. On release, and only for a
+		 * press this loop saw, unless that press became a chord: a MENU still
+		 * held when a menu resumes the game was not pressed here. */
+		if ((menu_armed && !menu_chorded &&
+		     ((prev_buttons & ~buttons) & DIATOM_BIT(DIATOM_BTN_MENU))) ||
 		    take_pause_request()) {
+			menu_armed = false;
 			if (!diatom_proto_active()) {
 				stop = true;
 			} else {
@@ -1362,16 +1483,23 @@ static int run_session_inner(const diatom_session *sn)
 					 * next second catching up. */
 					next_us = (double)diatom_port_now_us();
 
-					/* Re-read input and treat it as already-seen, so MENU must be
-					 * RELEASED before it can open the menu again.
+					/* Re-read input and treat it as already-seen, so a key still
+					 * held is not a fresh press.
 					 *
 					 * Clearing prev_buttons instead looks equivalent and is not:
-					 * the pause happens the instant the key goes down, so a finger
-					 * is still on it when the launcher resumes, and the next frame
-					 * reads that as a fresh press. Measured with a human 2026-08-25
-					 * - one press produced two menus. */
+					 * a finger can still be on a key when the launcher resumes,
+					 * and the next frame reads that as a fresh press. Measured
+					 * with a human 2026-08-25, when the menu opened on MENU's
+					 * press - one press produced two menus. On release now, a
+					 * MENU held across the resume would otherwise arm, and open
+					 * the menu again when let go. */
 					diatom_port_input_poll();
 					prev_buttons = diatom_port_input_state();
+					menu_armed = false;
+
+					/* Resuming fast is the one moment the speed could surprise,
+					 * so it is said again. At 1x there is nothing to say. */
+					if (g_speed > 1) speed_emit();
 
 					/* prev_buttons covers everything edge-triggered, which is
 					 * every consumer except the one that matters: the core reads
@@ -1409,7 +1537,7 @@ static int run_session_inner(const diatom_session *sn)
 		}
 		diatom_audio_sync();
 
-		next_us += frame_us;
+		next_us += frame_us * periods;
 		now = diatom_port_now_us();
 
 		if (next_us > (double)now) {
@@ -1450,6 +1578,11 @@ static int run_session_inner(const diatom_session *sn)
 	if (sn->preview && write_preview(sn->preview))
 		diatom_proto_send("PREVIEW\tpath=%s", sn->preview);
 
+	if (fast_frames)
+		step_report(g_speed, step_frames, step_periods,
+		            diatom_port_now_us() - step_t0,
+		            diatom_audio_dropped() - step_drop0);
+
 	{
 		uint64_t t_end = diatom_port_now_us();
 
@@ -1458,10 +1591,19 @@ static int run_session_inner(const diatom_session *sn)
 			       diatom_port_capture(sn->shot) ? "ok" : "FAILED");
 
 		uint64_t span = t_end - t_start;
-		double secs = (span > paused_us ? span - paused_us : 0) / 1000000.0;
+		double fast_secs = fast_turns * 2.0 * frame_us / 1000000.0;
+		double secs = (span > paused_us ? span - paused_us : 0) / 1000000.0 - fast_secs;
+		long   paced = frames - fast_frames;
 
+		if (secs < 0) secs = 0;
 		printf("diatom: %ld frames in %.2fs = %.2f fps (target %.4f)\n",
-		       frames, secs, secs > 0 ? frames / secs : 0.0, av.timing.fps);
+		       paced, secs, secs > 0 ? paced / secs : 0.0, av.timing.fps);
+		/* Fast forward is kept out of the rate, as the menu is, and said. */
+		if (fast_frames)
+			printf("diatom: %ld more frames fast over %.2fs = %.2fx, "
+			       "excluded from the rate above\n",
+			       fast_frames, fast_secs,
+			       fast_secs > 0 ? fast_frames / fast_secs / av.timing.fps : 0.0);
 		/* Stated rather than silently subtracted, so the line cannot be read
 		 * as wall clock by anyone who does not know it is not. */
 		if (paused_us)
