@@ -164,7 +164,8 @@ struct dm_ctl_elem_value {
 #define GAIN_CTL     "Master Playback Volume"
 #define GAIN_LEVELS  20         /* what the USER moves in: 20 steps of 5% */
 
-/* The windows the twenty levels spread over, raw register values.
+/* The windows the twenty levels spread over, as ATTENUATION from the
+ * register's top: 0 is 255, 0 dB.
  *
  * NOT YET MEASURED. These are a starting point to be set by ear with a game
  * playing, the way the Brick's were: 255 at the top, and a floor 45 dB down
@@ -174,13 +175,17 @@ struct dm_ctl_elem_value {
  * Level 0 is raw 0, -95 dB, as the cut: the control has no switch. Whether
  * that is silent by ear is also unmeasured.
  *
- * TortOS's launcher will carry the same numbers, for the reason brick.c gives:
- * a level that crosses the socket has to mean the same thing on both sides.
+ * Attenuation, not raw, because that is how TortOS's launcher holds it (its
+ * src/device/pixel2.c): its shared ladder arithmetic was written for the
+ * Brick's inverted register, loud end low, and attenuation is that shape. The
+ * same numbers and the same rounding on both sides, for the reason brick.c
+ * gives: a level that crosses the socket has to mean the same thing on both.
  * Change one, change the other. */
-#define SPK_RAW_TOP     255
-#define SPK_RAW_BOTTOM  134
-#define HP_RAW_TOP      255
-#define HP_RAW_BOTTOM   134
+#define GAIN_RAW_MAX    255
+#define SPK_ATT_TOP     0
+#define SPK_ATT_BOTTOM  121
+#define HP_ATT_TOP      0
+#define HP_ATT_BOTTOM   121
 
 static bool g_muted;                /* the launcher's, ADR-0031 */
 static int  g_mixer_fd = -1;
@@ -216,7 +221,10 @@ static bool     g_input_debug;
  * labels are MEASURED: every key pressed in a known order on 2026-10-01 with a
  * logger reading the kernel's events. The caps marked A, B, X, Y send SOUTH,
  * EAST, NORTH, WEST - not the Brick's arrangement, where X and Y were the
- * other way round from position. L2 and R2 are real keys, the d-pad is four
+ * other way round from position. The codes are named for the labels, not for
+ * where the caps sit: A is on the right and B at the bottom, so the A cap
+ * sends SOUTH. Mapping by label is what puts the right-hand button on the
+ * game's A, as on a SNES pad. L2 and R2 are real keys, the d-pad is four
  * keys rather than a hat, and the key the device calls FUNCTION
  * (BTN_TRIGGER_HAPPY1) is MENU. */
 static const struct { int code; int btn; } keymap[] = {
@@ -284,28 +292,33 @@ static int jack_present(void)
 	return BIT_IS_SET(bits, SW_HEADPHONE_INSERT) ? 1 : 0;
 }
 
-static int gain_top(void) { return jack_present() ? HP_RAW_TOP    : SPK_RAW_TOP; }
-static int gain_bot(void) { return jack_present() ? HP_RAW_BOTTOM : SPK_RAW_BOTTOM; }
+static int att_top(void) { return jack_present() ? HP_ATT_TOP    : SPK_ATT_TOP; }
+static int att_bot(void) { return jack_present() ? HP_ATT_BOTTOM : SPK_ATT_BOTTOM; }
 
-/* Levels 1..20 spread over the window, rounded both ways so a read-back lands
- * on the level it came from. Level 0 is the cut. */
+/* brick.c's arithmetic on attenuation, which is also TortOS's
+ * aout_level_to_raw: level 20 at the top of the window, level 0 at its
+ * bottom, rounded both ways so a read-back lands on the level it came from.
+ * Level 0 is then replaced by the cut. */
 static int level_to_raw(int lv)
 {
-	int top = gain_top(), bot = gain_bot();
+	int top = att_top(), span = att_bot() - top, att;
 
 	if (lv <= 0) return 0;
-	return bot + ((lv - 1) * (top - bot) + (GAIN_LEVELS - 1) / 2) / (GAIN_LEVELS - 1);
+	if (lv > GAIN_LEVELS) lv = GAIN_LEVELS;
+	att = top + ((GAIN_LEVELS - lv) * span + GAIN_LEVELS / 2) / GAIN_LEVELS;
+	return GAIN_RAW_MAX - att;
 }
 
 static int raw_to_level(int raw)
 {
-	int top = gain_top(), bot = gain_bot();
+	int top = att_top(), bot = att_bot(), span = bot - top;
+	int att = GAIN_RAW_MAX - raw;
 
 	/* Below the window reads as silence, above it as the top: a register
 	 * left outside it was set by something that was not us. */
-	if (raw < bot) return 0;
-	if (raw >= top) return GAIN_LEVELS;
-	return 1 + ((raw - bot) * (GAIN_LEVELS - 1) + (top - bot) / 2) / (top - bot);
+	if (att >= bot) return 0;
+	if (att <= top) return GAIN_LEVELS;
+	return ((bot - att) * GAIN_LEVELS + span / 2) / span;
 }
 
 static int gain_io(long *val, int write)
