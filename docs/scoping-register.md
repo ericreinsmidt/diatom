@@ -1225,12 +1225,15 @@ host decision and only means re-running the spike, which is cheap.
       A puts nothing in the game, and the conservative latch strands nothing.
       Not instrumented, for the same reason as the resume fix above.
 
-- [ ] **[OPEN]** **Fast forward, and in-game hotkeys** -> proposed in
-      **[ADR-0034](decisions/0034-fast-forward-on-a-menu-chord.md)**: MENU+R1
-      steps 1x to 4x, MENU opens the menu on release, drawn every other
-      refresh and muted while fast, `SPEED` on the state plane. Open until it
-      is accepted, built and measured in Diatom. First: what the overlay costs
-      (Eric saw a game slow under a toast), since a speed toast adds to it.
+- [x] **[OPEN]** **Who owns in-game hotkeys, and fast forward** →
+      **[ADR-0034](decisions/0034-fast-forward-on-a-menu-chord.md)**
+      *(Accepted)*. Diatom owns the one hotkey: MENU+R1 steps 1x to 4x, MENU
+      opens the menu on release, drawn every other refresh and muted while
+      fast, `SPEED` on the state plane and re-sent on a fast resume.
+- [ ] **[OPEN]** **Build fast forward and measure it in Diatom.** The real speed
+      per core, Diatom's own share of a frame, and heat over minutes at 4x,
+      none of which `ffprobe` could see. The toast's cost came first and is
+      fixed (`9b66c86`).
 
 **Genesis note:** launched 3-button in 1988; the 6-button pad arrived 1993 and
 most of the library predates it. Both fit 4 face + L1/R1. Requires

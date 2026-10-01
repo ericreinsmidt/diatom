@@ -82,4 +82,4 @@ never started.
 | [0031](0031-mute-is-a-state-the-launcher-owns.md) | Mute is the launcher's, and no producer may undo it | Accepted |
 | [0032](0032-quiet-the-game-in-its-own-stream.md) | Quiet the game in its own stream, when the launcher says so | Accepted |
 | [0033](0033-the-newest-connection-wins.md) | The newest connection wins, because a dead launcher's socket can outlive it | Accepted |
-| [0034](0034-fast-forward-on-a-menu-chord.md) | Fast forward on MENU+R1, drawn at half rate and muted | Proposed |
+| [0034](0034-fast-forward-on-a-menu-chord.md) | Fast forward on MENU+R1, drawn at half rate and muted | Accepted |

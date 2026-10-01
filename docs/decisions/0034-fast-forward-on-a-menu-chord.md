@@ -1,7 +1,7 @@
 # 0034. Fast forward on MENU+R1, drawn at half rate and muted
 
-- **Status:** Proposed
-- **Date:** 2026-09-30
+- **Status:** Accepted
+- **Date:** 2026-09-30 (accepted 2026-10-01)
 - **Supersedes:** -
 - **Superseded by:** -
 
@@ -125,7 +125,10 @@ and back to 1x.**
 - **Speed is a state on ADR-0020's plane, owned by Diatom alone.** `SPEED x=N`
   is the reply to a `SPEED` query and is sent unsolicited on every change.
   Nothing writes it yet. It resets to 1x at every `RUN` and survives the
-  in-game menu, since the player chose it. The launcher renders the toast from
+  in-game menu, since the player chose it - and because a game resuming
+  silently at 4x is the one moment that could confuse, `SPEED` is sent again
+  on `RESUME` whenever it is not 1x, so the reminder is the same toast. At 1x
+  nothing is sent and nothing shows. The launcher renders the toast from
   it and sends it back as an overlay (ADR-0027); Diatom draws no text.
 - **`READY proto=7`**, for the reason proto 4, 5 and 6 bumped. Additive, so an
   old launcher ignores `SPEED` (ADR-0009); the number is for a new one, which
@@ -142,12 +145,13 @@ MENU+L2), and L2's TurboGrafx-16 Mode Switch stops mattering under MENU.
 
 Harder: the menu opens on release, which every player feels a little and
 nothing documents yet. Fast forward is silent, and SNES never reaches 3x. The
-toast costs frames of its own today: Eric saw a game slow while one was up,
-and that Sonic session logged 24 resyncs in 9,110 frames, against 1 in 4,192
-for an earlier session of the same game in the same mode. Suspected, not yet
-measured: `draw_overlay` reads the framebuffer back for every pixel it blends.
-That cost has to be measured, and likely fixed, before a speed toast is drawn
-over a loop already spending its budget.
+toast cost frames of its own when this was proposed: Eric saw a game slow
+while one was up, and that Sonic session logged 24 resyncs in 9,110 frames.
+Measured before acceptance and fixed (`9b66c86`): drawing a toast read the
+framebuffer back for every part-transparent pixel, 5.85 ms a frame for a
+249x116 toast; it now blends against a copy of the picture in ordinary memory,
+1.36 ms for a 467x116 one. What remains is the blend arithmetic, which grows
+with the toast's width - 3.88 ms for an 850-wide one.
 
 Forecloses nothing: Option D and Option E stay open, and so does rewind.
 
