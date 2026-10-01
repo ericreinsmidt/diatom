@@ -1225,16 +1225,12 @@ host decision and only means re-running the spike, which is cheap.
       A puts nothing in the game, and the conservative latch strands nothing.
       Not instrumented, for the same reason as the resume fix above.
 
-- [ ] **[OPEN]** **Fast forward, and in-game hotkeys** - ADR-0014 left their
-      owner open. Decided with Eric 2026-09-30: MENU+R2 steps 1x, 2x, 3x, 4x, back to 1x, so MENU opens the menu
-      on RELEASE, and R2 is hidden from the game while MENU is held. Not R2
-      alone: on GB/GBC/GBA it is mGBA's own Turbo R, which works and is kept.
-      Each presented frame gets a ~12 ms budget and runs as many core frames
-      as fit, up to the step; audio is muted. Reported as a new `SPEED` line
-      so the launcher can render the toast (ADR-0027 overlay). `tools/ffprobe`,
-      unpaced from gameplay states: SNES 3.6x at p95 is the floor (DKC);
-      Genesis 4.9x, GBA 4.6x, NGPC 4.8x, NES 7.1x, PCE 7.7x (Rondo, CD).
-      Wants an ADR before code: it settles hotkey ownership and adds a message.
+- [ ] **[OPEN]** **Fast forward, and in-game hotkeys** -> proposed in
+      **[ADR-0034](decisions/0034-fast-forward-on-a-menu-chord.md)**: MENU+R1
+      steps 1x to 4x, MENU opens the menu on release, drawn every other
+      refresh and muted while fast, `SPEED` on the state plane. Open until it
+      is accepted, built and measured in Diatom. First: what the overlay costs
+      (Eric saw a game slow under a toast), since a speed toast adds to it.
 
 **Genesis note:** launched 3-button in 1988; the 6-button pad arrived 1993 and
 most of the library predates it. Both fit 4 face + L1/R1. Requires
