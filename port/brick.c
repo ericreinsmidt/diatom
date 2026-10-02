@@ -1817,6 +1817,31 @@ void diatom_port_input_poll(void)
 
 uint32_t diatom_port_input_state(void) { return g_buttons; }
 
+/* SDL keeps the joystick's own state current as it pumps, so after the queued
+ * events are dropped, the buttons, the hat and the two trigger axes are read
+ * back from it as they are now. */
+void diatom_port_input_reset(void)
+{
+	uint8_t hat;
+	size_t i;
+
+	SDL_PumpEvents();
+	SDL_FlushEvents(SDL_FIRSTEVENT, SDL_LASTEVENT);
+	memset(g_level_next_us, 0, sizeof g_level_next_us);
+	g_buttons = 0;
+	if (!g_joy) return;
+	for (i = 0; i < sizeof joymap / sizeof joymap[0]; i++)
+		if (SDL_JoystickGetButton(g_joy, joymap[i].idx))
+			g_buttons |= DIATOM_BIT(joymap[i].btn);
+	hat = SDL_JoystickGetHat(g_joy, 0);
+	if (hat & SDL_HAT_UP)    g_buttons |= DIATOM_BIT(DIATOM_BTN_UP);
+	if (hat & SDL_HAT_DOWN)  g_buttons |= DIATOM_BIT(DIATOM_BTN_DOWN);
+	if (hat & SDL_HAT_LEFT)  g_buttons |= DIATOM_BIT(DIATOM_BTN_LEFT);
+	if (hat & SDL_HAT_RIGHT) g_buttons |= DIATOM_BIT(DIATOM_BTN_RIGHT);
+	if (SDL_JoystickGetAxis(g_joy, AXIS_L2) > AXIS_PRESSED) g_buttons |= DIATOM_BIT(DIATOM_BTN_L2);
+	if (SDL_JoystickGetAxis(g_joy, AXIS_R2) > AXIS_PRESSED) g_buttons |= DIATOM_BIT(DIATOM_BTN_R2);
+}
+
 /* ADR-0020's rescale: round-to-nearest, endpoints exact. The endpoints matter
  * most - they are where a user is most likely to sit, and a minimum that drifts
  * off silence after a few round trips is the bug this whole design exists to

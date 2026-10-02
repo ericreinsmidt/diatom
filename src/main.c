@@ -668,6 +668,9 @@ static bool menu_pause(const diatom_session *sn)
 			 * than step from a cached value nobody is at. ADR-0020. */
 			diatom_port_level_invalidate();
 			levels_forget();
+			/* And whatever was pressed in it is the launcher's, already
+			 * acted on: dropped here, not read back on the next poll. */
+			diatom_port_input_reset();
 			/* The menu was time somebody spent pressing buttons, on a pad
 			 * this loop could not see. Counting it as idle is the opposite of
 			 * what happened. */

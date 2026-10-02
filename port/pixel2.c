@@ -1415,6 +1415,16 @@ void diatom_port_input_poll(void)
 
 uint32_t diatom_port_input_state(void) { return g_buttons; }
 
+void diatom_port_input_reset(void)
+{
+	struct input_event ev[32];
+
+	while (g_pad_fd >= 0 && read(g_pad_fd, ev, sizeof ev) > 0) { }
+	while (g_keys_fd >= 0 && read(g_keys_fd, ev, sizeof ev) > 0) { }
+	memset(g_level_held, 0, sizeof g_level_held);
+	pad_resync();
+}
+
 /* ---------- levels ---------------------------------------------------------- */
 
 /* ADR-0020's rescale: round-to-nearest, endpoints exact. */

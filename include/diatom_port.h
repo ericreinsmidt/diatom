@@ -223,6 +223,15 @@ void diatom_port_audio_get(char *out, size_t cap);
 void     diatom_port_input_poll(void);
 uint32_t diatom_port_input_state(void);
 
+/* Called when a pause ends, before the next poll. While paused nothing polls,
+ * and the launcher's menu was time somebody spent pressing buttons: a port
+ * whose input queues (evdev, SDL's event queue) would read it all back on the
+ * next poll and act on it again - a volume key pressed three times in the menu
+ * was three more steps on resume, measured on the GKD Pixel 2 2026-10-02. So
+ * the queue is thrown away, and what is held is read from the device as it is
+ * now. */
+void     diatom_port_input_reset(void);
+
 /* Levels the user can change with the device's own keys while a game runs -
  * volume and brightness on the Brick, nothing at all on the desktop.
  *

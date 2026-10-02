@@ -388,6 +388,10 @@ void diatom_port_input_poll(void)
 }
 
 uint32_t diatom_port_input_state(void) { return g_buttons; }
+
+/* Nothing queues here: the poll reads the keyboard as it is now. */
+void     diatom_port_input_reset(void) { }
+
 bool     diatom_port_should_quit(void) { return g_quit; }
 
 bool diatom_port_capture(const char *path)
