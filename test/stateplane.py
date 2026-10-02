@@ -138,6 +138,9 @@ send("DISPLAY"); got = drain()
 check_that("display reports mode, filter and rect",
            len(got) == 1 and got[0].startswith("DISPLAY\tmode=stretch\tfilter=nearest\trect="),
            got)
+check_that("and the surface the rect is measured in",
+           len(got) == 1 and "\tsurface=" in got[0] and "surface=0x" not in got[0],
+           got)
 
 send("SETDISPLAY\tmode=integer"); got = drain()
 check_that("setdisplay changes mode, keeps filter",

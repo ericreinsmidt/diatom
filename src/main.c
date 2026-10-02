@@ -506,11 +506,17 @@ static void apply_display(int mode, diatom_filter filter)
 	/* Reported from the ONE place the mode ever changes, so a launcher hears
 	 * about it whether it asked or the rect settled underneath it (ADR-0021). `rect=` is free here and is what a
 	 * launcher would otherwise have to recompute from geometry it does not
-	 * have. ADR-0022. */
+	 * have. ADR-0022.
+	 *
+	 * `surface=` says what the rect is measured in. A launcher that draws at
+	 * another size scales the rect to its own: on the GKD Pixel 2 the surface
+	 * is 640x480 under TortOS's 1024x768, and the in-game menu drew the paused
+	 * frame in the top-left 640x480 of the screen until it was said. */
 	if (diatom_proto_connected())
-		diatom_proto_send("DISPLAY\tmode=%s\tfilter=%s\trect=%dx%d+%d+%d",
+		diatom_proto_send("DISPLAY\tmode=%s\tfilter=%s\trect=%dx%d+%d+%d\tsurface=%dx%d",
 		                  diatom_modes[mode].name, filter_name(filter),
-		                  g_dst.w, g_dst.h, g_dst.x, g_dst.y);
+		                  g_dst.w, g_dst.h, g_dst.x, g_dst.y,
+		                  g_caps.surface_w, g_caps.surface_h);
 }
 
 /* The in-game menu handover - ADR-0016.

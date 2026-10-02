@@ -65,6 +65,13 @@ A second reporting path could disagree with the first, and would eventually.
 geometry it does not have - and after ADR-0021 that geometry can change a second
 into the session.
 
+*Added 2026-10-02:* **and so does `surface=`**, the size the rect is measured in,
+e.g. `rect=640x480+0+0 surface=640x480`. A launcher that draws at another size
+scales the rect to its own; one that sees no `surface=` takes the rect as
+already in its units. Found on the GKD Pixel 2, whose surface is 640x480 under
+a launcher drawing at 1024x768: the paused frame behind the in-game menu sat in
+the top-left 640x480 of the screen.
+
 **All-or-nothing.** Both fields are validated before either is applied, for the
 reason `SETMAP` is atomic: a half-applied setting is one nobody asked for and
 neither side believes in.
