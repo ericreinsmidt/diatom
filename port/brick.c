@@ -1690,6 +1690,56 @@ static const struct { int idx; int btn; } joymap[] = {
 #define AXIS_R2 5
 #define AXIS_PRESSED 16384
 
+/* The four level buttons, and holding one repeats it at the launcher's pace -
+ * TortOS's REPEAT_DELAY_MS and REPEAT_RATE_MS, 300 and 90 - so a hold does the
+ * same thing in a game as at the shelf. Until 2026-10-02 a hold was one step
+ * here and a run there. Before each repeat the button is asked about directly,
+ * so a release this loop never saw cannot leave a level climbing. */
+#define LEVEL_REPEAT_DELAY_US 300000ull
+#define LEVEL_REPEAT_RATE_US   90000ull
+static const struct { int idx; bool bright; int dir; } level_buttons[] = {
+	{ JOY_VOL_UP, false, +1 }, { JOY_VOL_DN, false, -1 },
+	{ JOY_FN_R,   true,  +1 }, { JOY_FN_L,   true,  -1 },
+};
+#define LEVEL_BUTTONS (sizeof level_buttons / sizeof level_buttons[0])
+static uint64_t g_level_next_us[LEVEL_BUTTONS];   /* when it next repeats; 0 is not held */
+
+static void level_step(size_t k)
+{
+	if (level_buttons[k].bright) bright_nudge(level_buttons[k].dir);
+	else                         gain_nudge(level_buttons[k].dir);
+}
+
+/* Whether `button` is a level button, handled here if so. */
+static bool level_button(int button, bool down)
+{
+	size_t k;
+
+	for (k = 0; k < LEVEL_BUTTONS; k++) {
+		if (level_buttons[k].idx != button) continue;
+		g_level_next_us[k] = down ? diatom_port_now_us() + LEVEL_REPEAT_DELAY_US : 0;
+		if (down) level_step(k);
+		return true;
+	}
+	return false;
+}
+
+static void levels_repeat(void)
+{
+	uint64_t now = diatom_port_now_us();
+	size_t k;
+
+	for (k = 0; k < LEVEL_BUTTONS; k++) {
+		if (!g_level_next_us[k] || now < g_level_next_us[k]) continue;
+		if (!g_joy || !SDL_JoystickGetButton(g_joy, level_buttons[k].idx)) {
+			g_level_next_us[k] = 0;
+			continue;
+		}
+		g_level_next_us[k] = now + LEVEL_REPEAT_RATE_US;
+		level_step(k);
+	}
+}
+
 static void debug_event(const char *what, int a, int b)
 {
 	char msg[96];
@@ -1719,26 +1769,12 @@ void diatom_port_input_poll(void)
 			bool down = (ev.type == SDL_JOYBUTTONDOWN);
 			debug_event("joy button", ev.jbutton.button, down);
 
-			/* Volume is the port's, and stops here. Whoever owns the
-			 * input loop during a game has to handle these, because
-			 * nothing else sees them - the device UI is not running.
-			 * They are never reported upward and never reach a core. */
-			if (ev.jbutton.button == JOY_VOL_UP) {
-				if (down) gain_nudge(+1);
-				break;
-			}
-			if (ev.jbutton.button == JOY_VOL_DN) {
-				if (down) gain_nudge(-1);
-				break;
-			}
-			if (ev.jbutton.button == JOY_FN_R) {
-				if (down) bright_nudge(+1);
-				break;
-			}
-			if (ev.jbutton.button == JOY_FN_L) {
-				if (down) bright_nudge(-1);
-				break;
-			}
+			/* Volume and brightness are the port's, and stop here.
+			 * Whoever owns the input loop during a game has to handle
+			 * these, because nothing else sees them - the device UI is
+			 * not running. They are never reported upward and never
+			 * reach a core. */
+			if (level_button(ev.jbutton.button, down)) break;
 
 			for (i = 0; i < sizeof joymap / sizeof joymap[0]; i++) {
 				if (joymap[i].idx != ev.jbutton.button) continue;
@@ -1776,7 +1812,7 @@ void diatom_port_input_poll(void)
 		}
 		}
 	}
-
+	levels_repeat();
 }
 
 uint32_t diatom_port_input_state(void) { return g_buttons; }

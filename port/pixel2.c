@@ -367,7 +367,7 @@ static void gain_apply(void)
 }
 
 /* Re-apply when the plug goes in or out, as on the Brick: whoever pumps input
- * owns the level, and the windows differ by jack (or will, once measured). */
+ * owns the level, and the windows differ by jack. */
 static void gain_jack_poll(void)
 {
 	if (jack_present() == g_jack_was || g_level < 0) return;
@@ -1314,6 +1314,53 @@ static void input_open(void)
 	pad_resync();
 }
 
+/* Holding a level key repeats it at the launcher's pace - TortOS's
+ * REPEAT_DELAY_MS and REPEAT_RATE_MS, 300 and 90 - so a hold does the same thing
+ * in a game as at the shelf. What a key is, volume or brightness under MENU, is
+ * settled when it goes down and kept while it is held, as TortOS keeps it, so
+ * letting go of MENU mid-hold does not turn brightness into volume. Before each
+ * repeat the kernel is asked whether the key is still down, so a release this
+ * loop never saw cannot leave a level climbing. */
+#define LEVEL_REPEAT_DELAY_US 300000ull
+#define LEVEL_REPEAT_RATE_US   90000ull
+static const int level_keys[2] = { KEY_VOLUMEUP, KEY_VOLUMEDOWN };
+static struct {
+	uint64_t next_us;    /* when it next repeats; 0 is not held */
+	bool     bright;
+} g_level_held[2];
+
+static void level_step(int k, bool bright)
+{
+	int dir = k == 0 ? +1 : -1;
+
+	if (bright) bright_nudge(dir);
+	else        gain_nudge(dir);
+}
+
+static void levels_repeat(void)
+{
+	unsigned long keys[NLONGS(KEY_MAX)];
+	uint64_t now = diatom_port_now_us();
+	bool read = false;
+	int k;
+
+	for (k = 0; k < 2; k++) {
+		if (!g_level_held[k].next_us || now < g_level_held[k].next_us) continue;
+		if (!read) {
+			memset(keys, 0, sizeof keys);
+			if (g_keys_fd < 0 || ioctl(g_keys_fd, EVIOCGKEY(sizeof keys), keys) < 0)
+				memset(keys, 0, sizeof keys);
+			read = true;
+		}
+		if (!BIT_IS_SET(keys, level_keys[k])) {
+			g_level_held[k].next_us = 0;
+			continue;
+		}
+		g_level_held[k].next_us = now + LEVEL_REPEAT_RATE_US;
+		level_step(k, g_level_held[k].bright);
+	}
+}
+
 void diatom_port_input_poll(void)
 {
 	struct input_event ev[32];
@@ -1342,22 +1389,28 @@ void diatom_port_input_poll(void)
 	/* The volume keys are the port's and stop here: never reported upward,
 	 * never sent to a core. With MENU held they are brightness instead, the
 	 * Pixel 2's only way to it (ADR-0037); the host sees the level move and
-	 * treats MENU's release as the end of a chord. Presses only - holding a
-	 * key does not repeat, as on the Brick. */
+	 * treats MENU's release as the end of a chord. A held key repeats; see
+	 * levels_repeat. */
 	while (g_keys_fd >= 0 && (n = read(g_keys_fd, ev, sizeof ev)) > 0) {
 		for (i = 0; i < (size_t)n / sizeof ev[0]; i++) {
-			int dir;
+			int key;
 
-			if (ev[i].type != EV_KEY || ev[i].value != 1) continue;
-			if      (ev[i].code == KEY_VOLUMEUP)   dir = +1;
-			else if (ev[i].code == KEY_VOLUMEDOWN) dir = -1;
+			if (ev[i].type != EV_KEY || ev[i].value == 2) continue;
+			if      (ev[i].code == KEY_VOLUMEUP)   key = 0;
+			else if (ev[i].code == KEY_VOLUMEDOWN) key = 1;
 			else continue;
+			if (!ev[i].value) {
+				g_level_held[key].next_us = 0;
+				continue;
+			}
 			if (g_input_debug)
 				port_logf(DIATOM_LOG_DEBUG, "level key %d", ev[i].code);
-			if (g_buttons & DIATOM_BIT(DIATOM_BTN_MENU)) bright_nudge(dir);
-			else                                          gain_nudge(dir);
+			g_level_held[key].bright  = (g_buttons & DIATOM_BIT(DIATOM_BTN_MENU)) != 0;
+			g_level_held[key].next_us = diatom_port_now_us() + LEVEL_REPEAT_DELAY_US;
+			level_step(key, g_level_held[key].bright);
 		}
 	}
+	levels_repeat();
 }
 
 uint32_t diatom_port_input_state(void) { return g_buttons; }
