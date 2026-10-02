@@ -192,14 +192,16 @@ static bool g_muted;                /* the launcher's, ADR-0031 */
 static int  g_mixer_fd = -1;
 static int  g_level = -1;           /* 0..GAIN_LEVELS, or -1 before first read */
 
-/* Backlight, /sys/class/backlight/backlight, 0-255, 0 is off. The ladder is
- * the Brick's, which is the launcher's rungs: brightness is perceived in
- * ratios, so equal ratios read as equal steps (spike 2026-08-26). On this
- * panel 1 was still lit and 0 dark, checked by eye 2026-10-01; the floor of 2
- * is therefore visible here too, though not separately measured. */
+/* Backlight, /sys/class/backlight/backlight, 0-255, 0 is off. The same rungs
+ * as TortOS's src/device/pixel2.c, which says how they were found: the device
+ * tree's brightness-levels table sends 1 to 17 all to the same output, so the
+ * Brick's rungs (2, 4, 8, 16) were four steps of one brightness. 17 is the
+ * floor, and the panel went black below it (checked by eye 2026-10-02 on the
+ * PWM directly); the rungs are equal ratios from there to 255, since
+ * brightness is perceived in ratios (spike 2026-08-26). */
 #define BACKLIGHT "/sys/class/backlight/backlight/brightness"
 static const unsigned char bright_ladder[] = {
-	2, 4, 8, 16, 32, 48, 72, 96, 128, 160, 192, 255
+	17, 22, 28, 36, 46, 58, 74, 95, 122, 156, 199, 255
 };
 #define BRIGHT_LEVELS ((int)(sizeof bright_ladder / sizeof bright_ladder[0]) - 1)
 static int g_bright = -1;           /* index into bright_ladder, or -1 unread */
