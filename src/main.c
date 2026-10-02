@@ -16,6 +16,7 @@
 #include <time.h>
 #include <math.h>
 #include <fcntl.h>
+#include <pthread.h>
 #include <signal.h>
 #include <unistd.h>
 
@@ -210,6 +211,16 @@ static void on_terminate(int sig)
 		ssize_t rc = write(g_wake_pipe[1], "", 1);
 		(void)rc;
 	}
+}
+
+/* Socket mode's premap, on its own thread. A signal may land on this thread
+ * too, which the wake pipe above already allows for. */
+static void *premap_cores(void *dir)
+{
+	int n = diatom_core_premap(dir);
+
+	fprintf(stderr, "diatom: premapped %d core(s) from %s\n", n, (const char *)dir);
+	return NULL;
 }
 
 /* Called once, before anything can be signaled.
@@ -1831,15 +1842,21 @@ int main(int argc, char **argv)
 		/* AFTER listening, not before. Mapping first delayed the socket by
 		 * the best part of 400ms, and the launcher probes early: it found no
 		 * socket, fell back to running the game standalone, and every launch
-		 * paid a dlopen the premap existed to avoid. A connection arriving
-		 * during the mapping waits in the backlog instead, which costs the
-		 * launcher nothing - it connects at startup and does not send a RUN
-		 * until somebody picks a game, seconds later. */
+		 * paid a dlopen the premap existed to avoid.
+		 *
+		 * And on a thread, not in line. A connection arriving during the
+		 * mapping waited in the backlog, which was thought to cost the
+		 * launcher nothing - but its connect waits for READY, and READY only
+		 * went out once every core was mapped. Measured on the GKD Pixel 2
+		 * 2026-10-02: the launcher's first frame waited about 280 ms on it,
+		 * hidden until then behind a 350 ms input grace of its own. */
 		if (cores_dir) {
-			int n = diatom_core_premap(cores_dir);
+			pthread_t premap;
 
-			fprintf(stderr, "diatom: premapped %d core(s) from %s\n",
-			        n, cores_dir);
+			if (pthread_create(&premap, NULL, premap_cores, (void *)cores_dir) == 0)
+				pthread_detach(premap);
+			else
+				premap_cores((void *)cores_dir);
 		}
 		terminate_init();
 
