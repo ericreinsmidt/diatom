@@ -167,10 +167,11 @@ struct dm_ctl_elem_value {
 /* The windows the twenty levels spread over, as ATTENUATION from the
  * register's top: 0 is 255, 0 dB.
  *
- * NOT YET MEASURED. These are a starting point to be set by ear with a game
- * playing, the way the Brick's were: 255 at the top, and a floor 45 dB down
- * (121 steps of the driver's 0.37 dB), the range the Brick's speaker ladder
- * spans. Headphones start on the same window and will want their own.
+ * Set by ear on 2026-10-02 with a game playing, the way the Brick's were; the
+ * steps taken are in TortOS's src/device/pixel2.c. Speaker: level 20 on raw
+ * 255, level 1 on raw 172, about 31 dB. Headphones (Apple EarPods): level 20
+ * on raw 244, level 1 on raw 76, about 63 dB. The windows below are the ones
+ * that land levels 1 and 20 exactly there with the rounding both sides share.
  *
  * Level 0 is raw 0, -95 dB, as the cut: the control has no switch. Whether
  * that is silent by ear is also unmeasured.
@@ -183,9 +184,9 @@ struct dm_ctl_elem_value {
  * Change one, change the other. */
 #define GAIN_RAW_MAX    255
 #define SPK_ATT_TOP     0
-#define SPK_ATT_BOTTOM  121
-#define HP_ATT_TOP      0
-#define HP_ATT_BOTTOM   121
+#define SPK_ATT_BOTTOM  87
+#define HP_ATT_TOP      11
+#define HP_ATT_BOTTOM   188
 
 static bool g_muted;                /* the launcher's, ADR-0031 */
 static int  g_mixer_fd = -1;
