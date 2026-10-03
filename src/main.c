@@ -22,6 +22,7 @@
 
 #include "cheevos.h"
 #include "diatom.h"
+#include "levels.h"
 
 /* --- the frame the core last handed us ----------------------------------- */
 static void       *g_frame;
@@ -666,7 +667,7 @@ static bool menu_pause(const diatom_session *sn)
 			/* The launcher had the display and therefore owned the levels;
 			 * it may have moved either while its menu was up. Re-read rather
 			 * than step from a cached value nobody is at. ADR-0020. */
-			diatom_port_level_invalidate();
+			diatom_levels_invalidate();
 			levels_forget();
 			/* And whatever was pressed in it is the launcher's, already
 			 * acted on: dropped here, not read back on the next poll. */
@@ -781,7 +782,7 @@ static void levels_tick(void)
 
 	if (!diatom_proto_connected()) return;
 	for (k = 0; k < DIATOM_LEVEL_COUNT; k++) {
-		if (!diatom_port_level_get((diatom_level_kind)k, &idx, &cnt)) continue;
+		if (!diatom_levels_get((diatom_level_kind)k, &idx, &cnt)) continue;
 		if (idx == g_last_index[k] && cnt == g_last_count[k]) continue;
 		level_emit(k, idx, cnt);
 	}
@@ -797,7 +798,7 @@ static bool levels_moved(void)
 	int k, idx, cnt;
 
 	for (k = 0; k < DIATOM_LEVEL_COUNT; k++) {
-		if (!diatom_port_level_get((diatom_level_kind)k, &idx, &cnt)) continue;
+		if (!diatom_levels_get((diatom_level_kind)k, &idx, &cnt)) continue;
 		if (seen[k] >= 0 && idx != seen[k]) moved = true;
 		seen[k] = idx;
 	}
@@ -809,13 +810,13 @@ static void levels_emit_all(void)
 	int k, idx, cnt, n = 0;
 
 	for (k = 0; k < DIATOM_LEVEL_COUNT; k++)
-		if (diatom_port_level_get((diatom_level_kind)k, &idx, &cnt)) n++;
+		if (diatom_levels_get((diatom_level_kind)k, &idx, &cnt)) n++;
 
 	/* count=0 is the answer on a port with no level control of its own, and
 	 * says "expect no events" instead of leaving it to be inferred. */
 	diatom_proto_send("LEVELS\tcount=%d", n);
 	for (k = 0; k < DIATOM_LEVEL_COUNT; k++)
-		if (diatom_port_level_get((diatom_level_kind)k, &idx, &cnt))
+		if (diatom_levels_get((diatom_level_kind)k, &idx, &cnt))
 			level_emit(k, idx, cnt);
 }
 
@@ -916,13 +917,13 @@ static void level_set(const diatom_msg *m)
 		if (!strcmp(level_kind_name[k], m->lkind)) break;
 
 	if (k == DIATOM_LEVEL_COUNT || m->count <= 0 ||
-	    !diatom_port_level_set((diatom_level_kind)k, m->index, m->count)) {
+	    !diatom_levels_set((diatom_level_kind)k, m->index, m->count)) {
 		diatom_proto_send("ERROR\tcode=bad_level\tmsg=%s", m->lkind);
 		return;
 	}
 	/* Answer in OUR positions rather than echoing theirs. The launcher sent a
 	 * fraction of its own ladder and needs to know which rung it landed on. */
-	if (diatom_port_level_get((diatom_level_kind)k, &idx, &cnt))
+	if (diatom_levels_get((diatom_level_kind)k, &idx, &cnt))
 		level_emit(k, idx, cnt);
 }
 
@@ -1024,7 +1025,7 @@ static int run_session_inner(const diatom_session *sn)
 	diatom_input_reset_map();
 	levels_forget();
 	audio_forget();
-	diatom_port_level_invalidate();
+	diatom_levels_invalidate();
 	long frames = 0, geom_changes = 0, resyncs = 0;
 	size_t q_min = (size_t)-1, q_max = 0;
 	bool stop = false;
@@ -1441,6 +1442,10 @@ static int run_session_inner(const diatom_session *sn)
 			}
 		}
 
+		/* The level keys, stepped here from what the port reports, before the
+		 * tick that reports a move and the MENU chord check that reads one.
+		 * ADR-0038. */
+		diatom_levels_frame();
 		levels_tick();
 		audio_tick();
 

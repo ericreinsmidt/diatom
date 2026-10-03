@@ -439,21 +439,17 @@ void diatom_port_log(diatom_log_level lvl, const char *msg)
 }
 
 /* No volume or brightness control here: the desktop backend is for iteration,
- * and the machine's own mixer and display already own both. Reporting false
+ * and the machine's own mixer and display already own both. No positions
  * makes `LEVELS count=0` the answer to a launcher's query, which tells it not
  * to expect events rather than leaving it to infer that from silence. */
-bool diatom_port_level_get(diatom_level_kind kind, int *index, int *count)
+int  diatom_port_level_positions(diatom_level_kind kind) { (void)kind; return 0; }
+int  diatom_port_level_read(diatom_level_kind kind) { (void)kind; return -1; }
+void diatom_port_level_write(diatom_level_kind kind, int pos) { (void)kind; (void)pos; }
+uint32_t diatom_port_level_keys(void) { return 0; }
+void diatom_port_level_shown(diatom_level_kind kind, int pos, int positions)
 {
-	(void)kind; (void)index; (void)count;
-	return false;
+	(void)kind; (void)pos; (void)positions;
 }
-
-bool diatom_port_level_set(diatom_level_kind kind, int index, int count)
-{
-	(void)kind; (void)index; (void)count;
-	return false;
-}
-
 void diatom_port_level_invalidate(void) { }
 
 /* Nothing to drain: this port presents synchronously inside

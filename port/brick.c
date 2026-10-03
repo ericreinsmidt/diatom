@@ -46,6 +46,7 @@
 #include <unistd.h>
 
 #include "diatom_port.h"
+#include "ladder.h"
 #include "port_clock.h"
 
 #define AUDIO_RATE 48000
@@ -283,10 +284,9 @@ static const unsigned char bright_ladder[] = {
 #define BRIGHT_LEVELS ((int)(sizeof bright_ladder / sizeof bright_ladder[0]) - 1)
 
 static int g_disp_fd = -1;
-static int g_bright = -1;       /* index into bright_ladder, or -1 unread */
 
 static int g_mixer_fd = -1;
-static int g_level = -1;        /* 0..GAIN_LEVELS, or -1 before first read */
+static int g_level = -1;        /* the position last read or written; -1 none */
 static uint64_t g_osd_until;    /* show the bar until this time */
 
 /* The overlay from diatom_port_overlay: a borrowed pointer, not a copy. See
@@ -358,25 +358,18 @@ static int jack_present(void)
 static int gain_top(void)  { return jack_present() ? HP_RAW_TOP    : SPK_RAW_TOP; }
 static int gain_bot(void)  { return jack_present() ? HP_RAW_BOTTOM : SPK_RAW_BOTTOM; }
 
-/* The port thinks in percent and converts; the inverted register never leaves
- * this file. Rounded both ways so a read-back lands on the level it came from. */
+/* Positions to the register and back; the inverted register never leaves this
+ * file. The register is the window as it stands, 0 loudest (port/ladder.h). A
+ * register left past the window by another program reads as an end of the
+ * scale: with a plug in, anything louder than raw 8 was set by something that
+ * was not us. */
 static int level_to_raw(int lv)
 {
-	int top = gain_top(), span = gain_bot() - top;
-
-	return top + ((GAIN_LEVELS - lv) * span + GAIN_LEVELS / 2) / GAIN_LEVELS;
+	return ladder_window_raw(lv, GAIN_LEVELS, gain_top(), gain_bot());
 }
 static int raw_to_level(int raw)
 {
-	int top = gain_top(), bot = gain_bot(), span = bot - top;
-
-	/* A register left past this window by another program reads as an end of
-	 * the scale rather than as a level outside it. Both ends need clamping now
-	 * that the top is not always 0: with a plug in, anything louder than raw 8
-	 * was set by something that was not us. */
-	if (raw >= bot) return 0;
-	if (raw <= top) return GAIN_LEVELS;
-	return ((bot - raw) * GAIN_LEVELS + span / 2) / span;
+	return ladder_window_pos(raw, GAIN_LEVELS, gain_top(), gain_bot());
 }
 
 static int ctl_io(const char *name, long *val, int write)
@@ -427,17 +420,6 @@ static void mixer_defaults(void)
 	if (g_mixer_fd < 0) return;
 	ctl_set(HP_CTL, 0);
 	ctl_set(SWAP_CTL, 0);
-}
-
-/* Split from the key handler so the level can be read without one being
- * pressed: the host polls these to report levels upward (ADR-0020). */
-static void gain_ensure(void)
-{
-	long v;
-
-	if (g_level >= 0) return;
-	if (gain_io(&v, 0) < 0) return;
-	g_level = raw_to_level((int)v);
 }
 
 /* Re-apply if the plug went in or came out since the last write.
@@ -503,56 +485,28 @@ static void osd_show(int kind, int level, int max)
 	g_osd_until = diatom_port_now_us() + 1500000ull;
 }
 
-/* `dir` is +1 for louder. One step is 5% of the range. */
-static void gain_nudge(int dir)
-{
-	gain_ensure();
-	if (g_level < 0) return;
-
-	g_level += dir;
-	if (g_level < 0)           g_level = 0;
-	if (g_level > GAIN_LEVELS) g_level = GAIN_LEVELS;
-	gain_apply();
-	osd_show(0, g_level, GAIN_LEVELS);
-}
-
-static void bright_ensure(void)
-{
-	unsigned long a[4] = { 0, 0, 0, 0 };
-	int raw, i;
-
-	if (g_bright >= 0 || g_disp_fd < 0) return;
-	raw = ioctl(g_disp_fd, DISP_LCD_GET_BRIGHTNESS, a);
-	if (raw < 0) return;
-
-	/* Nearest rung, so the first press moves one step from where the launcher
-	 * left the panel rather than jumping. Exact for every level the launcher
-	 * can set except its black one. */
-	g_bright = 0;
-	for (i = 1; i <= BRIGHT_LEVELS; i++)
-		if (abs(bright_ladder[i] - raw) < abs(bright_ladder[g_bright] - raw))
-			g_bright = i;
-}
-
-static void bright_apply(void)
+/* The panel at a rung, and back as the nearest rung, so a level the launcher
+ * left between two reads as the closer one - exact for every level the launcher
+ * can set except its black one. */
+static void bright_apply(int pos)
 {
 	unsigned long a[4] = { 0, 0, 0, 0 };
 
-	a[1] = bright_ladder[g_bright];
+	if (pos < 0)             pos = 0;
+	if (pos > BRIGHT_LEVELS) pos = BRIGHT_LEVELS;
+	a[1] = bright_ladder[pos];
 	ioctl(g_disp_fd, DISP_LCD_SET_BRIGHTNESS, a);
 }
 
-static void bright_nudge(int dir)
+static int bright_read(void)
 {
-	if (g_disp_fd < 0) return;
-	bright_ensure();
-	if (g_bright < 0) return;
+	unsigned long a[4] = { 0, 0, 0, 0 };
+	int raw;
 
-	g_bright += dir;
-	if (g_bright < 0)             g_bright = 0;
-	if (g_bright > BRIGHT_LEVELS) g_bright = BRIGHT_LEVELS;
-	bright_apply();
-	osd_show(1, g_bright, BRIGHT_LEVELS);
+	if (g_disp_fd < 0) return -1;
+	raw = ioctl(g_disp_fd, DISP_LCD_GET_BRIGHTNESS, a);
+	if (raw < 0) return -1;
+	return ladder_nearest(bright_ladder, BRIGHT_LEVELS + 1, raw);
 }
 
 /* The one indicator, matching what the device UI draws so volume reads the same
@@ -1690,54 +1644,37 @@ static const struct { int idx; int btn; } joymap[] = {
 #define AXIS_R2 5
 #define AXIS_PRESSED 16384
 
-/* The four level buttons, and holding one repeats it at the launcher's pace -
- * TortOS's REPEAT_DELAY_MS and REPEAT_RATE_MS, 300 and 90 - so a hold does the
- * same thing in a game as at the shelf. Until 2026-10-02 a hold was one step
- * here and a run there. Before each repeat the button is asked about directly,
- * so a release this loop never saw cannot leave a level climbing. */
-#define LEVEL_REPEAT_DELAY_US 300000ull
-#define LEVEL_REPEAT_RATE_US   90000ull
-static const struct { int idx; bool bright; int dir; } level_buttons[] = {
-	{ JOY_VOL_UP, false, +1 }, { JOY_VOL_DN, false, -1 },
-	{ JOY_FN_R,   true,  +1 }, { JOY_FN_L,   true,  -1 },
+/* The four level buttons, as level keys: volume on its own two, brightness on
+ * the two front keys. A press is latched until the host has read it, so a tap
+ * between two frames counts; a button the events say is held is checked
+ * against SDL's own state, so a release this port never saw cannot leave the
+ * host repeating. The stepping and the repeat are the host's (ADR-0038). */
+static const struct { int idx; uint32_t key; } level_buttons[] = {
+	{ JOY_VOL_UP, DIATOM_LEVEL_KEY_VOLUME_UP },
+	{ JOY_VOL_DN, DIATOM_LEVEL_KEY_VOLUME_DOWN },
+	{ JOY_FN_R,   DIATOM_LEVEL_KEY_BRIGHTNESS_UP },
+	{ JOY_FN_L,   DIATOM_LEVEL_KEY_BRIGHTNESS_DOWN },
 };
 #define LEVEL_BUTTONS (sizeof level_buttons / sizeof level_buttons[0])
-static uint64_t g_level_next_us[LEVEL_BUTTONS];   /* when it next repeats; 0 is not held */
+static uint32_t g_level_down;      /* held, by the events */
+static uint32_t g_level_pressed;   /* went down since the host last asked */
 
-static void level_step(size_t k)
-{
-	if (level_buttons[k].bright) bright_nudge(level_buttons[k].dir);
-	else                         gain_nudge(level_buttons[k].dir);
-}
-
-/* Whether `button` is a level button, handled here if so. */
+/* Whether `button` is a level button, recorded here if so. */
 static bool level_button(int button, bool down)
 {
 	size_t k;
 
 	for (k = 0; k < LEVEL_BUTTONS; k++) {
 		if (level_buttons[k].idx != button) continue;
-		g_level_next_us[k] = down ? diatom_port_now_us() + LEVEL_REPEAT_DELAY_US : 0;
-		if (down) level_step(k);
+		if (down) {
+			g_level_down    |= level_buttons[k].key;
+			g_level_pressed |= level_buttons[k].key;
+		} else {
+			g_level_down &= ~level_buttons[k].key;
+		}
 		return true;
 	}
 	return false;
-}
-
-static void levels_repeat(void)
-{
-	uint64_t now = diatom_port_now_us();
-	size_t k;
-
-	for (k = 0; k < LEVEL_BUTTONS; k++) {
-		if (!g_level_next_us[k] || now < g_level_next_us[k]) continue;
-		if (!g_joy || !SDL_JoystickGetButton(g_joy, level_buttons[k].idx)) {
-			g_level_next_us[k] = 0;
-			continue;
-		}
-		g_level_next_us[k] = now + LEVEL_REPEAT_RATE_US;
-		level_step(k);
-	}
 }
 
 static void debug_event(const char *what, int a, int b)
@@ -1812,7 +1749,6 @@ void diatom_port_input_poll(void)
 		}
 		}
 	}
-	levels_repeat();
 }
 
 uint32_t diatom_port_input_state(void) { return g_buttons; }
@@ -1827,7 +1763,7 @@ void diatom_port_input_reset(void)
 
 	SDL_PumpEvents();
 	SDL_FlushEvents(SDL_FIRSTEVENT, SDL_LASTEVENT);
-	memset(g_level_next_us, 0, sizeof g_level_next_us);
+	g_level_down = g_level_pressed = 0;
 	g_buttons = 0;
 	if (!g_joy) return;
 	for (i = 0; i < sizeof joymap / sizeof joymap[0]; i++)
@@ -1842,69 +1778,81 @@ void diatom_port_input_reset(void)
 	if (SDL_JoystickGetAxis(g_joy, AXIS_R2) > AXIS_PRESSED) g_buttons |= DIATOM_BIT(DIATOM_BTN_R2);
 }
 
-/* ADR-0020's rescale: round-to-nearest, endpoints exact. The endpoints matter
- * most - they are where a user is most likely to sit, and a minimum that drifts
- * off silence after a few round trips is the bug this whole design exists to
- * prevent. */
-static int rescale(int index, int from, int to)
-{
-	if (from <= 1 || to <= 1) return 0;
-	if (index < 0)        index = 0;
-	if (index > from - 1) index = from - 1;
-	return (index * (to - 1) + (from - 1) / 2) / (from - 1);
-}
+/* ---------- levels: the hardware under them (ADR-0038) ---------------------- */
 
 void diatom_port_level_invalidate(void)
 {
-	g_level  = -1;
-	g_bright = -1;
+	g_level = -1;
 	/* And the jack, for the reason in the header: a transition that happened
 	 * while the launcher was driving is invisible here, so the remembered
 	 * state is a memory of a world this process was not watching. */
 	g_jack_was = -1;
 }
 
-/* `*count` is positions, not a maximum index, so it is one MORE than the
- * internal level ceiling. That off-by-one is the whole reason ADR-0020 pins the
- * word. */
-bool diatom_port_level_get(diatom_level_kind kind, int *index, int *count)
+/* Positions, not a maximum index, so one MORE than the internal level
+ * ceiling. That off-by-one is the whole reason ADR-0020 pins the word. */
+int diatom_port_level_positions(diatom_level_kind kind)
 {
 	switch (kind) {
-	case DIATOM_LEVEL_VOLUME:
-		if (g_mixer_fd < 0) return false;
-		gain_ensure();
-		if (g_level < 0) return false;
-		*index = g_level;
-		*count = GAIN_LEVELS + 1;
-		return true;
-	case DIATOM_LEVEL_BRIGHTNESS:
-		if (g_disp_fd < 0) return false;
-		bright_ensure();
-		if (g_bright < 0) return false;
-		*index = g_bright;
-		*count = BRIGHT_LEVELS + 1;
-		return true;
-	default:
-		return false;
+	case DIATOM_LEVEL_VOLUME:     return g_mixer_fd >= 0 ? GAIN_LEVELS + 1 : 0;
+	case DIATOM_LEVEL_BRIGHTNESS: return g_disp_fd >= 0 ? BRIGHT_LEVELS + 1 : 0;
+	default:                      return 0;
 	}
 }
 
-bool diatom_port_level_set(diatom_level_kind kind, int index, int count)
+int diatom_port_level_read(diatom_level_kind kind)
+{
+	long v;
+
+	switch (kind) {
+	case DIATOM_LEVEL_VOLUME:
+		/* Kept as well as returned: the mute and the jack re-apply act on
+		 * the level the hardware is at, read here the first frame after a
+		 * handover, before any press writes one. */
+		if (gain_io(&v, 0) < 0) return -1;
+		g_level = raw_to_level((int)v);
+		return g_level;
+	case DIATOM_LEVEL_BRIGHTNESS:
+		return bright_read();
+	default:
+		return -1;
+	}
+}
+
+void diatom_port_level_write(diatom_level_kind kind, int pos)
 {
 	switch (kind) {
 	case DIATOM_LEVEL_VOLUME:
-		if (g_mixer_fd < 0) return false;
-		g_level = rescale(index, count, GAIN_LEVELS + 1);
+		if (g_mixer_fd < 0) return;
+		g_level = pos;
 		gain_apply();
-		return true;
+		break;
 	case DIATOM_LEVEL_BRIGHTNESS:
-		if (g_disp_fd < 0) return false;
-		g_bright = rescale(index, count, BRIGHT_LEVELS + 1);
-		bright_apply();
-		return true;
+		if (g_disp_fd < 0) return;
+		bright_apply(pos);
+		break;
 	default:
-		return false;
+		break;
 	}
+}
+
+uint32_t diatom_port_level_keys(void)
+{
+	uint32_t out;
+	size_t k;
+
+	for (k = 0; k < LEVEL_BUTTONS; k++)
+		if ((g_level_down & level_buttons[k].key) &&
+		    (!g_joy || !SDL_JoystickGetButton(g_joy, level_buttons[k].idx)))
+			g_level_down &= ~level_buttons[k].key;
+	out = g_level_down | g_level_pressed;
+	g_level_pressed = 0;
+	return out;
+}
+
+void diatom_port_level_shown(diatom_level_kind kind, int pos, int positions)
+{
+	osd_show(kind == DIATOM_LEVEL_BRIGHTNESS ? 1 : 0, pos, positions - 1);
 }
 bool     diatom_port_should_quit(void) { return g_quit; }
 

@@ -59,8 +59,8 @@ at **8.2 to 8.4 MB** with FCEUmm running.
 
 | Path | What it is |
 |---|---|
-| `src/` | The host: core loading, environment callbacks, frame loop, resampling, saves, the launcher protocol |
-| `port/` | Per-device backends. `desktop` (SDL2) and `brick` (raw fbdev). Pixels, samples, buttons, time - nothing else |
+| `src/` | The host: core loading, environment callbacks, frame loop, resampling, saves, the launcher protocol, volume and brightness |
+| `port/` | Per-device backends. `desktop` (SDL2), `brick` (raw fbdev) and `pixel2` (GLES on KMS). Pixels, samples, buttons, time, and the hardware under the levels (ADR-0038) - nothing else |
 | `include/diatom_port.h` | The one load-bearing seam, and the rules that keep it honest |
 | `test/stubcore.c` | A libretro core that is not an emulator, so the frontend can be exercised with no third-party binary |
 | `tools/` | Measurement instruments and checks. Every number cited in `docs/` came from one of these |

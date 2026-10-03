@@ -233,35 +233,67 @@ uint32_t diatom_port_input_state(void);
 void     diatom_port_input_reset(void);
 
 /* Levels the user can change with the device's own keys while a game runs -
- * volume and brightness on the Brick, nothing at all on the desktop.
+ * volume and brightness on the Brick and the GKD Pixel 2, nothing at all on
+ * the desktop.
  *
- * Polled rather than pushed. The port must not know the launcher protocol
- * exists (ADR-0007), so it cannot report anything itself; the host reads these
- * alongside the input bitfield it already polls every frame and emits a
- * protocol event when a value moves. No callback into the host, no work in the
- * port's key handler beyond what it already does.
+ * The LEVEL is the host's (src/levels.c, ADR-0038): which position each is at,
+ * stepping it, holding a key to repeat, the shared scale it crosses the socket
+ * on. The port is the hardware under it: how many positions a control has on
+ * this device, what position the hardware is at, writing one, which level keys
+ * are held, and drawing the bar. Raw device units (mixer registers, backlight
+ * duty) never leave the port.
  *
- * `index` is 0-based over `0 .. *count - 1`, and `*count` is the number of
- * distinct positions rather than a maximum index - the two differ by one, and
- * ADR-0020 pins it here because a shared scale that is off by one produces a
- * silent disagreement instead of an error. Raw device units (mixer registers,
- * backlight duty) never leave the port.
- *
- * Returns false for a kind this port has no control over. */
+ * A position is 0-based over `0 .. positions - 1`, and `positions` is the
+ * number of distinct positions rather than a maximum index - the two differ by
+ * one, and ADR-0020 pins it because a shared scale that is off by one produces
+ * a silent disagreement instead of an error. */
 typedef enum {
 	DIATOM_LEVEL_VOLUME = 0,
 	DIATOM_LEVEL_BRIGHTNESS,
 	DIATOM_LEVEL_COUNT
 } diatom_level_kind;
 
-/* Forget everything the port remembers about the output state, and re-read the
- * hardware on the next get.
+/* How many positions this device has for `kind`, or 0 if it has no control
+ * over it. */
+int  diatom_port_level_positions(diatom_level_kind kind);
+
+/* Where the hardware is now, as a position, or -1 if it cannot be read. A
+ * register left outside the port's window by another program reads as the
+ * nearer end. */
+int  diatom_port_level_read(diatom_level_kind kind);
+
+/* Put the hardware at `pos`. What position 0 means (a cut, on a volume control
+ * whose minimum is not silence), the launcher's mute (ADR-0031) and re-mapping
+ * the volume when the headphone jack changes are all the port's: it keeps what
+ * it last wrote for that. */
+void diatom_port_level_write(diatom_level_kind kind, int pos);
+
+/* The level keys held right now, or pressed since the last call, as
+ * DIATOM_LEVEL_KEY_* bits - the second so a tap that goes down and up between
+ * two frames still counts. Which physical key is which is the port's: on the
+ * GKD Pixel 2 a volume key pressed while MENU is held is a brightness key
+ * until it is let go (ADR-0037). The host steps on a press and repeats while
+ * held; the port only reports. diatom_port_input_reset clears what is latched. */
+enum {
+	DIATOM_LEVEL_KEY_VOLUME_UP       = 1u << 0,
+	DIATOM_LEVEL_KEY_VOLUME_DOWN     = 1u << 1,
+	DIATOM_LEVEL_KEY_BRIGHTNESS_UP   = 1u << 2,
+	DIATOM_LEVEL_KEY_BRIGHTNESS_DOWN = 1u << 3,
+};
+uint32_t diatom_port_level_keys(void);
+
+/* Show the level bar for `kind` at `pos` of `positions`, for a moment from now.
+ * Drawn by the port, in its own pixels; the host calls this on every step, so
+ * a held key keeps it up. */
+void diatom_port_level_shown(diatom_level_kind kind, int pos, int positions);
+
+/* Forget everything the port remembers about the output state.
  *
- * Needed because Diatom is RESIDENT: the port caches its level to avoid an
- * ioctl per frame, and the launcher owns levels whenever Diatom is not
- * presenting (ADR-0020). So between games, and across a menu, the value in the
- * port can be overwritten underneath it. Without this the first press after a
- * handover steps from a level nobody is at.
+ * Needed because Diatom is RESIDENT: the port keeps what it last wrote, to
+ * re-apply it on a jack change or a mute, and the launcher owns levels whenever
+ * Diatom is not presenting (ADR-0020). So between games, and across a menu, the
+ * hardware can be changed underneath it, and re-applying a stale write would
+ * put back a level nobody is at.
  *
  * That includes the LAST HEADPHONE JACK STATE the port acted on, and forgetting
  * it is not an extra: a port re-maps the level between the speaker and
@@ -272,12 +304,10 @@ typedef enum {
  * this device that reads as a working speaker at almost no volume. Measured
  * 2026-09-05: the register held 29 with a speaker window whose quiet end is 39.
  *
- * So this is called at every handover, and the next poll re-applies rather than
+ * So this is called at every handover (the host forgets its own positions at
+ * the same moment), and nothing is re-applied until the next write rather than
  * trusting a memory formed while something else was driving. */
 void diatom_port_level_invalidate(void);
-
-bool diatom_port_level_get(diatom_level_kind kind, int *index, int *count);
-bool diatom_port_level_set(diatom_level_kind kind, int index, int count);
 
 /* True once the port's surface has gone away - a closed window on desktop.
  * Not anticipated by ADR-0007; surfaced during implementation. It concerns the

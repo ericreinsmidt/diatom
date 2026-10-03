@@ -45,6 +45,7 @@
 #include <unistd.h>
 
 #include "diatom_port.h"
+#include "ladder.h"
 #include "port_clock.h"
 
 #define AUDIO_RATE 48000
@@ -190,7 +191,7 @@ struct dm_ctl_elem_value {
 
 static bool g_muted;                /* the launcher's, ADR-0031 */
 static int  g_mixer_fd = -1;
-static int  g_level = -1;           /* 0..GAIN_LEVELS, or -1 before first read */
+static int  g_level = -1;           /* the position last read or written; -1 none */
 
 /* Backlight, /sys/class/backlight/backlight, 0-255, 0 is off. The same rungs
  * as TortOS's src/device/pixel2.c, which says how they were found: the device
@@ -204,7 +205,6 @@ static const unsigned char bright_ladder[] = {
 	17, 22, 28, 36, 46, 58, 74, 95, 122, 156, 199, 255
 };
 #define BRIGHT_LEVELS ((int)(sizeof bright_ladder / sizeof bright_ladder[0]) - 1)
-static int g_bright = -1;           /* index into bright_ladder, or -1 unread */
 
 /* ---------- input ----------------------------------------------------------- */
 
@@ -298,30 +298,17 @@ static int jack_present(void)
 static int att_top(void) { return jack_present() ? HP_ATT_TOP    : SPK_ATT_TOP; }
 static int att_bot(void) { return jack_present() ? HP_ATT_BOTTOM : SPK_ATT_BOTTOM; }
 
-/* brick.c's arithmetic on attenuation, which is also TortOS's
- * aout_level_to_raw: level 20 at the top of the window, level 0 at its
- * bottom, rounded both ways so a read-back lands on the level it came from.
- * Level 0 is then replaced by the cut. */
+/* The window is attenuation from the register's top (port/ladder.h), and
+ * position 0 is then replaced by the cut. */
 static int level_to_raw(int lv)
 {
-	int top = att_top(), span = att_bot() - top, att;
-
 	if (lv <= 0) return 0;
-	if (lv > GAIN_LEVELS) lv = GAIN_LEVELS;
-	att = top + ((GAIN_LEVELS - lv) * span + GAIN_LEVELS / 2) / GAIN_LEVELS;
-	return GAIN_RAW_MAX - att;
+	return GAIN_RAW_MAX - ladder_window_raw(lv, GAIN_LEVELS, att_top(), att_bot());
 }
 
 static int raw_to_level(int raw)
 {
-	int top = att_top(), bot = att_bot(), span = bot - top;
-	int att = GAIN_RAW_MAX - raw;
-
-	/* Below the window reads as silence, above it as the top: a register
-	 * left outside it was set by something that was not us. */
-	if (att >= bot) return 0;
-	if (att <= top) return GAIN_LEVELS;
-	return ((bot - att) * GAIN_LEVELS + span / 2) / span;
+	return ladder_window_pos(GAIN_RAW_MAX - raw, GAIN_LEVELS, att_top(), att_bot());
 }
 
 static int gain_io(long *val, int write)
@@ -347,15 +334,6 @@ static int gain_io(long *val, int write)
 	if (ioctl(g_mixer_fd, DM_CTL_ELEM_READ, &v) < 0) return -1;
 	*val = v.value.integer.value[0];
 	return 0;
-}
-
-static void gain_ensure(void)
-{
-	long v;
-
-	if (g_level >= 0) return;
-	if (gain_io(&v, 0) < 0) return;
-	g_level = raw_to_level((int)v);
 }
 
 static int g_jack_was = -1;         /* jack state at the last write; -1 = never */
@@ -386,17 +364,6 @@ static void osd_show(int kind, int level, int max)
 	pthread_mutex_unlock(&g_mx);
 }
 
-static void gain_nudge(int dir)
-{
-	gain_ensure();
-	if (g_level < 0) return;
-	g_level += dir;
-	if (g_level < 0)           g_level = 0;
-	if (g_level > GAIN_LEVELS) g_level = GAIN_LEVELS;
-	gain_apply();
-	osd_show(0, g_level, GAIN_LEVELS);
-}
-
 static int backlight_read(void)
 {
 	char buf[16];
@@ -421,31 +388,6 @@ static void backlight_write(int raw)
 	if (write(fd, buf, (size_t)n) != n)
 		diatom_port_log(DIATOM_LOG_WARN, "pixel2: backlight write failed");
 	close(fd);
-}
-
-static void bright_ensure(void)
-{
-	int raw, i;
-
-	if (g_bright >= 0) return;
-	if ((raw = backlight_read()) < 0) return;
-	/* Nearest rung, so the first press moves one step from where the launcher
-	 * left the panel rather than jumping. */
-	g_bright = 0;
-	for (i = 1; i <= BRIGHT_LEVELS; i++)
-		if (abs(bright_ladder[i] - raw) < abs(bright_ladder[g_bright] - raw))
-			g_bright = i;
-}
-
-static void bright_nudge(int dir)
-{
-	bright_ensure();
-	if (g_bright < 0) return;
-	g_bright += dir;
-	if (g_bright < 0)             g_bright = 0;
-	if (g_bright > BRIGHT_LEVELS) g_bright = BRIGHT_LEVELS;
-	backlight_write(bright_ladder[g_bright]);
-	osd_show(1, g_bright, BRIGHT_LEVELS);
 }
 
 /* ==================== GL ==================================================== */
@@ -1316,52 +1258,19 @@ static void input_open(void)
 	pad_resync();
 }
 
-/* Holding a level key repeats it at the launcher's pace - TortOS's
- * REPEAT_DELAY_MS and REPEAT_RATE_MS, 300 and 90 - so a hold does the same thing
- * in a game as at the shelf. What a key is, volume or brightness under MENU, is
- * settled when it goes down and kept while it is held, as TortOS keeps it, so
- * letting go of MENU mid-hold does not turn brightness into volume. Before each
- * repeat the kernel is asked whether the key is still down, so a release this
- * loop never saw cannot leave a level climbing. */
-#define LEVEL_REPEAT_DELAY_US 300000ull
-#define LEVEL_REPEAT_RATE_US   90000ull
-static const int level_keys[2] = { KEY_VOLUMEUP, KEY_VOLUMEDOWN };
+/* The two volume keys, as level keys. What a key is, volume or brightness under
+ * MENU, is settled when it goes down and kept while it is held, as TortOS keeps
+ * it, so letting go of MENU mid-hold does not turn brightness into volume. A
+ * press is latched until the host has read it, so a tap between two frames
+ * counts; a key the events say is held is checked against the kernel, so a
+ * release this port never saw cannot leave the host repeating. The stepping
+ * and the repeat are the host's (ADR-0038). */
+static const int level_codes[2] = { KEY_VOLUMEUP, KEY_VOLUMEDOWN };
 static struct {
-	uint64_t next_us;    /* when it next repeats; 0 is not held */
-	bool     bright;
-} g_level_held[2];
-
-static void level_step(int k, bool bright)
-{
-	int dir = k == 0 ? +1 : -1;
-
-	if (bright) bright_nudge(dir);
-	else        gain_nudge(dir);
-}
-
-static void levels_repeat(void)
-{
-	unsigned long keys[NLONGS(KEY_MAX)];
-	uint64_t now = diatom_port_now_us();
-	bool read = false;
-	int k;
-
-	for (k = 0; k < 2; k++) {
-		if (!g_level_held[k].next_us || now < g_level_held[k].next_us) continue;
-		if (!read) {
-			memset(keys, 0, sizeof keys);
-			if (g_keys_fd < 0 || ioctl(g_keys_fd, EVIOCGKEY(sizeof keys), keys) < 0)
-				memset(keys, 0, sizeof keys);
-			read = true;
-		}
-		if (!BIT_IS_SET(keys, level_keys[k])) {
-			g_level_held[k].next_us = 0;
-			continue;
-		}
-		g_level_held[k].next_us = now + LEVEL_REPEAT_RATE_US;
-		level_step(k, g_level_held[k].bright);
-	}
-}
+	bool down;           /* held, by the events */
+	bool pressed;        /* went down since the host last asked */
+	bool bright;         /* went down with MENU held */
+} g_level_key[2];
 
 void diatom_port_input_poll(void)
 {
@@ -1388,11 +1297,10 @@ void diatom_port_input_poll(void)
 		}
 	}
 
-	/* The volume keys are the port's and stop here: never reported upward,
-	 * never sent to a core. With MENU held they are brightness instead, the
+	/* The volume keys are level keys, never reported as buttons and never
+	 * sent to a core. With MENU held they are brightness instead, the
 	 * Pixel 2's only way to it (ADR-0037); the host sees the level move and
-	 * treats MENU's release as the end of a chord. A held key repeats; see
-	 * levels_repeat. */
+	 * treats MENU's release as the end of a chord. */
 	while (g_keys_fd >= 0 && (n = read(g_keys_fd, ev, sizeof ev)) > 0) {
 		for (i = 0; i < (size_t)n / sizeof ev[0]; i++) {
 			int key;
@@ -1402,17 +1310,16 @@ void diatom_port_input_poll(void)
 			else if (ev[i].code == KEY_VOLUMEDOWN) key = 1;
 			else continue;
 			if (!ev[i].value) {
-				g_level_held[key].next_us = 0;
+				g_level_key[key].down = false;
 				continue;
 			}
 			if (g_input_debug)
 				port_logf(DIATOM_LOG_DEBUG, "level key %d", ev[i].code);
-			g_level_held[key].bright  = (g_buttons & DIATOM_BIT(DIATOM_BTN_MENU)) != 0;
-			g_level_held[key].next_us = diatom_port_now_us() + LEVEL_REPEAT_DELAY_US;
-			level_step(key, g_level_held[key].bright);
+			g_level_key[key].down    = true;
+			g_level_key[key].pressed = true;
+			g_level_key[key].bright  = (g_buttons & DIATOM_BIT(DIATOM_BTN_MENU)) != 0;
 		}
 	}
-	levels_repeat();
 }
 
 uint32_t diatom_port_input_state(void) { return g_buttons; }
@@ -1423,65 +1330,104 @@ void diatom_port_input_reset(void)
 
 	while (g_pad_fd >= 0 && read(g_pad_fd, ev, sizeof ev) > 0) { }
 	while (g_keys_fd >= 0 && read(g_keys_fd, ev, sizeof ev) > 0) { }
-	memset(g_level_held, 0, sizeof g_level_held);
+	memset(g_level_key, 0, sizeof g_level_key);
 	pad_resync();
 }
 
-/* ---------- levels ---------------------------------------------------------- */
-
-/* ADR-0020's rescale: round-to-nearest, endpoints exact. */
-static int rescale(int index, int from, int to)
-{
-	if (from <= 1 || to <= 1) return 0;
-	if (index < 0)        index = 0;
-	if (index > from - 1) index = from - 1;
-	return (index * (to - 1) + (from - 1) / 2) / (from - 1);
-}
+/* ---------- levels: the hardware under them (ADR-0038) ---------------------- */
 
 void diatom_port_level_invalidate(void)
 {
 	g_level    = -1;
-	g_bright   = -1;
 	g_jack_was = -1;
 }
 
-bool diatom_port_level_get(diatom_level_kind kind, int *index, int *count)
+int diatom_port_level_positions(diatom_level_kind kind)
 {
+	/* Asked every frame, so the backlight is looked for once, not read each
+	 * time. */
+	static int have_backlight = -1;
+
 	switch (kind) {
 	case DIATOM_LEVEL_VOLUME:
-		if (g_mixer_fd < 0) return false;
-		gain_ensure();
-		if (g_level < 0) return false;
-		*index = g_level;
-		*count = GAIN_LEVELS + 1;
-		return true;
+		return g_mixer_fd >= 0 ? GAIN_LEVELS + 1 : 0;
 	case DIATOM_LEVEL_BRIGHTNESS:
-		bright_ensure();
-		if (g_bright < 0) return false;
-		*index = g_bright;
-		*count = BRIGHT_LEVELS + 1;
-		return true;
+		if (have_backlight < 0) have_backlight = backlight_read() >= 0;
+		return have_backlight ? BRIGHT_LEVELS + 1 : 0;
 	default:
-		return false;
+		return 0;
 	}
 }
 
-bool diatom_port_level_set(diatom_level_kind kind, int index, int count)
+int diatom_port_level_read(diatom_level_kind kind)
+{
+	long v;
+	int raw;
+
+	switch (kind) {
+	case DIATOM_LEVEL_VOLUME:
+		/* Kept as well as returned: the mute and the jack re-apply act on
+		 * the level the hardware is at, read here the first frame after a
+		 * handover, before any press writes one. */
+		if (gain_io(&v, 0) < 0) return -1;
+		g_level = raw_to_level((int)v);
+		return g_level;
+	case DIATOM_LEVEL_BRIGHTNESS:
+		/* Nearest rung, so a level the launcher left between two reads as the
+		 * closer one. */
+		if ((raw = backlight_read()) < 0) return -1;
+		return ladder_nearest(bright_ladder, BRIGHT_LEVELS + 1, raw);
+	default:
+		return -1;
+	}
+}
+
+void diatom_port_level_write(diatom_level_kind kind, int pos)
 {
 	switch (kind) {
 	case DIATOM_LEVEL_VOLUME:
-		if (g_mixer_fd < 0) return false;
-		g_level = rescale(index, count, GAIN_LEVELS + 1);
+		g_level = pos;
 		gain_apply();
-		return true;
+		break;
 	case DIATOM_LEVEL_BRIGHTNESS:
-		if (backlight_read() < 0) return false;
-		g_bright = rescale(index, count, BRIGHT_LEVELS + 1);
-		backlight_write(bright_ladder[g_bright]);
-		return true;
+		if (pos < 0)             pos = 0;
+		if (pos > BRIGHT_LEVELS) pos = BRIGHT_LEVELS;
+		backlight_write(bright_ladder[pos]);
+		break;
 	default:
-		return false;
+		break;
 	}
+}
+
+uint32_t diatom_port_level_keys(void)
+{
+	static const uint32_t as_volume[2] = { DIATOM_LEVEL_KEY_VOLUME_UP, DIATOM_LEVEL_KEY_VOLUME_DOWN };
+	static const uint32_t as_bright[2] = { DIATOM_LEVEL_KEY_BRIGHTNESS_UP, DIATOM_LEVEL_KEY_BRIGHTNESS_DOWN };
+	unsigned long keys[NLONGS(KEY_MAX)];
+	uint32_t out = 0;
+	bool asked = false;
+	int k;
+
+	for (k = 0; k < 2; k++) {
+		if (g_level_key[k].down) {
+			if (!asked) {
+				memset(keys, 0, sizeof keys);
+				if (g_keys_fd < 0 || ioctl(g_keys_fd, EVIOCGKEY(sizeof keys), keys) < 0)
+					memset(keys, 0, sizeof keys);
+				asked = true;
+			}
+			if (!BIT_IS_SET(keys, level_codes[k])) g_level_key[k].down = false;
+		}
+		if (g_level_key[k].down || g_level_key[k].pressed)
+			out |= g_level_key[k].bright ? as_bright[k] : as_volume[k];
+		g_level_key[k].pressed = false;
+	}
+	return out;
+}
+
+void diatom_port_level_shown(diatom_level_kind kind, int pos, int positions)
+{
+	osd_show(kind == DIATOM_LEVEL_BRIGHTNESS ? 1 : 0, pos, positions - 1);
 }
 
 /* No hardware mute on this device, but the launcher may still hold one
