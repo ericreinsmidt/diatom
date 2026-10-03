@@ -7,7 +7,7 @@
 #   make                 desktop build (SDL2), the development target
 #   make PORT=brick      device build for the TrimUI Brick (TG3040); needs the
 #                        cross toolchain, so run it as  tools/brick-make.sh
-#   make PORT=pixel2     device build for the GKD Pixel 2; built by TortOS-px2's
+#   make PORT=pixel2     device build for the GKD Pixel 2; built by plastron's
 #                        Buildroot, which supplies CC and the libraries
 
 PORT ?= desktop
@@ -94,7 +94,7 @@ ifeq ($(PORT),brick)
 endif
 
 ifeq ($(PORT),pixel2)
-  # GKD Pixel 2 - ADR-0035. Built inside TortOS-px2's Buildroot, which sets CC
+  # GKD Pixel 2 - ADR-0035. Built inside plastron's Buildroot, which sets CC
   # and puts a pkg-config on PATH that answers for the device system's own
   # libraries: its SDL2 (audio and the clock), and Mesa's EGL, GLES and GBM
   # with libdrm for the display.

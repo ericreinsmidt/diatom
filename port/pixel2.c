@@ -1,7 +1,7 @@
 /* GKD Pixel 2 port - ADR-0035 and ADR-0036.
  *
  * The Pixel 2 is an RK3326S with a Mali-G31 and a 640x480 panel that is
- * physically 480x640 portrait, mounted turned. Its system is TortOS-px2:
+ * physically 480x640 portrait, mounted turned. Its system is plastron:
  * mainline Linux, Mesa's Panfrost, SDL2 with ALSA, no udev, no fbdev.
  *
  * Presentation is OpenGL ES 3 on a GBM surface, page-flipped through KMS by a

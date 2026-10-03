@@ -5,6 +5,10 @@
 - **Supersedes:** -
 - **Superseded by:** -
 
+> The system this calls TortOS-px2 was renamed plastron on 2026-10-03
+> ([github.com/ericreinsmidt/plastron](https://github.com/ericreinsmidt/plastron)).
+> Nothing in the decision changed.
+
 The second device port. [ADR-0013](0013-brick-fbdev-flip-thread.md) chose the
 Brick's display path from that device's measurements; this does the same for
 the Pixel 2, and keeps 0013's contract: `present()` never blocks.
