@@ -262,27 +262,47 @@ static void port_logf(diatom_log_level lvl, const char *fmt, ...)
 
 /* ==================== levels ================================================ */
 
-/* Is there a plug in the headphone jack? SW_HEADPHONE_INSERT on the codec's
- * input device ("rk817_int Headphones"), found by capability as on the Brick. */
-static void jack_open(void)
+/* The gamepad, the volume keys and the headphone jack, found by what each
+ * reports, not by number - there is no udev here, and enumeration order is not
+ * a promise.
+ *
+ * In one pass, keeping the nodes it wants and closing only the rest (the power
+ * key, which the launcher watches). Closing an evdev descriptor waits out an
+ * RCU grace period in the kernel (evdev_detach_client), 10 to 50 ms each on
+ * this device while the boot is busy; TortOS's scan of the same kind spent
+ * about 190 ms of its startup in close(), measured 2026-10-02, and this port's
+ * scan was the same shape - one per device, closing everything passed over. */
+static void input_scan(void)
 {
-	unsigned long bits[NLONGS(SW_MAX)];
+	unsigned long keys[NLONGS(KEY_MAX)], sw[NLONGS(SW_MAX)];
 	char path[32];
 	int i, fd;
 
 	for (i = 0; i < 32; i++) {
+		bool kept = true;
+
 		snprintf(path, sizeof path, "/dev/input/event%d", i);
 		if ((fd = open(path, O_RDONLY | O_NONBLOCK | O_CLOEXEC)) < 0) continue;
-		memset(bits, 0, sizeof bits);
-		if (ioctl(fd, EVIOCGBIT(EV_SW, sizeof bits), bits) >= 0 &&
-		    BIT_IS_SET(bits, SW_HEADPHONE_INSERT)) {
-			g_jack_fd = fd;
-			return;
-		}
-		close(fd);
+		memset(keys, 0, sizeof keys);
+		memset(sw, 0, sizeof sw);
+		ioctl(fd, EVIOCGBIT(EV_KEY, sizeof keys), keys);
+		ioctl(fd, EVIOCGBIT(EV_SW, sizeof sw), sw);
+		if      (g_pad_fd < 0  && BIT_IS_SET(keys, BTN_SOUTH))          g_pad_fd = fd;
+		else if (g_keys_fd < 0 && BIT_IS_SET(keys, KEY_VOLUMEUP))       g_keys_fd = fd;
+		else if (g_jack_fd < 0 && BIT_IS_SET(sw, SW_HEADPHONE_INSERT))  g_jack_fd = fd;
+		else kept = false;
+		if (!kept) close(fd);
 	}
-	diatom_port_log(DIATOM_LOG_WARN, "pixel2: no headphone jack input; "
-	                "volume uses the speaker window");
+}
+
+/* Is there a plug in the headphone jack? SW_HEADPHONE_INSERT on the codec's
+ * input device ("rk817_int Headphones"), found by input_scan. */
+static void jack_open(void)
+{
+	if (g_jack_fd < 0) input_scan();
+	if (g_jack_fd < 0)
+		diatom_port_log(DIATOM_LOG_WARN, "pixel2: no headphone jack input; "
+		                "volume uses the speaker window");
 }
 
 static int jack_present(void)
@@ -1212,24 +1232,6 @@ size_t diatom_port_audio_queued(void)
 
 /* ---------- input ----------------------------------------------------------- */
 
-static int open_by_key(int code, int skip_fd)
-{
-	unsigned long bits[NLONGS(KEY_MAX)];
-	char path[32];
-	int i, fd;
-
-	for (i = 0; i < 32; i++) {
-		snprintf(path, sizeof path, "/dev/input/event%d", i);
-		if ((fd = open(path, O_RDONLY | O_NONBLOCK | O_CLOEXEC)) < 0) continue;
-		memset(bits, 0, sizeof bits);
-		if (fd != skip_fd && ioctl(fd, EVIOCGBIT(EV_KEY, sizeof bits), bits) >= 0 &&
-		    BIT_IS_SET(bits, code))
-			return fd;
-		close(fd);
-	}
-	return -1;
-}
-
 /* The pad's keys as they are right now, for a start or after the kernel
  * dropped events (SYN_DROPPED): the held-at-entry rule needs to know about a
  * key that was already down. */
@@ -1247,10 +1249,10 @@ static void pad_resync(void)
 			g_buttons |= DIATOM_BIT(keymap[i].btn);
 }
 
+/* Normally found already, by jack_open's scan, which runs first. */
 static void input_open(void)
 {
-	g_pad_fd  = open_by_key(BTN_SOUTH, -1);
-	g_keys_fd = open_by_key(KEY_VOLUMEUP, g_pad_fd);
+	if (g_pad_fd < 0 || g_keys_fd < 0) input_scan();
 	if (g_pad_fd < 0)
 		diatom_port_log(DIATOM_LOG_WARN, "pixel2: no gamepad found; no game input");
 	if (g_keys_fd < 0)
