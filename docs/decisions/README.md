@@ -86,3 +86,4 @@ never started.
 | [0035](0035-pixel2-presents-through-kms-with-gles.md) | The GKD Pixel 2 presents through KMS with OpenGL ES, on a presenting thread | Accepted |
 | [0036](0036-kms-handover-by-drm-master.md) | On KMS, the display is handed over by DRM master, at present and present_stop | Accepted |
 | [0037](0037-a-level-key-under-menu-is-a-chord.md) | A level key pressed while MENU is held is a chord | Accepted |
+| [0038](0038-levels-are-the-hosts.md) | Levels are the host's; the port is the hardware under them | Accepted |
