@@ -189,6 +189,19 @@ struct dm_ctl_elem_value {
 #define HP_ATT_TOP      11
 #define HP_ATT_BOTTOM   188
 
+/* A USB-C DAC's volume: "USB Playback Volume" on the codec's card, a software
+ * volume that plastron's ALSA config puts in front of the DAC (its pcm.usb),
+ * the DAC's own control set to full by the system. TortOS makes the control
+ * at startup (its src/device/pixel2.c says why it can't be left to alsa-lib)
+ * and writes it with every level; so does this, both controls each time, so a
+ * DAC plugged in mid-game needs nothing re-applied. 0-255, 0.375 dB a step,
+ * the codec's step; 0 is silence. The window is TortOS's, a starting guess
+ * from the EarPods' headphone window. Change one, change the other. */
+#define USB_CTL         "USB Playback Volume"
+#define USB_RAW_MAX     255
+#define USB_ATT_TOP     11
+#define USB_ATT_BOTTOM  188
+
 static bool g_muted;                /* the launcher's, ADR-0031 */
 static int  g_mixer_fd = -1;
 static int  g_level = -1;           /* the position last read or written; -1 none */
@@ -331,14 +344,14 @@ static int raw_to_level(int raw)
 	return ladder_window_pos(GAIN_RAW_MAX - raw, GAIN_LEVELS, att_top(), att_bot());
 }
 
-static int gain_io(long *val, int write)
+static int ctl_io(const char *name, long *val, int write)
 {
 	struct dm_ctl_elem_value v;
 
 	if (g_mixer_fd < 0) return -1;
 	memset(&v, 0, sizeof v);
 	v.id.iface = 2;                                 /* SNDRV_CTL_ELEM_IFACE_MIXER */
-	snprintf((char *)v.id.name, sizeof v.id.name, "%s", GAIN_CTL);
+	snprintf((char *)v.id.name, sizeof v.id.name, "%s", name);
 	if (write) {
 		/* Both channels: a stereo control written in one leaves the other
 		 * where it was, which reads as a balance problem. */
@@ -346,7 +359,7 @@ static int gain_io(long *val, int write)
 		v.value.integer.value[1] = *val;
 		if (ioctl(g_mixer_fd, DM_CTL_ELEM_WRITE, &v) < 0) {
 			port_logf(DIATOM_LOG_WARN, "pixel2: mixer rejected '%s' = %ld",
-			          GAIN_CTL, *val);
+			          name, *val);
 			return -1;
 		}
 		return 0;
@@ -356,14 +369,20 @@ static int gain_io(long *val, int write)
 	return 0;
 }
 
+static int gain_io(long *val, int write) { return ctl_io(GAIN_CTL, val, write); }
+
 static int g_jack_was = -1;         /* jack state at the last write; -1 = never */
 
 static void gain_apply(void)
 {
-	long v = (g_level <= 0 || g_muted) ? 0 : level_to_raw(g_level);
+	bool cut = g_level <= 0 || g_muted;
+	long v   = cut ? 0 : level_to_raw(g_level);
+	long usb = cut ? 0 : USB_RAW_MAX - ladder_window_raw(g_level, GAIN_LEVELS,
+	                                                     USB_ATT_TOP, USB_ATT_BOTTOM);
 
 	g_jack_was = jack_present();
 	gain_io(&v, 1);
+	ctl_io(USB_CTL, &usb, 1);
 }
 
 /* Re-apply when the plug goes in or out, as on the Brick: whoever pumps input
