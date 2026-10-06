@@ -438,6 +438,17 @@ static const char *VERTEX_SHADER =
 	"out vec2 v_src;\n"
 	"void main() { v_src = a_src; gl_Position = vec4(a_pos, 0.0, 1.0); }\n";
 
+/* The panel's color matrix, applied in linear light: decoded from the
+ * screen's gamma, mixed, encoded again. See matrix_load. */
+#define PANEL_COLOR \
+	"uniform mat3 u_matrix;\n" \
+	"uniform bool u_panel;\n" \
+	"vec4 panel(vec4 c) {\n" \
+	"	if (!u_panel) return c;\n" \
+	"	vec3 lin = pow(c.rgb, vec3(2.2));\n" \
+	"	return vec4(pow(clamp(u_matrix * lin, 0.0, 1.0), vec3(1.0 / 2.2)), c.a);\n" \
+	"}\n"
+
 /* Nearest: the sampler's own, which picks the source pixel under the
  * destination pixel's centre - floor((i + 0.5) / scale), the same pixel
  * brick.c's map picks. */
@@ -446,9 +457,10 @@ static const char *PLAIN_SHADER =
 	"precision highp float;\n"
 	"uniform sampler2D u_tex;\n"
 	"uniform vec2 u_size;\n"
+	PANEL_COLOR
 	"in vec2 v_src;\n"
 	"out vec4 o_color;\n"
-	"void main() { o_color = texture(u_tex, v_src / u_size); }\n";
+	"void main() { o_color = panel(texture(u_tex, v_src / u_size)); }\n";
 
 /* Sharp-bilinear, brick.c's build_map in a shader: the bilinear weight,
  * steepened by the scale so the blend spans one destination pixel. Interior
@@ -463,13 +475,14 @@ static const char *SHARP_SHADER =
 	"uniform sampler2D u_tex;\n"
 	"uniform vec2 u_size;\n"
 	"uniform vec2 u_scale;\n"
+	PANEL_COLOR
 	"in vec2 v_src;\n"
 	"out vec4 o_color;\n"
 	"void main() {\n"
 	"	vec2 c = v_src - 0.5;\n"
 	"	vec2 p = floor(c);\n"
 	"	vec2 f = clamp((c - p - 0.5) * u_scale + 0.5, 0.0, 1.0);\n"
-	"	o_color = texture(u_tex, (p + 0.5 + f) / u_size);\n"
+	"	o_color = panel(texture(u_tex, (p + 0.5 + f) / u_size));\n"
 	"}\n";
 
 static const char *SOLID_SHADER =
@@ -624,6 +637,48 @@ static void draw_level_bar(int kind, int level, int max, bool turned)
 		solid(fill, pad, W - fill, bar, 60 / 255.f, 62 / 255.f, 72 / 255.f, 1, turned);
 }
 
+/* The panel's color matrix, from plastron's /etc/panel-color: nine numbers,
+ * row by row, lines starting with # skipped. Beside the Brick Hammer the
+ * Pixel's panel shows greens yellow - its green has no blue in it where the
+ * Brick's has some - and a curve per channel (the splash's gamma table) can't
+ * add blue to a pixel that has none; a matrix can. Tuned by eye 2026-10-07:
+ * blue gains a tenth of green, in linear light. Read once, at start; no file,
+ * no matrix, and the shaders skip the math. Measured that day with the GPU's
+ * work in the timing: 8.69 ms a frame with it, 8.86 without, the same within
+ * the noise, as the turn to the panel is already a pass of its own. */
+#define MATRIX_PATH "/etc/panel-color"
+static float g_matrix[9];
+static bool  g_matrix_on;
+
+static void matrix_load(void)
+{
+	FILE *f = fopen(MATRIX_PATH, "r");
+	char line[256];
+	float m[9];
+	int n = 0;
+
+	if (!f) return;
+	while (n < 9 && fgets(line, sizeof line, f)) {
+		char *p = line, *end;
+
+		if (line[0] == '#') continue;
+		while (n < 9) {
+			float v = strtof(p, &end);
+			if (end == p) break;
+			m[n++] = v;
+			p = end;
+		}
+	}
+	fclose(f);
+	if (n != 9) {
+		port_logf(DIATOM_LOG_WARN, "pixel2: %s has %d numbers, not 9; no matrix", MATRIX_PATH, n);
+		return;
+	}
+	memcpy(g_matrix, m, sizeof g_matrix);
+	g_matrix_on = true;
+	port_logf(DIATOM_LOG_INFO, "pixel2: color matrix from %s", MATRIX_PATH);
+}
+
 /* Draw one frame and whatever is over it, onto the current target. */
 static void draw_scene(const mailbox_frame *f, bool overlay_live, bool osd_live,
                        int osd_kind, int osd_level, int osd_max, bool turned)
@@ -640,6 +695,8 @@ static void draw_scene(const mailbox_frame *f, bool overlay_live, bool osd_live,
 	glUseProgram(prog);
 	glUniform1i(glGetUniformLocation(prog, "u_tex"), 0);
 	glUniform2f(glGetUniformLocation(prog, "u_size"), (float)f->w, (float)f->h);
+	glUniformMatrix3fv(glGetUniformLocation(prog, "u_matrix"), 1, GL_TRUE, g_matrix);
+	glUniform1i(glGetUniformLocation(prog, "u_panel"), g_matrix_on);
 	if (prog == g_prog_sharp)
 		glUniform2f(glGetUniformLocation(prog, "u_scale"),
 		            (float)f->dst.w / (float)f->w, (float)f->dst.h / (float)f->h);
@@ -661,6 +718,9 @@ static void draw_scene(const mailbox_frame *f, bool overlay_live, bool osd_live,
 		glUniform1i(glGetUniformLocation(g_prog_plain, "u_tex"), 0);
 		glUniform2f(glGetUniformLocation(g_prog_plain, "u_size"),
 		            (float)g_ov_w, (float)g_ov_h);
+		glUniformMatrix3fv(glGetUniformLocation(g_prog_plain, "u_matrix"), 1, GL_TRUE,
+		                   g_matrix);
+		glUniform1i(glGetUniformLocation(g_prog_plain, "u_panel"), g_matrix_on);
 		draw_quad(x0, y0, (float)g_ov_w, (float)g_ov_h,
 		          (float)g_ov_w, (float)g_ov_h, turned);
 	}
@@ -865,6 +925,7 @@ static bool gl_start(void)
 	g_prog_sharp = link_program(SHARP_SHADER);
 	g_prog_solid = link_program(SOLID_SHADER);
 	if (!g_prog_plain || !g_prog_sharp || !g_prog_solid) return false;
+	matrix_load();
 
 	glGenTextures(1, &g_frame_tex);
 	glGenTextures(1, &g_overlay_tex);
