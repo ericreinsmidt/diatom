@@ -261,7 +261,15 @@ conform-check: $(BIN)
 # and needs no core, no ROM and no network - and it SKIPS rather than builds
 # when build/desktop/diatom is absent, so `check` keeps its promise of being
 # instant and offline for someone who has not built yet.
+#
+# But a build that IS there is brought up to date first. These run the binary
+# as it sits in build/desktop, and nothing else rebuilt it: on 2026-10-07
+# check-stateplane failed on a DISPLAY field added five days earlier, against a
+# binary from the day before that.
+FRESH_IF_BUILT = @if [ -e $(BIN) ]; then $(MAKE) --no-print-directory $(BIN) $(STUB); fi
+
 check-proto:
+	$(FRESH_IF_BUILT)
 	@python3 test/proto.py
 
 # ADR-0020's state plane, end to end against the stub core. On the same terms
@@ -272,6 +280,7 @@ check-proto:
 # number to 4, and nothing noticed because nothing ran it. A test outside the
 # suite is a test that rots while looking like coverage.
 check-stateplane:
+	$(FRESH_IF_BUILT)
 	@python3 test/stateplane.py
 
 # The port's audio contract: falls back, is idempotent, and ALWAYS returns.

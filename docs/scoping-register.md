@@ -953,6 +953,12 @@ Two levers the spike discovered:
       and lands LEVEL events in libmsettings when EXIT returns ownership -
       closed 2026-08-26 by its migration. History and the ladder mismatch:
       [measurement](spikes/2026-08-26-backlight-floor.md).
+- [x] **[LB]** **A level lives in the host, the hardware in the port** →
+      **[ADR-0038](decisions/0038-levels-are-the-hosts.md)** *(Accepted)*.
+      Amends ADR-0020: `src/levels.c` steps, repeats and rescales every level
+      once; the port reads and writes the hardware and draws the bar;
+      `port/ladder.h` holds the window arithmetic. Checked on the Brick and
+      the Pixel 2, 2026-10-02.
 - [x] **[OPEN]** **Brightness works during a game** too - front keys
       (`BTN_THUMBL`/`THUMBR`, SDL 9/10), 20 steps sharing volume's scale, via
       `DISP_LCD_SET_BRIGHTNESS` on `/dev/disp` (no `/sys/class/backlight` on
