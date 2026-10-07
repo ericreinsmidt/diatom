@@ -104,23 +104,10 @@ ifeq ($(PORT),pixel2)
   LDFLAGS += $(shell $(PKG_CONFIG) --libs $(PIXEL2_PKGS)) -lm -ldl -lpthread
 endif
 
-.PHONY: all clean check check-seam check-proto check-port check-register check-register-diff \
-        check-corefacts check-cheevos stub run-stub tools probes hooks
+.PHONY: all clean check check-seam check-proto check-port \
+        check-corefacts check-cheevos stub run-stub tools probes
 
 all: $(BIN)
-
-# BELOW `all`, not above it: the first target in a makefile is the default
-# goal, and putting this at the top quietly made `make` mean `make hooks`.
-# It runs git, which the build container has no copy of, so the device build
-# failed with "git: No such file or directory" and nothing pointed at why.
-#
-# A worktree is a checkout of TRACKED files of TRACKED files, so CLAUDE.md stays behind in the
-# main tree and a worktree session starts without the working agreement at all.
-# git runs post-checkout after `git worktree add`, and hooks come from the
-# shared common dir, so this is a one-time install per clone.
-hooks:
-	git config core.hooksPath tools/hooks
-	@echo "hooks: post-checkout will copy CLAUDE.md into new worktrees"
 
 
 # Measurement instruments (tools/). Not part of the frontend, never linked into
@@ -221,11 +208,9 @@ $(BUILD)/%.o: %.c
 # The seam test from ADR-0007, mechanized. A port that includes libretro.h can
 # no longer be built without a core, which destroys the reason the desktop
 # backend exists. Cheap to check, so check it.
-# Two mechanical checks, both guarding a rule that decays the moment nothing
-# fails when it is broken. check-seam has held since day one for exactly that
-# reason; the register drifted 418 -> 992 lines in three days because nothing
-# ever complained.
-check: check-seam check-register check-corefacts check-rates check-cheevos check-proto check-port check-stateplane
+# Mechanical checks, each guarding a rule that decays the moment nothing fails
+# when it is broken: check-seam has held since day one for exactly that reason.
+check: check-seam check-corefacts check-rates check-cheevos check-proto check-port check-stateplane
 
 # Does a RetroAchievements address reach the byte it names? Offline, needs no
 # core and no ROM, and links only cheevos.c plus the vendored runtime - so it
@@ -300,9 +285,6 @@ $(PORT_TEST): test/port_test.c port/desktop.c port/port_clock.h include/diatom_p
 	      -Iinclude -Isrc -Iport -o $@ test/port_test.c port/desktop.c \
 	      $(SDL_CFLAGS) $(SDL_LIBS)
 
-check-register:
-	@python3 tools/check-register.py
-
 # The offline half: does core-facts.md still describe the cores we ship? The
 # real proof re-measures on hardware - tools/corefacts.sh --check - but that
 # needs the device and the user's ROMs, so it cannot run on every build.
@@ -315,12 +297,6 @@ check-corefacts:
 # went untested because of it.
 check-rates:
 	@python3 tools/check-rates.py
-
-# Use in a commit hook or by hand before committing: enforces that a resolution
-# REPLACES the question it answers rather than being appended below it, which
-# is the habit that broke the register.
-check-register-diff:
-	@python3 tools/check-register.py --diff
 
 check-seam:
 	@if grep -nE '^[[:space:]]*#[[:space:]]*include.*libretro\.h' \

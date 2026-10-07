@@ -14,8 +14,7 @@ these hashes are the pin.
 
 Licenses are pinned with the hashes and re-checked on every run against
 libretro's core-info. The set is **not uniformly GPL** and the
-differences matter to anyone shipping an image - see
-[ADR-0023](docs/decisions/0023-core-licensing.md).
+differences matter to anyone shipping an image.
 
 | Core | License | Bytes | sha256 |
 |---|---|---|---|

@@ -3,17 +3,12 @@
 Measurement instruments, not part of diatom's runtime and never linked into it.
 
 They started as spikes. They are tracked because their own results are cited as
-evidence in `docs/spikes/`, and an unversioned instrument makes those claims
-unverifiable - which is the exact failure this project exists to avoid. A spike
-is a throwaway that answers one question and dies; an instrument is something you
-re-run to re-check a claim. These became the second the moment the register
-created work items requiring them.
+evidence, and an unversioned instrument makes those claims unverifiable - which
+is the exact failure this project exists to avoid. A spike is a throwaway that
+answers one question and dies; an instrument is something you re-run to re-check
+a claim.
 
 Neither builds as part of `make`. Neither may be included from `src/` or `port/`.
-
-One file here is not an instrument: `check-register.py` is a **check**, and it
-runs as part of `make check` alongside `check-seam`. See the bottom of this
-file.
 
 ## `envlog.c`
 
@@ -24,7 +19,7 @@ Loads a core, logs every environment command with its phase, answers a minimal
 set and declines the rest - a decline is a data point. Then `retro_init`,
 `retro_load_game`, 120 frames, `retro_unload_game`, `retro_deinit`.
 
-Produced [the environment inventory](../docs/spikes/2026-08-23-env-inventory.md):
+Produced the environment inventory:
 34 of 77 commands appear, ~17 need real answers, 17 are declined by every core
 with nothing breaking.
 
@@ -38,8 +33,8 @@ on this CPU?*
 Maps N cores `RTLD_NOW | RTLD_LOCAL`, timing each, initializes exactly one, loads
 a game, runs 720 frames, and reports resident memory at every step.
 
-Produced [the RSS and dlopen measurements](../docs/spikes/2026-08-23-rss-and-dlopen.md)
-and evaluates [ADR-0006](../docs/decisions/0006-keep-all-cores-resident.md)'s
+Produced the RSS and dlopen measurements
+and evaluates ADR-0006's
 revisit trigger. **Must run on the target device** - timings from a faster CPU
 are worse than no measurement, because they look authoritative.
 
@@ -58,16 +53,16 @@ cannot be re-checked, and that is the drift this project exists to avoid.
 
 | Probe | Question | Cited by |
 |---|---|---|
-| `savprobe.c` | What does each core expose for saving - SRAM, RTC, state size - and what does `retro_serialize` cost? | [ADR-0016](../docs/decisions/0016-saves-and-save-states.md) |
-| `wprobe.c` | What does an atomic save write (write, fsync, rename) cost on the device's card? | [ADR-0016](../docs/decisions/0016-saves-and-save-states.md) |
-| `sigprobe.c` | On power-off, does a running process get a signal, and how long before it dies? | [ADR-0016](../docs/decisions/0016-saves-and-save-states.md) |
-| `protodrive.c` | A stand-in launcher: drives diatom over the ADR-0009 socket and times RUN to RUNNING. Also exercises READY, STOP and QUIT, so a protocol regression fails here rather than on a device with a real launcher attached. | [protocol log](../docs/discussion/2026-08-25-protocol.md) |
-| `blitprobe.c` | Is the blit slow because of the pixels it computes or the memory it writes? | [blit-cost spike](../docs/spikes/2026-08-25-blit-cost.md) |
-| `ffprobe.c` | How fast does each core run with no pacing, from a real gameplay state? The ceiling for fast forward. `FFPROBE_INPUTS=1` also lists the buttons a core declares and counts its reads of each. | [register §8](../docs/scoping-register.md) |
-| `warmprobe.c` | What does a launch cost with the process up and the core already resident? | [warm-launch spike](../docs/spikes/2026-08-25-warm-launch.md) |
-| `pantest.c` | What does `FBIOPAN_DISPLAY` cost, and does anything change it? | [ADR-0013](../docs/decisions/0013-brick-fbdev-flip-thread.md) |
-| `eglpresent.c` | Stand-in for the launcher: presents through the device's mali/EGL driver. | [handoff spike](../docs/spikes/2026-08-24-display-handoff.md) |
-| `holdfb.c` | Can EGL present while another process holds `/dev/fb0` open and mapped? | [handoff spike](../docs/spikes/2026-08-24-display-handoff.md) |
+| `savprobe.c` | What does each core expose for saving - SRAM, RTC, state size - and what does `retro_serialize` cost? | ADR-0016 |
+| `wprobe.c` | What does an atomic save write (write, fsync, rename) cost on the device's card? | ADR-0016 |
+| `sigprobe.c` | On power-off, does a running process get a signal, and how long before it dies? | ADR-0016 |
+| `protodrive.c` | A stand-in launcher: drives diatom over the ADR-0009 socket and times RUN to RUNNING. Also exercises READY, STOP and QUIT, so a protocol regression fails here rather than on a device with a real launcher attached. | protocol log |
+| `blitprobe.c` | Is the blit slow because of the pixels it computes or the memory it writes? | blit-cost spike |
+| `ffprobe.c` | How fast does each core run with no pacing, from a real gameplay state? The ceiling for fast forward. `FFPROBE_INPUTS=1` also lists the buttons a core declares and counts its reads of each. | register §8 |
+| `warmprobe.c` | What does a launch cost with the process up and the core already resident? | warm-launch spike |
+| `pantest.c` | What does `FBIOPAN_DISPLAY` cost, and does anything change it? | ADR-0013 |
+| `eglpresent.c` | Stand-in for the launcher: presents through the device's mali/EGL driver. | handoff spike |
+| `holdfb.c` | Can EGL present while another process holds `/dev/fb0` open and mapped? | handoff spike |
 
 `savprobe` needs a core and a ROM; the rest need neither. `holdfb` and
 `eglpresent` are two halves of one test and are meant to overlap in time - see
@@ -122,7 +117,7 @@ Cross-built instruments land in `build/brick/tools/` and run on the device.
 ## Brick toolchain
 
 The cross build for the TrimUI Brick (TG3040), per
-[ADR-0012](../docs/decisions/0012-independent-toolchain.md):
+ADR-0012:
 
 - `brick-toolchain.Dockerfile` - the container image: Debian bullseye pinned by
   digest, stock `aarch64-linux-gnu` GCC. Build once:
@@ -151,52 +146,6 @@ tools/brick-run.sh --core X.so --rom game --frames 600 --shot /tmp/x.bmp
 ```
 
 Set `LD_LIBRARY_PATH` if the cores need runtime libraries beside them.
-
-## `check-register.py` - a check, not an instrument
-
-*Can the register still be trusted to say what is left?*
-
-By 2026-08-25 it could not. It had grown 418 to 992 lines in three days and
-**never once shrunk**, because every resolution was appended rather than
-substituted: section 10 opened with five unticked questions and then, twelve
-lines down, a `RESOLVED -> ADR-0006` block ticking the same five. The
-core-options work created `## 4c` and left `## 12` standing. Saves did the same
-thing across `## 5b` and `## 9`.
-
-That was not neglect - the register was edited in **15 of the 16 ADR commits**.
-It was a habit. Writing the resolution is the satisfying part; deleting the
-question it answers feels like discarding information, in a project whose whole
-discipline is to keep the reasoning. But the reasoning lives in the ADR. The
-register only has to say what is left.
-
-So it exists for the same reason `check-seam` does. That rule has held since
-day one because a build fails when it is broken, not because anyone remembered
-it. Nothing ever failed when the register drifted, so it drifted.
-
-    make check              check-seam plus this
-    make check-register     this alone
-    make check-register-diff   enforce substitution over appending
-
-**FAIL** - structural facts a machine can be certain about:
-
-| | |
-|---|---|
-| Section order | `## 5` sitting above `## 4b` is how you see sections were inserted wherever was convenient |
-| Resolved but still open | a section recording a resolution that still carries unticked items above it - the exact signature of the habit |
-| Duplicate subject | two sections whose titles cover the same thing |
-| Undeclared tag | the header once said "nothing is decided unless it says DECIDED" while every resolution was written `RESOLVED`; the stated vocabulary and the real one drifted apart unnoticed |
-| Orphaned ADR | an Accepted ADR that no ticked item points at |
-| `--diff`: appended a resolution | a change that records a resolution and deletes nothing |
-
-**WARN** - suspected fossils, an open item whose vocabulary is already covered
-by a ticked one elsewhere. Never fails a build, because "is this the same
-question?" is a judgment. The first version scored these on raw shared-word
-count and produced **40 warnings, nearly all noise** - `**[OPEN]**` was leaking
-into the comparison so every open item matched every other. Tags are stripped
-first now, and overlap is measured against the *shorter* item rather than the
-union, because a one-line question and a six-line resolution can be about
-exactly the same thing. That took it to 4, all worth reading. A check that
-cries wolf is one people learn to ignore, which is worse than no check.
 
 ## `corefacts.sh` and `check-corefacts.py` - measured facts, not remembered ones
 

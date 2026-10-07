@@ -7,13 +7,9 @@
 /out/
 
 # Spikes are throwaway by definition and must not be committed.
-# See docs/working-agreement.md practice 7.
 /spike/
 
 *.o
-
-# Local scratch notes, not part of the project.
-CLAUDE.md
 
 # Device sysroots are regenerated, never committed - see tools/fetch-brick-sysroot.sh
 /sysroot/
