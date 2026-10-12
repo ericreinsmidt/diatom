@@ -470,6 +470,7 @@ static void usage(void)
 	fprintf(stderr,
 		"usage: diatom --core <core.so> --rom <file> [--system <dir>] [--save <dir>]\n"
 		"              [--display <mode>] [--filter nearest|sharp]\n"
+		"              [--channels stereo|mono|left|right]\n"
 		"              [--load-state <file>] [--state-on-exit <file>]\n"
 		"              [--firmware <name>]  required in --system, checked first\n"
 		"              [--frames <n>] [--shot <file.bmp>] [--preview-on-exit <file.bmp>]\n"
@@ -909,6 +910,32 @@ static void quiet_set(const diatom_msg *m)
 	quiet_emit();
 }
 
+/* ---- channels ------------------------------------------------------------
+ *
+ * Which ears hear what, for a player who hears with one. The launcher decides
+ * per output and this host mixes, in its own stream (audio.c), like quiet. */
+static void channels_emit(void)
+{
+	diatom_proto_send("CHANNELS\tmode=%s",
+	                  diatom_channels_names[diatom_audio_channels_get()]);
+}
+
+static void channels_set(const diatom_msg *m)
+{
+	int c;
+
+	for (c = 0; c < DIATOM_CHANNELS_COUNT; c++)
+		if (!strcmp(diatom_channels_names[c], m->dmode)) break;
+	/* A name it does not know changes nothing, and says so: guessing stereo
+	 * for it would undo a mix the player depends on. Answered either way,
+	 * as SETMAP is, so the launcher always knows what is in force. */
+	if (c == DIATOM_CHANNELS_COUNT)
+		diatom_proto_send("ERROR\tcode=bad_channels\tmsg=%s", m->dmode);
+	else
+		diatom_audio_channels((diatom_channels)c);
+	channels_emit();
+}
+
 static void level_set(const diatom_msg *m)
 {
 	int k, idx, cnt;
@@ -978,6 +1005,8 @@ static bool state_plane_msg(const diatom_msg *m)
 	case DIATOM_MSG_SETMUTE:  mute_set(m);       return true;
 	case DIATOM_MSG_QUIET:    quiet_emit();      return true;
 	case DIATOM_MSG_SETQUIET: quiet_set(m);      return true;
+	case DIATOM_MSG_CHANNELS:    channels_emit();  return true;
+	case DIATOM_MSG_SETCHANNELS: channels_set(m);  return true;
 	case DIATOM_MSG_SPEED:    speed_emit();      return true;
 	case DIATOM_MSG_DISPLAY:
 		/* apply_display is what emits, so ask it to restate the current one
@@ -1745,6 +1774,7 @@ int main(int argc, char **argv)
 	const char *preview_path = NULL, *cheevos_path = NULL;
 	const char *sock = getenv("DIATOM_SOCKET");
 	const char *cores_dir = NULL;
+	const char *channels = "stereo";
 	bool list_options = false;
 	diatom_filter start_filter;
 	long limit = 0;
@@ -1770,6 +1800,10 @@ int main(int argc, char **argv)
 		else if (!strcmp(argv[i], "--console") && i + 1 < argc)
 			console = (int)strtol(argv[++i], NULL, 10);
 		else if (!strcmp(argv[i], "--tap-audio") && i + 1 < argc) tap = argv[++i];
+		/* The channels as SETCHANNELS sets them, for the launcher's standalone
+		 * fallback: a player who hears with one ear should not lose half a
+		 * game's sound because the resident one was not there. */
+		else if (!strcmp(argv[i], "--channels") && i + 1 < argc) channels = argv[++i];
 		else if (!strcmp(argv[i], "--socket") && i + 1 < argc) sock = argv[++i];
 		else if (!strcmp(argv[i], "--cores") && i + 1 < argc) cores_dir = argv[++i];
 		else if (!strcmp(argv[i], "--list-options")) list_options = true;
@@ -1802,6 +1836,14 @@ int main(int argc, char **argv)
 		usage();
 		return 1;
 	}
+	for (i = 0; i < DIATOM_CHANNELS_COUNT; i++)
+		if (!strcmp(channels, diatom_channels_names[i])) break;
+	if (i == DIATOM_CHANNELS_COUNT) {
+		fprintf(stderr, "diatom: unknown channels '%s'\n", channels);
+		usage();
+		return 1;
+	}
+	diatom_audio_channels((diatom_channels)i);
 
 	/* Reflect the process default in the live state, AFTER both are parsed.
 	 *

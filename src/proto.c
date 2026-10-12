@@ -189,6 +189,8 @@ static void parse_line(char *line, diatom_msg *out)
 	else if (!strcmp(field, "QUIET"))      out->kind = DIATOM_MSG_QUIET;
 	else if (!strcmp(field, "SETQUIET"))   out->kind = DIATOM_MSG_SETQUIET;
 	else if (!strcmp(field, "SPEED"))      out->kind = DIATOM_MSG_SPEED;
+	else if (!strcmp(field, "CHANNELS"))   out->kind = DIATOM_MSG_CHANNELS;
+	else if (!strcmp(field, "SETCHANNELS"))out->kind = DIATOM_MSG_SETCHANNELS;
 	else {
 		log_(DIATOM_LOG_WARN, "proto: ignoring unknown verb '%s'", field);
 		out->kind = DIATOM_MSG_NONE;
@@ -350,7 +352,12 @@ diatom_msg_kind diatom_proto_poll(diatom_msg *out, int timeout_ms, bool running)
 		/* proto=7 adds ADR-0034's fast forward. Additive - an old launcher
 		 * ignores SPEED - and bumped so a new one can tell whether MENU+R1
 		 * will answer before telling a player it does. */
-		diatom_proto_send("READY\tproto=7\tstate=%s", running ? "running" : "idle");
+		/* proto=8 adds the channels, for a player who hears with one ear.
+		 * Additive like the rest, and bumped for quiet's reason: an old Diatom
+		 * ignores SETCHANNELS and a game plays half its sound into the ear
+		 * that cannot hear it, which a launcher could not tell from a mix
+		 * that worked. */
+		diatom_proto_send("READY\tproto=8\tstate=%s", running ? "running" : "idle");
 		/* A displaced launcher is a vanished one, and every loop already
 		 * knows what that means - the in-game menu resumes the game. Said
 		 * after READY, so the new launcher hears where things stand first. */

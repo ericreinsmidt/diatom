@@ -141,12 +141,81 @@ static const int16_t *quieten(const int16_t *in, size_t n)
 	return g_quiet_buf;
 }
 
+/* Channels, for a player who hears with one ear. Each output channel is a mix
+ * of the two inputs, out_l = mix[0] * l + mix[1] * r and out_r = mix[2] * l +
+ * mix[3] * r, and a change walks the four weights toward the new ones at
+ * quiet's rate rather than jumping: going from stereo to one side otherwise
+ * cuts the other side off in a single sample, which is a click in that ear.
+ *
+ * Mono is the average, not the sum: the sum of two full-scale channels
+ * clips, and the average of a sound that was already in both is that sound. */
+const char *const diatom_channels_names[DIATOM_CHANNELS_COUNT] = {
+	"stereo", "mono", "left", "right",
+};
+
+static const float CHANNEL_MIX[DIATOM_CHANNELS_COUNT][4] = {
+	[DIATOM_CHANNELS_STEREO] = { 1.0f, 0.0f, 0.0f, 1.0f },
+	[DIATOM_CHANNELS_MONO]   = { 0.5f, 0.5f, 0.5f, 0.5f },
+	[DIATOM_CHANNELS_LEFT]   = { 0.5f, 0.5f, 0.0f, 0.0f },
+	[DIATOM_CHANNELS_RIGHT]  = { 0.0f, 0.0f, 0.5f, 0.5f },
+};
+
+static diatom_channels g_channels;     /* what the launcher asked for */
+static float           g_mix[4] = { 1.0f, 0.0f, 0.0f, 1.0f };
+static int16_t         g_mix_buf[OUT_CHUNK * 2];
+
+void diatom_audio_channels(diatom_channels c)
+{
+	if (c >= 0 && c < DIATOM_CHANNELS_COUNT) g_channels = c;
+}
+diatom_channels diatom_audio_channels_get(void) { return g_channels; }
+
+static bool mixed_as_asked(void)
+{
+	return !memcmp(g_mix, CHANNEL_MIX[g_channels], sizeof g_mix);
+}
+
+static int16_t clamp16(float v)
+{
+	return v > 32767.0f ? 32767 : v < -32768.0f ? -32768 : (int16_t)v;
+}
+
+/* `n` frames of `in`, mixed into g_mix_buf, the weights moving one step a
+ * frame. Only called when there is something to do: in stereo with nothing
+ * left of a change, the frames go out as they came. */
+static const int16_t *mix_channels(const int16_t *in, size_t n)
+{
+	const float *target = CHANNEL_MIX[g_channels];
+	size_t i;
+	int k;
+
+	for (i = 0; i < n; i++) {
+		float l = in[i * 2], r = in[i * 2 + 1];
+
+		for (k = 0; k < 4; k++) {
+			if (g_mix[k] > target[k]) {
+				g_mix[k] -= g_gain_step;
+				if (g_mix[k] < target[k]) g_mix[k] = target[k];
+			} else if (g_mix[k] < target[k]) {
+				g_mix[k] += g_gain_step;
+				if (g_mix[k] > target[k]) g_mix[k] = target[k];
+			}
+		}
+		g_mix_buf[i * 2]     = clamp16(g_mix[0] * l + g_mix[1] * r);
+		g_mix_buf[i * 2 + 1] = clamp16(g_mix[2] * l + g_mix[3] * r);
+	}
+	return g_mix_buf;
+}
+
 static void push(const int16_t *f, size_t n)
 {
 	size_t i, took;
 
 	/* Every caller hands over at most a chunk - the resampler flushes at
-	 * OUT_CHUNK and priming at 512 - so one scratch buffer is enough. */
+	 * OUT_CHUNK and priming at 512 - so one scratch buffer is enough. The
+	 * channels before quiet, so quiet fades whatever the ears are hearing. */
+	if ((g_channels != DIATOM_CHANNELS_STEREO || !mixed_as_asked()) && n <= OUT_CHUNK)
+		f = mix_channels(f, n);
 	if ((g_quiet || g_gain < 1.0f) && n <= OUT_CHUNK) f = quieten(f, n);
 
 	for (i = 0; i < n * 2; i++) {
@@ -204,6 +273,9 @@ void diatom_audio_configure(double src_rate, int dst_rate, int capacity_frames)
 	g_gain_step = dst_rate > 0 ? 1000.0f / ((float)QUIET_FADE_MS * (float)dst_rate)
 	                           : 1.0f;
 	g_quiet_frames = 0;
+	/* And mixed as asked, the same way: the launcher sends the channels
+	 * before RUN, so the first sample is already in the right ear. */
+	memcpy(g_mix, CHANNEL_MIX[g_channels], sizeof g_mix);
 
 	if (src_rate <= 0.0 || dst_rate <= 0) {
 		g_base_ratio = g_ratio = 1.0;

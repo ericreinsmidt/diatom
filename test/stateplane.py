@@ -66,7 +66,7 @@ def check_that(name, cond, got):
     if not cond: fails.append(name)
 
 print("READY:", (r := drain(2.0)))
-check("proto version", [x for x in r if x.startswith("READY")][0].split("\t")[1], "proto=7")
+check("proto version", [x for x in r if x.startswith("READY")][0].split("\t")[1], "proto=8")
 
 # Before any RUN: identity must already be identity, not "everything unbound".
 send("MAP"); check("map is identity while idle", drain(), ["MAP\tmap=identity"])
@@ -323,6 +323,15 @@ check_that("SETQUIET is acknowledged with the new state",
 send("SETQUIET\ton=0"); got = drain(1.0)
 check_that("and released", any(l == "QUIET\ton=0" for l in got), got)
 
+# Channels: a second on the left alone, then stereo again. Left and not right,
+# so the quiet check below, which reads the left channel, is not disturbed;
+# the right channel is checked after the process has gone, as quiet is.
+send("SETCHANNELS\tmode=left"); got = drain(1.0)
+check_that("SETCHANNELS left is acknowledged",
+           any(l == "CHANNELS\tmode=left" for l in got), got)
+send("SETCHANNELS\tmode=stereo"); got = drain(1.0)
+check_that("and stereo again", any(l == "CHANNELS\tmode=stereo" for l in got), got)
+
 send("STOP"); got = drain(3.0)
 check_that("the game still ends normally after all that",
            any(l.startswith("EXIT") for l in got), got)
@@ -367,5 +376,32 @@ check_that("the last 2 ms before the silence are already faded",
 check_that("and the first 2 ms after it are still fading in",
            peak(q1, q1 + 2 * ms) < 0.3 * peak(q1 + 20 * ms, q1 + 30 * ms),
            f"{peak(q1, q1 + 2 * ms)} against {peak(q1 + 20 * ms, q1 + 30 * ms)}")
+
+# The channels, as heard: outside the quiet, which silences both, the one long
+# stretch of exact silence in the right channel is the second on the left
+# alone - the tone only touches zero for a sample at a time. Around it the
+# right has to ramp, as quiet does, not step.
+R = tone[1::2]
+run, i = (0, 0), 0
+while i < len(R):
+    if R[i] == 0:
+        j = i
+        while j < len(R) and R[j] == 0: j += 1
+        if j - i > run[1] - run[0] and (j <= q0 or i >= q1): run = (i, j)
+        i = j
+    else:
+        i += 1
+c0, c1 = run
+check_that("the right channel went silent outside the quiet",
+           c1 - c0 >= 300 * ms, f"{(c1 - c0) / ms:.0f} ms")
+check_that("with the left still playing all through it",
+           peak(c0, c1) > 1000, f"left peak {peak(c0, c1)}")
+check_that("and came back afterwards",
+           any(R[k] != 0 for k in range(c1, min(len(R), c1 + 100 * ms))),
+           f"frames {c1}..{c1 + 100 * ms}")
+near = range(max(1, c0 - 50 * ms), min(len(R), c1 + 50 * ms))
+rstep = max(abs(R[k] - R[k - 1]) for k in near)
+check_that("no step in the right channel going or coming back - it ramps",
+           rstep <= 400, f"largest sample-to-sample move {rstep}")
 print("\n" + ("ALL PASS" if not fails else f"{len(fails)} FAILED: {fails}"))
 sys.exit(1 if fails else 0)

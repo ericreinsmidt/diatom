@@ -163,6 +163,8 @@ typedef enum {
 	DIATOM_MSG_QUIET,      /* report whether the game's own sound is held silent */
 	DIATOM_MSG_SETQUIET,   /* hold it silent, or let it play: `on` = 1 | 0 */
 	DIATOM_MSG_SPEED,      /* report the fast-forward step, 1 to 4 - ADR-0034 */
+	DIATOM_MSG_CHANNELS,   /* report which ears hear what */
+	DIATOM_MSG_SETCHANNELS,/* set it: `dmode` = stereo | mono | left | right */
 	/* The launcher went away - or was displaced by a newer one, ADR-0033,
 	 * which means the same thing. The game keeps running. */
 	DIATOM_MSG_HANGUP
@@ -198,7 +200,9 @@ typedef struct {
 	 * passed straight through: the host's business is which, the port's is
 	 * how, and nothing in between reads it. Empty means the default. */
 	char device[128];
-	char dmode[32];        /* SETDISPLAY: a name from diatom_modes[] */
+	char dmode[32];        /* SETDISPLAY: a name from diatom_modes[].
+	                        * SETCHANNELS: one from diatom_channels_names[].
+	                        * Both arrive as `mode=`, so one slot. */
 	char dfilter[16];      /* SETDISPLAY: nearest | sharp */
 	int  index, count;     /* SETLEVEL: `count` is POSITIONS, not a max index.
 	                        * OVERLAY: `count` is the duration in ms, sent as
@@ -322,5 +326,22 @@ bool     diatom_audio_quiet_get(void);
 /* Output frames this session that went out quiet, fades included - so a silent
  * OUT line above can be told from a silent game. */
 uint64_t diatom_audio_quiet_frames(void);
+
+/* CHANNELS: which ears hear what, for a player who hears with one. Stereo as
+ * the game made it; mono, the two channels as one, in both; left or right,
+ * the two as one on that side and silence on the other. The launcher chooses
+ * per output - it never asks a speaker for one side - and this does it after
+ * the resampler, ramped the way quiet is, so a change never clicks. Held
+ * across sessions like quiet: a session starts mixed as asked, with no ramp. */
+typedef enum {
+	DIATOM_CHANNELS_STEREO = 0,
+	DIATOM_CHANNELS_MONO,
+	DIATOM_CHANNELS_LEFT,
+	DIATOM_CHANNELS_RIGHT,
+	DIATOM_CHANNELS_COUNT
+} diatom_channels;
+extern const char *const diatom_channels_names[DIATOM_CHANNELS_COUNT];
+void            diatom_audio_channels(diatom_channels c);
+diatom_channels diatom_audio_channels_get(void);
 
 #endif /* DIATOM_H */

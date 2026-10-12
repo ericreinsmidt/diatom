@@ -89,8 +89,8 @@ def main():
     with Diatom() as d:
         ready = d.line("READY")
         print(f"  READY: {ready}")
-        ck(ready is not None and "proto=7" in ready,
-           "READY announces proto=7, so a launcher knows fast forward exists")
+        ck(ready is not None and "proto=8" in ready,
+           "READY announces proto=8, so a launcher knows the channels exist")
 
         # Query. Empty is a real value - the port's default device - and the
         # launcher has to be able to tell it from "no answer".
@@ -134,6 +134,24 @@ def main():
         ck(d.line("QUIET") == "QUIET\ton=1", "and still holds it on the next ask")
         d.send("SETQUIET\ton=true")
         ck(d.line("QUIET") == "QUIET\ton=0", "a value that is not 1 releases it")
+
+        # Channels, for a player who hears with one ear: stereo until set,
+        # each name answered with itself, and a name it does not know refused
+        # without touching what is in force - guessing stereo would undo a mix
+        # someone depends on.
+        d.send("CHANNELS")
+        ck(d.line("CHANNELS") == "CHANNELS\tmode=stereo", "CHANNELS answers, stereo before anyone sets it")
+        for mode in ("mono", "left", "right", "stereo"):
+            d.send(f"SETCHANNELS\tmode={mode}")
+            ck(d.line("CHANNELS") == f"CHANNELS\tmode={mode}", f"SETCHANNELS {mode} answers with it")
+        d.send("SETCHANNELS\tmode=left")
+        d.line("CHANNELS")
+        d.send("SETCHANNELS\tmode=both")
+        r = d.line()
+        ck(r is not None and r.startswith("ERROR\tcode=bad_channels"), "a name it does not know is refused")
+        ck(d.line("CHANNELS") == "CHANNELS\tmode=left", "and the mix in force stays as it was")
+        d.send("SETCHANNELS\tmode=stereo")
+        d.line("CHANNELS")
 
         # ADR-0009's forward-compatibility promise, which is what lets a verb
         # be added at all. If this ever fails, adding one stops being safe.
