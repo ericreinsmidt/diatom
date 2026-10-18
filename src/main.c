@@ -214,16 +214,6 @@ static void on_terminate(int sig)
 	}
 }
 
-/* Socket mode's premap, on its own thread. A signal may land on this thread
- * too, which the wake pipe above already allows for. */
-static void *premap_cores(void *dir)
-{
-	int n = diatom_core_premap(dir);
-
-	fprintf(stderr, "diatom: premapped %d core(s) from %s\n", n, (const char *)dir);
-	return NULL;
-}
-
 /* Called once, before anything can be signaled.
  *
  * The per-session sigaction further down is about saving a game's state on
@@ -982,6 +972,46 @@ static void display_set(const diatom_msg *m)
 	apply_display(mode, filter);
 }
 
+/* Socket mode's premap, on its own thread. A signal may land on this thread
+ * too, which the wake pipe above already allows for.
+ *
+ * It waits for the launcher's PREMAP, which says it has drawn its first
+ * frame. Mapped the moment Diatom listened, the cores were read from the card
+ * at the same moment as the launcher's GPU libraries and firmware, and the
+ * launcher's video setup took 510-630 ms instead of 260: its first frame came
+ * about 0.4 s later on most boots of the TrimUI Brick (measured 2026-10-18,
+ * six cold boots, and three with the mapping moved after the first frame: all
+ * fast). A RUN meanwhile maps its own core, as a RUN always could.
+ *
+ * Five seconds of idle at most, for a launcher that never says: then the
+ * cores are mapped anyway. Idle only, because a game resumed at power-on
+ * comes before the launcher draws anything, and mapping beside it would read
+ * the card under a running game; the launcher's first frame after it sends
+ * PREMAP. Counted in 20 ms naps rather than against a clock: the wall clock
+ * can jump (a Brick boots into 2076 and NTP puts it back fifty years), and a
+ * condition on the monotonic clock is not on every system this builds for. A
+ * nap's lateness after PREMAP is nothing beside the mapping. */
+#define PREMAP_WAIT_MS 5000
+
+static volatile sig_atomic_t g_premap_go;
+
+static void premap_go(void) { g_premap_go = 1; }
+
+static void *premap_cores(void *dir)
+{
+	struct timespec nap = { 0, 20 * 1000000L };
+	int n, waited;
+
+	for (waited = 0; !g_premap_go && waited < PREMAP_WAIT_MS; ) {
+		nanosleep(&nap, NULL);
+		if (g_phase == PHASE_IDLE) waited += 20;
+	}
+
+	n = diatom_core_premap(dir);
+	fprintf(stderr, "diatom: premapped %d core(s) from %s\n", n, (const char *)dir);
+	return NULL;
+}
+
 /* Shared by all three message loops. A launcher may read or write any of this
  * whenever it likes: the two moments it is drawing - menu and idle - are
  * exactly the moments Diatom is not, and it is no less valid mid-game. */
@@ -1007,6 +1037,7 @@ static bool state_plane_msg(const diatom_msg *m)
 	case DIATOM_MSG_SETQUIET: quiet_set(m);      return true;
 	case DIATOM_MSG_CHANNELS:    channels_emit();  return true;
 	case DIATOM_MSG_SETCHANNELS: channels_set(m);  return true;
+	case DIATOM_MSG_PREMAP:   premap_go();       return true;
 	case DIATOM_MSG_SPEED:    speed_emit();      return true;
 	case DIATOM_MSG_DISPLAY:
 		/* apply_display is what emits, so ask it to restate the current one
@@ -1905,14 +1936,20 @@ int main(int argc, char **argv)
 		 * launcher nothing - but its connect waits for READY, and READY only
 		 * went out once every core was mapped. Measured on the GKD Pixel 2
 		 * 2026-10-02: the launcher's first frame waited about 280 ms on it,
-		 * hidden until then behind a 350 ms input grace of its own. */
+		 * hidden until then behind a 350 ms input grace of its own.
+		 *
+		 * And the thread waits for the launcher's PREMAP: see premap_cores.
+		 * Inline, with no thread, it maps at once, as waiting there would
+		 * hold READY back for five seconds. */
 		if (cores_dir) {
 			pthread_t premap;
 
-			if (pthread_create(&premap, NULL, premap_cores, (void *)cores_dir) == 0)
+			if (pthread_create(&premap, NULL, premap_cores, (void *)cores_dir) == 0) {
 				pthread_detach(premap);
-			else
+			} else {
+				premap_go();
 				premap_cores((void *)cores_dir);
+			}
 		}
 		terminate_init();
 

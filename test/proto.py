@@ -17,7 +17,7 @@ here when one of them next needs changing.
 Fast and offline: no core, no ROM, no frames, about a second. It skips rather
 than builds when there is no binary, so `make check` keeps costing nothing.
 """
-import os, socket, subprocess, sys, time
+import os, socket, subprocess, sys, tempfile, time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BIN  = f"{ROOT}/build/desktop/diatom"
@@ -35,11 +35,14 @@ def ck(ok, what):
 
 
 class Diatom:
+    def __init__(self, args=(), stderr=subprocess.DEVNULL):
+        self.args, self.stderr = list(args), stderr
+
     def __enter__(self):
         if os.path.exists(SOCK): os.unlink(SOCK)
-        self.p = subprocess.Popen([BIN, "--socket", SOCK], env=ENV,
+        self.p = subprocess.Popen([BIN, "--socket", SOCK] + self.args, env=ENV,
                                   stdout=subprocess.DEVNULL,
-                                  stderr=subprocess.DEVNULL)
+                                  stderr=self.stderr)
         for _ in range(100):
             if os.path.exists(SOCK): break
             time.sleep(0.05)
@@ -89,8 +92,8 @@ def main():
     with Diatom() as d:
         ready = d.line("READY")
         print(f"  READY: {ready}")
-        ck(ready is not None and "proto=8" in ready,
-           "READY announces proto=8, so a launcher knows the channels exist")
+        ck(ready is not None and "proto=9" in ready,
+           "READY announces proto=9, so a launcher knows PREMAP exists")
 
         # Query. Empty is a real value - the port's default device - and the
         # launcher has to be able to tell it from "no answer".
@@ -225,6 +228,29 @@ def main():
             ck(all(closed(c) for c in newer[:-1]),
                "and so is every one the newest displaced")
         for c in newer: c.close()
+
+    # PREMAP: the cores are mapped when the launcher says it has drawn, not
+    # the moment Diatom listens, so the mapping doesn't read the card beside
+    # the launcher's own start. An empty cores folder is enough: what is
+    # checked is when the mapping runs, which its log line says. The five
+    # second fallback for a launcher that never sends it is not waited out
+    # here, to keep this a second long.
+    with tempfile.TemporaryDirectory() as cores, \
+         tempfile.TemporaryFile() as err:
+        def mapped():
+            err.seek(0)
+            return b"premapped" in err.read()
+        with Diatom(["--cores", cores], stderr=err) as d:
+            d.line("READY")
+            time.sleep(0.3)
+            ck(not mapped(), "the cores wait for the launcher's PREMAP")
+            d.send("PREMAP")
+            deadline = time.time() + 1.0
+            while not mapped() and time.time() < deadline:
+                time.sleep(0.02)
+            ck(mapped(), "and are mapped once it comes")
+            d.send("AUDIO")
+            ck(d.line("AUDIO") is not None, "PREMAP has no answer and changes nothing else")
 
     if fails:
         print(f"\n{len(fails)} protocol check(s) failed")

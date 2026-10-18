@@ -191,6 +191,7 @@ static void parse_line(char *line, diatom_msg *out)
 	else if (!strcmp(field, "SPEED"))      out->kind = DIATOM_MSG_SPEED;
 	else if (!strcmp(field, "CHANNELS"))   out->kind = DIATOM_MSG_CHANNELS;
 	else if (!strcmp(field, "SETCHANNELS"))out->kind = DIATOM_MSG_SETCHANNELS;
+	else if (!strcmp(field, "PREMAP"))     out->kind = DIATOM_MSG_PREMAP;
 	else {
 		log_(DIATOM_LOG_WARN, "proto: ignoring unknown verb '%s'", field);
 		out->kind = DIATOM_MSG_NONE;
@@ -357,7 +358,12 @@ diatom_msg_kind diatom_proto_poll(diatom_msg *out, int timeout_ms, bool running)
 		 * ignores SETCHANNELS and a game plays half its sound into the ear
 		 * that cannot hear it, which a launcher could not tell from a mix
 		 * that worked. */
-		diatom_proto_send("READY\tproto=8\tstate=%s", running ? "running" : "idle");
+		/* proto=9 adds PREMAP: the cores are mapped when the launcher says
+		 * it has drawn, rather than the moment Diatom listens. Additive: an
+		 * old Diatom ignores it and maps at once, as it always did; an old
+		 * launcher never sends it, and the cores are mapped a few seconds
+		 * later anyway. */
+		diatom_proto_send("READY\tproto=9\tstate=%s", running ? "running" : "idle");
 		/* A displaced launcher is a vanished one, and every loop already
 		 * knows what that means - the in-game menu resumes the game. Said
 		 * after READY, so the new launcher hears where things stand first. */

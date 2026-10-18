@@ -171,8 +171,9 @@ int diatom_core_resident_count(void)
  * and it also pays the dynamic linker so a first launch does not.
  *
  * Run on a thread of its own once the socket is listening, so the launcher's
- * connect is answered at once rather than after every core is mapped; see
- * main.c. A RUN that arrives meanwhile waits at most for the core being mapped
+ * connect is answered at once rather than after every core is mapped, and
+ * only once the launcher has drawn (its PREMAP), so the mapping doesn't read
+ * the card beside the launcher's own start; see main.c. A RUN that arrives meanwhile waits at most for the core being mapped
  * at that moment (see the registry's lock above).
  *
  * A core that fails here is not fatal: it will be tried again by name when a

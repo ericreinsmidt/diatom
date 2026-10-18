@@ -165,6 +165,7 @@ typedef enum {
 	DIATOM_MSG_SPEED,      /* report the fast-forward step, 1 to 4 - ADR-0034 */
 	DIATOM_MSG_CHANNELS,   /* report which ears hear what */
 	DIATOM_MSG_SETCHANNELS,/* set it: `dmode` = stereo | mono | left | right */
+	DIATOM_MSG_PREMAP,     /* the launcher has drawn: map the cores now */
 	/* The launcher went away - or was displaced by a newer one, ADR-0033,
 	 * which means the same thing. The game keeps running. */
 	DIATOM_MSG_HANGUP
