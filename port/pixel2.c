@@ -1278,6 +1278,25 @@ bool diatom_port_audio_set(const char *name, char *actual, size_t cap)
 	return ok;
 }
 
+/* Not at init: see diatom_port_audio_start in diatom_port.h. NOT fatal when
+ * it fails. A port that cannot open a sound device can still put pixels where
+ * the device wants them, and silence costs far less than no emulator: the
+ * write path drops, and the host configures the session with capacity 0, which
+ * turns dynamic rate control off rather than leaving it correcting for a
+ * buffer that does not exist. Tried again at the next start, which costs
+ * nothing when it fails. */
+bool diatom_port_audio_start(void)
+{
+	if (g_audio) return true;
+	if (audio_open(NULL)) {
+		g_audio_dev[0] = '\0';
+		return true;
+	}
+	port_logf(DIATOM_LOG_WARN, "audio unavailable (%s); continuing without sound",
+	          SDL_GetError());
+	return false;
+}
+
 void diatom_port_audio_get(char *out, size_t cap)
 {
 	if (out && cap) snprintf(out, cap, "%s", g_audio_dev);
@@ -1609,11 +1628,8 @@ bool diatom_port_init(diatom_port_caps *out)
 	jack_open();
 	input_open();
 
-	/* Not fatal, as on the Brick: silence beats no emulator at all, and
-	 * capacity 0 is how the silence is reported (it turns rate control off). */
-	if (!audio_open(NULL))
-		port_logf(DIATOM_LOG_WARN, "audio unavailable (%s); continuing without sound",
-		          SDL_GetError());
+	/* No audio here: it opens once the launcher has drawn, or at the first
+	 * game; see diatom_port_audio_start. */
 
 	port_logf(DIATOM_LOG_INFO,
 	          "pixel2: panel %dx%d%s, surface %dx%d, crtc %u, audio %d Hz, pad %s",
@@ -1624,7 +1640,7 @@ bool diatom_port_init(diatom_port_caps *out)
 	out->surface_w           = g_surface_w;
 	out->surface_h           = g_surface_h;
 	out->audio_rate          = AUDIO_RATE;
-	out->audio_buffer_frames = g_audio ? AUDIO_BUFFER_FRAMES : 0;
+	out->audio_buffer_frames = AUDIO_BUFFER_FRAMES;   /* open or not yet */
 	out->present_blocks      = false;
 	return true;
 }

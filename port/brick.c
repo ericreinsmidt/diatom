@@ -935,6 +935,24 @@ bool diatom_port_audio_set(const char *name, char *actual, size_t cap)
 	return ok;
 }
 
+/* Not at init: see diatom_port_audio_start in diatom_port.h. NOT fatal when
+ * it fails. A port that cannot open a sound device can still put pixels where
+ * the device wants them, and silence costs far less than no emulator: the
+ * write path drops, and the host configures the session with capacity 0, which
+ * turns dynamic rate control off rather than leaving it correcting for a
+ * buffer that does not exist. Tried again at the next start, which costs
+ * nothing when it fails. */
+bool diatom_port_audio_start(void)
+{
+	if (g_audio) return true;
+	if (audio_open(NULL)) {
+		g_audio_dev[0] = '\0';
+		return true;
+	}
+	fprintf(stderr, "audio unavailable (%s); continuing without sound\n", SDL_GetError());
+	return false;
+}
+
 void diatom_port_audio_get(char *out, size_t cap)
 {
 	if (out && cap) snprintf(out, cap, "%s", g_audio_dev);
@@ -1006,22 +1024,8 @@ bool diatom_port_init(diatom_port_caps *out)
 	}
 	g_front = 0;
 
-	/* NOT fatal. A port that cannot open a sound device can still put pixels
-	 * where the device wants them, and refusing to start costs far more than
-	 * silence does: Diatom is resident, so a failed open here leaves the
-	 * launcher with no emulator at all and every launch then pays the cold
-	 * cost (~1100 ms) instead of the warm one (~15 ms). That is the worst
-	 * outcome available and it happened by accident - see ADR-0029, which
-	 * needs this to be true before a sink can be chosen at runtime, since
-	 * anything settable while a game runs can fail while a game runs.
-	 *
-	 * capacity 0 is how the silence is reported rather than hidden: it turns
-	 * off dynamic rate control, which would otherwise read a permanently empty
-	 * queue as a permanent deficit and hold the resampler at its deviation
-	 * limit forever, correcting for a buffer that does not exist. */
-	if (!audio_open(NULL))
-		fprintf(stderr, "audio unavailable (%s); continuing without sound\n",
-		        SDL_GetError());
+	/* No audio here: it opens once the launcher has drawn, or at the first
+	 * game; see diatom_port_audio_start. */
 
 	/* The Brick's buttons arrive as one joystick (kernel name "TRIMUI
 	 * Player1"; the firmware's SDL reports it as "Xbox 360 Controller").
@@ -1045,11 +1049,11 @@ bool diatom_port_init(diatom_port_caps *out)
 
 	out->surface_w           = (int)g_vinfo.xres;
 	out->surface_h           = (int)g_vinfo.yres;
-	/* `have` is untouched when the open failed, so the rate comes from what
-	 * was asked for: the resampler still needs a target to convert into,
-	 * and a zero here would divide. */
+	/* What is asked of SDL, which converts behind it, so the rate holds
+	 * whatever device opens later; and the buffer is the port's own, open
+	 * or not yet (see diatom_port_audio_start). */
 	out->audio_rate          = AUDIO_RATE;
-	out->audio_buffer_frames = g_audio ? AUDIO_BUFFER_FRAMES : 0;
+	out->audio_buffer_frames = AUDIO_BUFFER_FRAMES;
 	out->present_blocks      = false;
 	return true;
 }

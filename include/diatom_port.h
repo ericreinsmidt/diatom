@@ -193,6 +193,26 @@ size_t diatom_port_audio_queued(void);
  * and never the resampler's. */
 bool diatom_port_audio_set(const char *name, char *actual, size_t cap);
 
+/* The default device, opened if nothing is open yet; true when one is open
+ * after. A second call changes nothing, so it never throws away what is
+ * queued.
+ *
+ * NOT at init, and that is the point of it. Opened at init, the stream was
+ * running before the host had drawn its first frame, and the host's own
+ * writes to the codec (on the Brick, its headphone stage and speaker
+ * switches) then powered those paths up on the spot, with the driver's waits:
+ * 124 ms of the launcher's start, on two boots of three, depending on which
+ * process got there first (measured 2026-10-18). Opened after, those writes
+ * only record a setting, and the power-up happens here. The host calls this
+ * when the launcher has drawn (PREMAP) and at the start of every session,
+ * whichever comes first; a device set by diatom_port_audio_set is open
+ * already.
+ *
+ * caps.audio_buffer_frames is the port's buffer, open or not yet. When this
+ * fails the host configures the session with 0, as for a port with no
+ * sound. */
+bool diatom_port_audio_start(void);
+
 /* MUTE, which this port OBEYS rather than owns - ADR-0031.
  *
  * The launcher reads a hardware switch and cuts the analog stage, which sits

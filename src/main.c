@@ -1037,7 +1037,12 @@ static bool state_plane_msg(const diatom_msg *m)
 	case DIATOM_MSG_SETQUIET: quiet_set(m);      return true;
 	case DIATOM_MSG_CHANNELS:    channels_emit();  return true;
 	case DIATOM_MSG_SETCHANNELS: channels_set(m);  return true;
-	case DIATOM_MSG_PREMAP:   premap_go();       return true;
+	case DIATOM_MSG_PREMAP:
+		/* The launcher has drawn: the cores and the sound device, which both
+		 * waited so as not to compete with its start. */
+		premap_go();
+		diatom_port_audio_start();
+		return true;
 	case DIATOM_MSG_SPEED:    speed_emit();      return true;
 	case DIATOM_MSG_DISPLAY:
 		/* apply_display is what emits, so ask it to restate the current one
@@ -1217,8 +1222,11 @@ static int run_session_inner(const diatom_session *sn)
 	       (double)av.geometry.aspect_ratio,
 	       av.timing.fps, av.timing.sample_rate, g_caps.audio_rate);
 
+	/* The device opens here if the launcher has not had it opened yet: a
+	 * game resumed at power-on comes before the launcher draws. Capacity 0
+	 * when it will not open, which turns rate control off. */
 	diatom_audio_configure(av.timing.sample_rate, g_caps.audio_rate,
-	                       g_caps.audio_buffer_frames);
+	                       diatom_port_audio_start() ? g_caps.audio_buffer_frames : 0);
 	diatom_audio_prime();
 
 	/* The rect is computed from BASE geometry and does not move again unless

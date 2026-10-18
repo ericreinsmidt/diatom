@@ -72,6 +72,14 @@ int main(void)
 	ck(caps.audio_rate > 0, "a rate the resampler can convert into");
 	ck(caps.audio_buffer_frames >= 0, "a capacity, even when it is zero");
 
+	printf("opening the sound device:\n");
+	ck(diatom_port_audio_start(), "the default device opens when asked");
+	diatom_port_audio_write(buf, 512);
+	queued_before = diatom_port_audio_queued();
+	ck(diatom_port_audio_start(), "and asking again says it is open");
+	ck(!(queued_before > 0 && diatom_port_audio_queued() == 0),
+	   "without throwing away what was queued");
+
 	printf("where the sound is:\n");
 	diatom_port_audio_get(at, sizeof at);
 	ck(at[0] == '\0', "starts on the default device, reported as empty");
