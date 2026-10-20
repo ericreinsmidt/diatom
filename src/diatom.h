@@ -166,6 +166,8 @@ typedef enum {
 	DIATOM_MSG_CHANNELS,   /* report which ears hear what */
 	DIATOM_MSG_SETCHANNELS,/* set it: `dmode` = stereo | mono | left | right */
 	DIATOM_MSG_PREMAP,     /* the launcher has drawn: map the cores now */
+	DIATOM_MSG_LOWBATTERY,   /* report whether the low-battery disc is shown */
+	DIATOM_MSG_SETLOWBATTERY,/* show it over the game, or not: `on`, `blink` */
 	/* The launcher went away - or was displaced by a newer one, ADR-0033,
 	 * which means the same thing. The game keeps running. */
 	DIATOM_MSG_HANGUP
@@ -197,6 +199,7 @@ typedef struct {
 	 * is a cut measured inaudible at both ends, so nothing ramps it; quiet is
 	 * a step in the samples, so audio.c fades it. */
 	int  on;
+	int  blink;            /* SETLOWBATTERY, ADR-0040: the disc blinks */
 	/* SETAUDIO, ADR-0029. An output device named the way the PORT names one,
 	 * passed straight through: the host's business is which, the port's is
 	 * how, and nothing in between reads it. Empty means the default. */

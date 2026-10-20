@@ -131,6 +131,7 @@ static bool           g_ov_dirty;           /* a new image to upload */
 
 static uint64_t g_osd_until;
 static int      g_osd_level, g_osd_max, g_osd_kind;   /* kind 0 volume, 1 brightness */
+static bool     g_lowbat, g_lowbat_blink;   /* the low-battery disc, ADR-0040; under g_mx */
 
 /* ---------- levels ---------------------------------------------------------- */
 
@@ -637,6 +638,26 @@ static void draw_level_bar(int kind, int level, int max, bool turned)
 		solid(fill, pad, W - fill, bar, 60 / 255.f, 62 / 255.f, 72 / 255.f, 1, turned);
 }
 
+/* The low-battery disc, ADR-0040: the launcher's, in its place and color, as
+ * horizontal spans so it matches TortOS's draw_low_battery_dot to the pixel:
+ * radius 9, centered 34 px from the top and right edges of the surface. */
+static void draw_low_battery(bool turned)
+{
+	const int r = 9, cx = g_surface_w - 34, cy = 34;
+	int dy;
+
+	for (dy = -r; dy <= r; dy++) {
+		const int v = r * r - dy * dy;
+		int dx = 0;
+
+		/* sqrt(v) rounded, as the launcher's span is: the largest dx with
+		 * (2dx - 1)^2 <= 4v. */
+		while ((2 * (dx + 1) - 1) * (2 * (dx + 1) - 1) <= 4 * v) dx++;
+		solid((float)(cx - dx), (float)(cy + dy), (float)(2 * dx + 1), 1,
+		      224 / 255.f, 72 / 255.f, 72 / 255.f, 1, turned);
+	}
+}
+
 /* The panel's color matrix, from plastron's /etc/panel-color: nine numbers,
  * row by row, lines starting with # skipped. Beside the Brick Hammer the
  * Pixel's panel shows greens yellow - its green has no blue in it where the
@@ -681,7 +702,8 @@ static void matrix_load(void)
 
 /* Draw one frame and whatever is over it, onto the current target. */
 static void draw_scene(const mailbox_frame *f, bool overlay_live, bool osd_live,
-                       int osd_kind, int osd_level, int osd_max, bool turned)
+                       int osd_kind, int osd_level, int osd_max, bool lowbat,
+                       bool turned)
 {
 	GLuint prog = f->filter == DIATOM_FILTER_SHARP ? g_prog_sharp : g_prog_plain;
 	GLint  filter = f->filter == DIATOM_FILTER_SHARP ? GL_LINEAR : GL_NEAREST;
@@ -726,6 +748,8 @@ static void draw_scene(const mailbox_frame *f, bool overlay_live, bool osd_live,
 	}
 	if (osd_live)
 		draw_level_bar(osd_kind, osd_level, osd_max, turned);
+	if (lowbat)
+		draw_low_battery(turned);
 	glDisable(GL_BLEND);
 }
 
@@ -980,7 +1004,7 @@ static bool capture_front(int front, const char *path)
 	glViewport(0, 0, g_surface_w, g_surface_h);
 
 	upload_frame(&g_frames[front]);
-	draw_scene(&g_frames[front], false, false, 0, 0, 0, false);
+	draw_scene(&g_frames[front], false, false, 0, 0, 0, false, false);
 	glReadPixels(0, 0, g_surface_w, g_surface_h, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
 
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -1016,7 +1040,7 @@ static void *present_thread(void *arg)
 
 	while (!g_thread_stop) {
 		int frame;
-		bool ov_live, osd_live;
+		bool ov_live, osd_live, lowbat;
 		int osd_kind, osd_level, osd_max;
 		uint64_t now, t0 = 0;
 
@@ -1072,12 +1096,14 @@ static void *present_thread(void *arg)
 		osd_kind  = g_osd_kind;
 		osd_level = g_osd_level;
 		osd_max   = g_osd_max;
+		/* Blinking: the even seconds, the launcher's rhythm. */
+		lowbat    = g_lowbat && (!g_lowbat_blink || (now / 1000000u) % 2 == 0);
 		pthread_mutex_unlock(&g_mx);
 
 		if (g_present_debug) t0 = diatom_port_now_us();
 		upload_frame(&g_frames[frame]);
 		draw_scene(&g_frames[frame], ov_live, osd_live, osd_kind, osd_level,
-		           osd_max, g_turned);
+		           osd_max, lowbat, g_turned);
 		eglSwapBuffers(g_egl_display, g_egl_surface);
 		if (g_present_debug) {
 			static int n;
@@ -1529,6 +1555,14 @@ uint32_t diatom_port_level_keys(void)
 void diatom_port_level_shown(diatom_level_kind kind, int pos, int positions)
 {
 	osd_show(kind == DIATOM_LEVEL_BRIGHTNESS ? 1 : 0, pos, positions - 1);
+}
+
+void diatom_port_low_battery(bool on, bool blink)
+{
+	pthread_mutex_lock(&g_mx);
+	g_lowbat = on;
+	g_lowbat_blink = blink;
+	pthread_mutex_unlock(&g_mx);
 }
 
 /* No hardware mute on this device, but the launcher may still hold one

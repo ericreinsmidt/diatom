@@ -469,6 +469,10 @@ void diatom_port_level_shown(diatom_level_kind kind, int pos, int positions)
 }
 void diatom_port_level_invalidate(void) { }
 
+/* No device UI drawn over the game on a desktop: the window is for iteration,
+ * and the host half of ADR-0040 is tested through its answers. */
+void diatom_port_low_battery(bool on, bool blink) { (void)on; (void)blink; }
+
 /* Nothing to drain: this port presents synchronously inside
  * diatom_port_present - SDL_RenderPresent has returned by the time it does,
  * so there is never a flip in flight to wait for. The definition exists

@@ -66,7 +66,7 @@ def check_that(name, cond, got):
     if not cond: fails.append(name)
 
 print("READY:", (r := drain(2.0)))
-check("proto version", [x for x in r if x.startswith("READY")][0].split("\t")[1], "proto=9")
+check("proto version", [x for x in r if x.startswith("READY")][0].split("\t")[1], "proto=10")
 
 # Before any RUN: identity must already be identity, not "everything unbound".
 send("MAP"); check("map is identity while idle", drain(), ["MAP\tmap=identity"])
@@ -322,6 +322,22 @@ check_that("SETQUIET is acknowledged with the new state",
            any(l == "QUIET\ton=1" for l in got), got)
 send("SETQUIET\ton=0"); got = drain(1.0)
 check_that("and released", any(l == "QUIET\ton=0" for l in got), got)
+
+# Low battery, ADR-0040: the launcher's to say, the port's to draw. The host
+# half is what a desktop can check: it answers what it was told, and holds it.
+send("LOWBATTERY"); got = drain(1.0)
+check_that("LOWBATTERY answers before anyone has set it",
+           any(l == "LOWBATTERY\ton=0\tblink=0" for l in got), got)
+send("SETLOWBATTERY\ton=1"); got = drain(1.0)
+check_that("SETLOWBATTERY is acknowledged with the new state",
+           any(l == "LOWBATTERY\ton=1\tblink=0" for l in got), got)
+send("LOWBATTERY"); got = drain(1.0)
+check_that("and held", any(l == "LOWBATTERY\ton=1\tblink=0" for l in got), got)
+send("SETLOWBATTERY\ton=1\tblink=1"); got = drain(1.0)
+check_that("critical blinks", any(l == "LOWBATTERY\ton=1\tblink=1" for l in got), got)
+send("SETLOWBATTERY\ton=0\tblink=1"); got = drain(1.0)
+check_that("and off is off, blink or not",
+           any(l == "LOWBATTERY\ton=0\tblink=0" for l in got), got)
 
 # Channels: a second on the left alone, then stereo again. Left and not right,
 # so the quiet check below, which reads the left channel, is not disturbed;

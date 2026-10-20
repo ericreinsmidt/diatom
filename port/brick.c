@@ -575,6 +575,55 @@ static void clear_gain_bar(uint8_t *base, diatom_rect dst)
 	}
 }
 
+/* The low-battery disc, ADR-0040: the launcher's, drawn the launcher's way so
+ * it reads the same in a game as on the shelf (TortOS's draw_low_battery_dot):
+ * horizontal spans of a disc of radius 9, centered 34 px from the top and
+ * right edges. Like the bar it goes into the page after the blit, and when it
+ * goes, what it covered outside the picture is put back to black - inside, the
+ * blit has already redrawn it. */
+#define DOT_R  9
+#define DOT_IN 34
+static bool g_lowbat, g_lowbat_blink;
+static bool g_dot_painted[FB_PAGES];
+
+/* Shown this frame: always when low, the even seconds when blinking. */
+static bool dot_visible(void)
+{
+	return g_lowbat && (!g_lowbat_blink || (diatom_port_now_us() / 1000000u) % 2 == 0);
+}
+
+static void dot_page(uint8_t *base, diatom_rect dst, bool draw)
+{
+	const unsigned ro = g_vinfo.red.offset, go = g_vinfo.green.offset;
+	const unsigned bo = g_vinfo.blue.offset;
+	const uint32_t red = (224u << ro) | (72u << go) | (72u << bo) | g_opaque;
+	const int cx = (int)g_vinfo.xres - DOT_IN, cy = DOT_IN;
+	int dy;
+
+	for (dy = -DOT_R; dy <= DOT_R; dy++) {
+		const int v = DOT_R * DOT_R - dy * dy, y = cy + dy;
+		uint32_t *row = (uint32_t *)(base + (size_t)y * g_finfo.line_length);
+		bool covered = y >= dst.y && y < dst.y + dst.h;
+		int dx = 0, x;
+
+		/* The launcher's span: sqrt(v) rounded, so the two discs match to the
+		 * pixel. The largest dx with (2dx - 1)^2 <= 4v. */
+		while ((2 * (dx + 1) - 1) * (2 * (dx + 1) - 1) <= 4 * v) dx++;
+		for (x = cx - dx; x <= cx + dx; x++) {
+			if (draw)
+				row[x] = red;
+			else if (!covered || x < dst.x || x >= dst.x + dst.w)
+				row[x] = g_opaque;
+		}
+	}
+}
+
+void diatom_port_low_battery(bool on, bool blink)
+{
+	g_lowbat = on;
+	g_lowbat_blink = blink;
+}
+
 /* The picture under the notice, in ordinary memory.
  *
  * Blending needs what is underneath, and reading it back out of the page was
@@ -1478,6 +1527,7 @@ void diatom_port_present(const void *src, int w, int h, size_t pitch,
 	if (rect_changed) {
 		clear_pages();
 		memset(g_osd_painted, 0, sizeof g_osd_painted);
+		memset(g_dot_painted, 0, sizeof g_dot_painted);
 		memset(g_ov_painted, 0, sizeof g_ov_painted);
 	}
 
@@ -1491,6 +1541,14 @@ void diatom_port_present(const void *src, int w, int h, size_t pitch,
 		} else if (g_osd_painted[g_front]) {
 			clear_gain_bar(page_base(g_front), dst);
 			g_osd_painted[g_front] = false;
+		}
+		{
+			bool dot = dot_visible();
+
+			if (dot || g_dot_painted[g_front]) {
+				dot_page(page_base(g_front), dst, dot);
+				g_dot_painted[g_front] = dot;
+			}
 		}
 		overlay_page(page_base(g_front), g_front, dst);
 		return;
@@ -1523,6 +1581,16 @@ void diatom_port_present(const void *src, int w, int h, size_t pitch,
 	} else if (g_osd_painted[page]) {
 		clear_gain_bar(page_base(page), dst);
 		g_osd_painted[page] = false;
+	}
+	/* The disc the same way: painted every frame it is shown, taken off the
+	 * page it was on once it isn't - which, blinking, is every other second. */
+	{
+		bool dot = dot_visible();
+
+		if (dot || g_dot_painted[page]) {
+			dot_page(page_base(page), dst, dot);
+			g_dot_painted[page] = dot;
+		}
 	}
 	overlay_page(page_base(page), page, dst);
 

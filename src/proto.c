@@ -192,6 +192,8 @@ static void parse_line(char *line, diatom_msg *out)
 	else if (!strcmp(field, "CHANNELS"))   out->kind = DIATOM_MSG_CHANNELS;
 	else if (!strcmp(field, "SETCHANNELS"))out->kind = DIATOM_MSG_SETCHANNELS;
 	else if (!strcmp(field, "PREMAP"))     out->kind = DIATOM_MSG_PREMAP;
+	else if (!strcmp(field, "LOWBATTERY"))    out->kind = DIATOM_MSG_LOWBATTERY;
+	else if (!strcmp(field, "SETLOWBATTERY")) out->kind = DIATOM_MSG_SETLOWBATTERY;
 	else {
 		log_(DIATOM_LOG_WARN, "proto: ignoring unknown verb '%s'", field);
 		out->kind = DIATOM_MSG_NONE;
@@ -212,6 +214,9 @@ static void parse_line(char *line, diatom_msg *out)
 		 * making sound can be quieted again, and one stuck silent looks
 		 * broken. */
 		else if (!strcmp(field, "on")) out->on = (strcmp(v, "1") == 0);
+		/* SETLOWBATTERY's second flag, ADR-0040: the battery is critical, and
+		 * the disc blinks. "1" or not, as `on`. */
+		else if (!strcmp(field, "blink")) out->blink = (strcmp(v, "1") == 0);
 		else if (!strcmp(field, "core")) snprintf(out->core, sizeof out->core, "%s", v);
 		else if (!strcmp(field, "rom"))  snprintf(out->rom,  sizeof out->rom,  "%s", v);
 		/* ADR-0017. A key ADR-0009 did not define, which costs nothing to add
@@ -363,7 +368,10 @@ diatom_msg_kind diatom_proto_poll(diatom_msg *out, int timeout_ms, bool running)
 		 * old Diatom ignores it and maps at once, as it always did; an old
 		 * launcher never sends it, and the cores are mapped a few seconds
 		 * later anyway. */
-		diatom_proto_send("READY\tproto=9\tstate=%s", running ? "running" : "idle");
+		/* proto=10 adds ADR-0040's low battery. Additive: an old Diatom
+		 * ignores SETLOWBATTERY and a game shows nothing, as before; bumped
+		 * so a launcher can tell whether the disc will be drawn. */
+		diatom_proto_send("READY\tproto=10\tstate=%s", running ? "running" : "idle");
 		/* A displaced launcher is a vanished one, and every loop already
 		 * knows what that means - the in-game menu resumes the game. Said
 		 * after READY, so the new launcher hears where things stand first. */

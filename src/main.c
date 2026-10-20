@@ -900,6 +900,27 @@ static void quiet_set(const diatom_msg *m)
 	quiet_emit();
 }
 
+/* ---- low battery, ADR-0040 ------------------------------------------------
+ *
+ * The launcher decides what counts as low and says so; the port draws the
+ * disc over the game. Held across sessions like quiet, and never emitted
+ * unsolicited: nothing on this side ever changes it. */
+static bool g_low_battery, g_low_battery_blink;
+
+static void low_battery_emit(void)
+{
+	diatom_proto_send("LOWBATTERY\ton=%d\tblink=%d", g_low_battery ? 1 : 0,
+	                  g_low_battery_blink ? 1 : 0);
+}
+
+static void low_battery_set(const diatom_msg *m)
+{
+	g_low_battery = m->on != 0;
+	g_low_battery_blink = g_low_battery && m->blink != 0;
+	diatom_port_low_battery(g_low_battery, g_low_battery_blink);
+	low_battery_emit();
+}
+
 /* ---- channels ------------------------------------------------------------
  *
  * Which ears hear what, for a player who hears with one. The launcher decides
@@ -1035,6 +1056,8 @@ static bool state_plane_msg(const diatom_msg *m)
 	case DIATOM_MSG_SETMUTE:  mute_set(m);       return true;
 	case DIATOM_MSG_QUIET:    quiet_emit();      return true;
 	case DIATOM_MSG_SETQUIET: quiet_set(m);      return true;
+	case DIATOM_MSG_LOWBATTERY:    low_battery_emit(); return true;
+	case DIATOM_MSG_SETLOWBATTERY: low_battery_set(m); return true;
 	case DIATOM_MSG_CHANNELS:    channels_emit();  return true;
 	case DIATOM_MSG_SETCHANNELS: channels_set(m);  return true;
 	case DIATOM_MSG_PREMAP:

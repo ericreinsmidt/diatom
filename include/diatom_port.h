@@ -307,6 +307,15 @@ uint32_t diatom_port_level_keys(void);
  * a held key keeps it up. */
 void diatom_port_level_shown(diatom_level_kind kind, int pos, int positions);
 
+/* Show the low-battery disc over the game, or take it off (ADR-0040). The
+ * launcher decides what low and critical mean; the port draws the disc the
+ * launcher draws on its own screens, in the same place: radius 9, centered
+ * 34 px from the top and right edges, red (224, 72, 72), on every frame until
+ * told otherwise. `blink` (critical): shown in the even seconds of the port's
+ * clock and not in the odd ones, the launcher's rhythm. A port with no screen
+ * of its own implements this as a no-op and is correct. */
+void diatom_port_low_battery(bool on, bool blink);
+
 /* Forget everything the port remembers about the output state.
  *
  * Needed because Diatom is RESIDENT: the port keeps what it last wrote, to
