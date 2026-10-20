@@ -78,7 +78,6 @@ void diatom_core_stop(diatom_core *c);
  * repeat launch skips dlopen and retro_init. Never unloaded. Locked, so the
  * premap's thread and a RUN can both call it. */
 diatom_core *diatom_core_resident(const char *path);
-int          diatom_core_resident_count(void);
 /* Map every *_libretro.so in `dir`, returning how many are now resident. For
  * the boot path: it costs less than reading them to warm the cache did, and
  * leaves the dynamic linker's work done as well. */
@@ -118,7 +117,6 @@ void        diatom_options_define_vars(const struct retro_variable *vars);
 const char *diatom_options_get(const char *key);
 bool        diatom_options_set(const char *key, const char *value);
 bool        diatom_options_take_update(void);   /* consumes the flag */
-int         diatom_options_count(void);
 void        diatom_options_list(void);
 void        diatom_options_emit(void);   /* over the protocol, for a menu */
 /* Drop values the launcher set for a game that is now over - see options.c. */

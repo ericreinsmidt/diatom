@@ -1234,25 +1234,6 @@ static bool ensure_maps(int src_w, int src_h, diatom_rect dst,
 	return true;
 }
 
-static inline diatom_rgb un565(uint16_t c)
-{
-	diatom_rgb v;
-	int r = (c >> 11) & 0x1f, g = (c >> 5) & 0x3f, b = c & 0x1f;
-	v.r = (int)((r << 3) | (r >> 2));
-	v.g = (int)((g << 2) | (g >> 4));
-	v.b = (int)((b << 3) | (b >> 2));
-	return v;
-}
-
-static inline diatom_rgb un8888(uint32_t c)
-{
-	diatom_rgb v;
-	v.r = (int)((c >> 16) & 0xff);
-	v.g = (int)((c >>  8) & 0xff);
-	v.b = (int)( c        & 0xff);
-	return v;
-}
-
 /* Converted source rows, so a source pixel is converted ONCE rather than once
  * per destination pixel that samples it.
  *

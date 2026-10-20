@@ -152,16 +152,6 @@ diatom_core *diatom_core_resident(const char *path)
 	return c;
 }
 
-int diatom_core_resident_count(void)
-{
-	int n;
-
-	pthread_mutex_lock(&g_resident_lock);
-	n = g_nresident;
-	pthread_mutex_unlock(&g_resident_lock);
-	return n;
-}
-
 /* Map every core in `dir` before anyone asks for one.
  *
  * launch.sh used to warm the page cache by reading the cores with cat during

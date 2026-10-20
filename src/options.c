@@ -271,7 +271,6 @@ bool diatom_options_take_update(void)
 	return d;
 }
 
-int diatom_options_count(void) { return g_active ? g_active->n : 0; }
 
 /* One line per option, for a launcher building a menu. Values are pipe-joined
  * because the protocol is tab-separated, so a tab inside a field would be
