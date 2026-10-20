@@ -837,21 +837,5 @@ void diatom_cheevos_emit(void)
 
 /* ---------------------------------------------------------------- reports */
 
-bool diatom_cheevos_supported(void)
-{
-	/* A core that never said is not a core that said no. The header makes the
-	 * frontend's discretion explicit for exactly this case: "if
-	 * retro_get_memory_data returns a valid address but this environment call
-	 * is not used, the frontend may or may not opt in the core". Diatom opts
-	 * in, because having readable memory is the whole requirement. */
-	return g_supported && g_mapped > 0;
-}
-
-size_t diatom_cheevos_mapped_bytes(void) { return g_mapped; }
 size_t diatom_cheevos_total_bytes(void)  { return g_total; }
 int    diatom_cheevos_span_count(void)   { return g_nspan; }
-
-const diatom_mem_span *diatom_cheevos_span(int i)
-{
-	return (i >= 0 && i < g_nspan) ? &g_span[i] : NULL;
-}

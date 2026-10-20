@@ -116,10 +116,7 @@ void diatom_cheevos_runtime_reset(void);
 void diatom_cheevos_emit(void);
 
 /* What was found, for the log and for the launcher to be told about. */
-bool   diatom_cheevos_supported(void);
-size_t diatom_cheevos_mapped_bytes(void);   /* readable */
 size_t diatom_cheevos_total_bytes(void);    /* readable + holes */
 int    diatom_cheevos_span_count(void);
-const diatom_mem_span *diatom_cheevos_span(int i);
 
 #endif
