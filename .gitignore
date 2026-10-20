@@ -14,3 +14,6 @@
 # Third-party core binaries, fetched by tools/fetch-cores.sh. Provenance is
 # recorded in CORES.md; the bytes are not ours to commit.
 /cores/
+
+# Retired things kept for reference, out of the repository
+/attic/
