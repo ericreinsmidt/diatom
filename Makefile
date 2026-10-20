@@ -5,10 +5,10 @@
 # and an abstraction with no consumer is a tax (register §0).
 #
 #   make                 desktop build (SDL2), the development target
-#   make PORT=brick      device build for the TrimUI Brick (TG3040); needs the
-#                        cross toolchain, so run it as  tools/brick-make.sh
-#   make PORT=pixel2     device build for the GKD Pixel 2; built by plastron's
-#                        Buildroot, which supplies CC and the libraries
+#   make PORT=brick      device build for the TrimUI Brick
+#   make PORT=pixel2     device build for the GKD Pixel 2
+#                        Both built by plastron's Buildroot, which supplies CC
+#                        and the libraries
 
 PORT ?= desktop
 
@@ -77,20 +77,13 @@ ifeq ($(PORT),desktop)
 endif
 
 ifeq ($(PORT),brick)
-  # TrimUI Brick (TG3040) - ADR-0012. Stock Debian cross-compiler; SDL2 is the
-  # device's own library plus version-matched upstream headers, assembled into
-  # sysroot/brick by tools/fetch-brick-sysroot.sh and never committed.
-  CROSS   ?= aarch64-linux-gnu-
-  CC       = $(CROSS)gcc
-  SYSROOT ?= sysroot/brick
-  ifeq ($(wildcard $(SYSROOT)/usr/trimui/lib/libSDL2.so),)
-    $(error brick sysroot missing: run tools/fetch-brick-sysroot.sh)
-  endif
-  CFLAGS  += -I$(SYSROOT)/usr/include/SDL2 -D_REENTRANT
-  LDFLAGS += -L$(SYSROOT)/usr/trimui/lib -Wl,-rpath-link,$(SYSROOT)/usr/trimui/lib
-  # Explicit -ldl/-lpthread: the toolchain's glibc 2.31 predates their merge
-  # into libc proper (2.34).
-  LDFLAGS += -lSDL2 -lm -ldl -lpthread
+  # TrimUI Brick, on plastron. Built inside plastron's Buildroot, as the Pixel
+  # 2's is: it sets CC and puts a pkg-config on PATH that answers for the
+  # device system's own SDL2. The display is fbdev and the sound the codec's
+  # controls, which need no library.
+  PKG_CONFIG ?= pkg-config
+  CFLAGS  += $(shell $(PKG_CONFIG) --cflags sdl2)
+  LDFLAGS += $(shell $(PKG_CONFIG) --libs sdl2) -lm -ldl -lpthread
 endif
 
 ifeq ($(PORT),pixel2)
