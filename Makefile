@@ -98,83 +98,10 @@ ifeq ($(PORT),pixel2)
 endif
 
 .PHONY: all clean check check-seam check-proto check-port \
-        check-corefacts check-cheevos stub run-stub tools probes
+        check-corefacts check-cheevos stub run-stub
 
 all: $(BIN)
 
-
-# Measurement instruments (tools/). Not part of the frontend, never linked into
-# it, and deliberately not built by `all`. Cores and ROMs are supplied locally;
-# see tools/README.md.
-TOOLS_DIR := $(BUILD)/tools
-TOOLS     := $(TOOLS_DIR)/envlog $(TOOLS_DIR)/rssprobe $(TOOLS_DIR)/resampleprobe
-TOOL_CFLAGS := -std=gnu11 -Wall -Wextra -Wno-unused-parameter -O1 -Isrc -I$(TOOLS_DIR)
-
-tools: $(TOOLS)
-
-$(TOOLS_DIR)/env_names.h: src/libretro.h tools/gen_env_names.py
-	@mkdir -p $(TOOLS_DIR)
-	python3 tools/gen_env_names.py src/libretro.h > $@
-
-$(TOOLS_DIR)/envlog: tools/envlog.c $(TOOLS_DIR)/env_names.h
-	@mkdir -p $(TOOLS_DIR)
-	$(CC) $(TOOL_CFLAGS) -o $@ $< $(TOOL_LDFLAGS)
-
-$(TOOLS_DIR)/resampleprobe: tools/resampleprobe.c src/audio.c
-	@mkdir -p $(TOOLS_DIR)
-	$(CC) $(TOOL_CFLAGS) -Iinclude -o $@ $^ -lm $(TOOL_LDFLAGS)
-
-$(TOOLS_DIR)/rssprobe: tools/rssprobe.c
-	@mkdir -p $(TOOLS_DIR)
-	$(CC) $(TOOL_CFLAGS) -o $@ $< $(TOOL_LDFLAGS)
-
-ifeq ($(shell uname -s),Linux)
-  TOOL_LDFLAGS += -ldl
-endif
-
-# Device probes. Every number they produce is cited by an ADR, which is exactly
-# why they are versioned rather than left in a temp directory: an unverifiable
-# measurement is the drift this project exists to avoid (practice 7).
-#
-# They only build for PORT=brick - they use linux/fb.h, the device's SDL2, or
-# both, and their results only mean anything on the hardware they measure.
-#
-#   tools/brick-make.sh probes
-PROBE_SRC := savprobe wprobe sigprobe pantest holdfb warmprobe protodrive blitprobe
-PROBES    := $(addprefix $(TOOLS_DIR)/,$(PROBE_SRC)) $(TOOLS_DIR)/eglpresent \
-             $(TOOLS_DIR)/btaudio $(TOOLS_DIR)/coreprobe $(TOOLS_DIR)/ffprobe
-
-probes: $(PROBES)
-
-$(TOOLS_DIR)/savprobe: tools/savprobe.c
-	@mkdir -p $(TOOLS_DIR)
-	$(CC) $(TOOL_CFLAGS) -o $@ $< $(TOOL_LDFLAGS)
-
-# Needs libdl: the whole point is dlopen.
-$(TOOLS_DIR)/coreprobe: tools/coreprobe.c
-	@mkdir -p $(TOOLS_DIR)
-	$(CC) $(TOOL_CFLAGS) -o $@ $< -ldl
-
-# How fast each core runs unpaced: the ceiling for fast forward. dlopen again.
-$(TOOLS_DIR)/ffprobe: tools/ffprobe.c
-	@mkdir -p $(TOOLS_DIR)
-	$(CC) $(TOOL_CFLAGS) -Iinclude -o $@ $< -ldl
-
-$(TOOLS_DIR)/%: tools/%.c
-	@mkdir -p $(TOOLS_DIR)
-	$(CC) $(TOOL_CFLAGS) -o $@ $<
-
-$(TOOLS_DIR)/eglpresent: tools/eglpresent.c
-	@mkdir -p $(TOOLS_DIR)
-	$(CC) $(TOOL_CFLAGS) $(CFLAGS) -o $@ $< $(LDFLAGS)
-
-# Does SDL's audio path drive a named ALSA sink on this device? The frontend
-# opens a bluealsa PCM cleanly and it then carries nothing, while aplay to the
-# same device works - so this is the smallest thing that separates SDL from the
-# sink. It also times the close, which is where the frame loop hung.
-$(TOOLS_DIR)/btaudio: tools/btaudio.c
-	@mkdir -p $(TOOLS_DIR)
-	$(CC) $(TOOL_CFLAGS) $(CFLAGS) -o $@ $< $(LDFLAGS)
 
 # A libretro core that is not an emulator, so Diatom can be exercised end to end
 # with no third-party binary present. See test/stubcore.c.
@@ -278,9 +205,9 @@ $(PORT_TEST): test/port_test.c port/desktop.c port/port_clock.h include/diatom_p
 	      -Iinclude -Isrc -Iport -o $@ test/port_test.c port/desktop.c \
 	      $(SDL_CFLAGS) $(SDL_LIBS)
 
-# The offline half: does core-facts.md still describe the cores we ship? The
-# real proof re-measures on hardware - tools/corefacts.sh --check - but that
-# needs the device and the user's ROMs, so it cannot run on every build.
+# Does core-facts.md still describe the cores we ship? It was measured on the
+# device, which needs the hardware and the user's ROMs; this is the half that
+# runs on every build.
 check-corefacts:
 	@python3 tools/check-corefacts.py
 
@@ -318,6 +245,7 @@ clean:
 # into what ships. --wrap is a GNU ld feature; Apple's ld64 has no equivalent,
 # which makes this a Linux and device check. That is the platform the memory
 # thesis is actually about.
+TOOLS_DIR := $(BUILD)/tools
 $(TOOLS_DIR)/allocwatch.o: tools/allocwatch.c
 	@mkdir -p $(TOOLS_DIR)
 	$(CC) $(CFLAGS) -c -o $@ $<
@@ -328,12 +256,6 @@ $(CONFORM): $(OBJ) $(RC_OBJ) $(TOOLS_DIR)/allocwatch.o
 
 conform: $(CONFORM)
 .PHONY: conform
-
-# The device half of the same suite: allocation counts and the RSS budget, on
-# the hardware §11's thesis is actually about. Needs a Brick over adb.
-conform-device:
-	@tools/conform-device.sh
-.PHONY: conform-device
 
 # At the END, after `all:` is established: an included .d file's first rule
 # would otherwise become the default goal, and `make` would silently build one

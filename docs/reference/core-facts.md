@@ -1,6 +1,7 @@
 # Core facts - generated, do not edit
 
-Regenerate with `tools/corefacts.sh`. Verify with `tools/corefacts.sh --check`.
+Measured on the device by a script kept outside this repository.
+`make check-corefacts` checks it still describes the pinned cores.
 
 **Every number here was measured, on the device, from a binary whose
 sha256 matched [CORES.md](../../CORES.md) both before and after the push.**

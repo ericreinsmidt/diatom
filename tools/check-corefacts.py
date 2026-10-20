@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Offline half of the core-facts check - no device needed.
 
-`tools/corefacts.sh --check` re-measures on hardware and is the real proof, but
-it needs the Brick plugged in and the user's ROMs present, so it cannot be the
-thing that runs on every build. This is what can.
+core-facts.md was measured on the hardware, which needs the Brick and the
+user's ROMs, so measuring it again cannot be the thing that runs on every
+build. This is what can.
 
 It asserts one thing: **the pinned core set recorded in core-facts.md is still
 the pinned core set in CORES.md.** If a core is swapped, every measured row in
@@ -64,7 +64,7 @@ def main():
     fails = []
 
     if not os.path.exists(FACTS):
-        print("core-facts.md does not exist - run tools/corefacts.sh")
+        print("core-facts.md does not exist; it is measured on the device")
         return 1
 
     manifest = dict(PIN.findall(read(MANIFEST)))
@@ -85,7 +85,7 @@ def main():
                          "        CORES.md now has %s\n"
                          "        Every row using this core is now a claim about a "
                          "binary nothing runs.\n"
-                         "        Re-run tools/corefacts.sh with the device attached."
+                         "        Measure it again on the device."
                          % (core, sha[:16], want[:16]))
 
     for core in sorted(set(manifest) - set(recorded)):

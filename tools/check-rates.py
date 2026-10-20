@@ -34,7 +34,7 @@ SKIP  = ("docs/decisions/", "docs/discussion/",
 LOOK  = ("*.c", "*.h", "*.md")
 
 if not FACTS.exists():
-    sys.exit("check-rates: no core-facts.md; run tools/corefacts.sh")
+    sys.exit("check-rates: no core-facts.md; it is measured on the device")
 
 rates = set()
 for line in FACTS.read_text().splitlines():

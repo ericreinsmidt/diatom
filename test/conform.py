@@ -15,9 +15,8 @@ its own thesis - asserted nothing at all:
                 actually means.
 
 The allocation check needs `-Wl,--wrap`, a GNU ld feature. Apple's ld64 has no
-equivalent, so on macOS it reports as skipped rather than passing silently. The
-device half, which is the one the memory thesis is about, is
-`tools/conform-device.sh`.
+equivalent, so on macOS it reports as skipped rather than passing silently. On a
+Linux machine, `make conform` first builds the counting binary.
 
     make && make stub && python3 test/conform.py
 """
@@ -32,7 +31,7 @@ RSS_CEILING_MB = 32      # measured 12.5 MB here, where SDL and the host window
                          # system dominate. A ceiling well above the measured
                          # figure still fails on the regressions worth catching
                          # and does not fail on a different SDL. The number that
-                         # matters is the device's - tools/conform-device.sh
+                         # matters is the device's: 8.2 to 8.4 MB on a Brick
 
 ENV = dict(os.environ, SDL_VIDEODRIVER="dummy", SDL_RENDER_DRIVER="software",
            SDL_AUDIODRIVER="dummy")
