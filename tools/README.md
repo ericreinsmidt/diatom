@@ -106,7 +106,6 @@ cores are third-party binaries, ROMs are copyrighted.
 
 ```sh
 make tools                    # builds for the host
-tools/brick-make.sh tools     # cross-builds in the Brick toolchain container
 
 ./build/desktop/tools/envlog   <core.so> [rom]
 ./build/desktop/tools/rssprobe <rom> <core.so>...
@@ -114,18 +113,10 @@ tools/brick-make.sh tools     # cross-builds in the Brick toolchain container
 
 Cross-built instruments land in `build/brick/tools/` and run on the device.
 
-## Brick toolchain
+## Running on the Brick
 
-The cross build for the TrimUI Brick (TG3040), per
-ADR-0012:
+The Brick build itself is plastron's (see the top-level README). These run it:
 
-- `brick-toolchain.Dockerfile` - the container image: Debian bullseye pinned by
-  digest, stock `aarch64-linux-gnu` GCC. Build once:
-  `docker build -f tools/brick-toolchain.Dockerfile -t diatom-brick-toolchain tools`
-- `fetch-brick-sysroot.sh` - regenerates `sysroot/brick/` from first sources:
-  the device's own libraries over ADB, SDL2 headers from the upstream release,
-  pinned by sha256. Needs a connected Brick.
-- `brick-make.sh` - runs `make PORT=brick` inside the container.
 - `brick-run.sh` - builds nothing; pushes the current build and runs it on the
   device with exclusive use of the display. Arguments pass through to diatom.
 - `brick-device-run.sh` - the on-device half, staged as

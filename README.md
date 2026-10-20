@@ -31,8 +31,12 @@ alone is a stricter test than designing for one embedder.
 ## Building
 
     make                        desktop (SDL2), for iteration
-    tools/brick-make.sh         TrimUI Brick, in a pinned container
     make check                  the checks below; run before committing
+
+The devices' builds are [plastron](https://github.com/ericreinsmidt/plastron)'s:
+its Buildroot builds Diatom for the TrimUI Brick and the GKD Pixel 2 with its
+own compiler and SDL2 (`PORT=brick` or `PORT=pixel2`, SDL2 found with
+pkg-config), from this working tree.
 
 `make check` is not advice. It fails on a port including `libretro.h`,
 on documented core measurements describing binaries the
