@@ -14,7 +14,7 @@ harness and the fixture are the same and a second copy of both would drift.
 
 The level half cannot be tested here: a desktop has no volume or brightness of
 its own, so `LEVELS count=0` is the whole of it. Levels are exercised on
-hardware by `protodrive --state`.
+the devices.
 
     python3 test/stateplane.py
 """

@@ -1,8 +1,7 @@
 /* TrimUI Brick (TG3040) port.
  *
- * Presentation is raw fbdev with a flip thread; SDL2 (the firmware's own
- * library, via the sysroot - ADR-0012) provides audio, joystick input and the
- * monotonic clock.
+ * Presentation is raw fbdev with a flip thread; SDL2, plastron's own build,
+ * provides audio, joystick input and the monotonic clock.
  *
  * fbdev is not a fallback, it is the device's native display path. Measured
  * 2026-08-24 on firmware 1.1.1: scanout is the Allwinner disp2 engine
@@ -24,10 +23,6 @@
  * at vblank, so no tearing; three pages mean the page being drawn is never
  * the one on glass or in flight. The frame loop keeps its own absolute clock,
  * exactly as on desktop - no console runs at the panel's rate.
- *
- * The firmware keeps its SDL2 outside the default linker path, so run with:
- *
- *   LD_LIBRARY_PATH=/usr/trimui/lib ./diatom --core X.so --rom game
  *
  * This file does not include libretro.h and must never need to.
  */
@@ -120,13 +115,13 @@ static bool          g_map_valid;
 
 /* Output gain, by ioctl on /dev/snd/controlC0.
  *
- * No alsa-lib or tinyalsa in the sysroot, and forking `tinymix` per keypress
- * means a process spawn in the input path plus a dependency on a firmware
- * binary. So: a raw ioctl on a device node, which is what this port already
- * does for /dev/fb0. The struct layout is vendored from the kernel UAPI rather
- * than depended on, and its SIZE is baked into the request number by _IOWR -
- * validated against the running kernel by tools/mixprobe.c before it was
- * written here (sizeof 1224, read agreed with tinymix to the digit).
+ * Written for TrimUI's system, which had no alsa-lib or tinyalsa headers, and
+ * forking `tinymix` per keypress means a process spawn in the input path plus a
+ * dependency on a binary. So: a raw ioctl on a device node, which is what this
+ * port already does for /dev/fb0. The struct layout is vendored from the kernel
+ * UAPI rather than depended on, and its SIZE is baked into the request number
+ * by _IOWR - validated against the running kernel by a probe (mixprobe) before
+ * it was written here (sizeof 1224, read agreed with tinymix to the digit).
  *
  * `digital volume` is 0-63 and **INVERTED**: 0 is loudest, 63 is silence. The
  * driver advertises `dBscale-min=-74.24dB, step=+1.16dB`, i.e. that higher is
@@ -254,7 +249,7 @@ static bool g_muted;
  * the Allwinner disp2 engine, and the firmware's own settings library goes
  * through /dev/disp. These are plain command numbers with an unsigned long[4]
  * argument block rather than _IOWR-encoded requests, so there is no struct size
- * to get wrong - validated against the running kernel by tools/dispprobe.c
+ * to get wrong - validated against the running kernel by a probe (dispprobe)
  * before it was written here.
  *
  * Not inverted, unlike the mixer: 0 is dark, 255 is full. */

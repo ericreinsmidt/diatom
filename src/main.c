@@ -1428,7 +1428,7 @@ static int run_session_inner(const diatom_session *sn)
 		 * excursion - SNES and PC Engine hires - and wrong when the load-time
 		 * value is a boot artifact.
 		 *
-		 * Measured 2026-08-26 with tools/envlog.c over 3600 frames:
+		 * Measured 2026-08-26 with envlog, a probe, over 3600 frames:
 		 *
 		 *   genesis_plus_gx  Herzog Zwei       256x192 for 29 frames, then
 		 *                                      320x224 for the other 3571
@@ -1456,7 +1456,7 @@ static int run_session_inner(const diatom_session *sn)
 				/* Reprinted in the SAME format as the load-time
 				 * line so anything parsing that format sees the
 				 * mode the game actually runs in by taking the
-				 * last one. tools/corefacts.sh took the first and
+				 * last one. The core facts script took the first and
 				 * recorded Genesis as 256x192 at 1.5238 - twenty-
 				 * nine frames of boot - which ADR-0018's display
 				 * table was then computed from. */
