@@ -1,4 +1,4 @@
-/* The launcher protocol - ADR-0009.
+/* The launcher protocol.
  *
  * One Unix domain socket, line-based, tab-separated `key=value`. Tabs separate
  * fields so that paths may contain spaces, which ROM filenames routinely do.
@@ -16,8 +16,8 @@
  * Unknown verbs and unknown keys are ignored rather than refused, so a newer
  * launcher can talk to an older Diatom without a version negotiation.
  *
- * One connection at a time, and THE NEWEST WINS - ADR-0033. A connect while
- * one is held displaces it, and the old one is reported as a hangup.
+ * One connection at a time, and THE NEWEST WINS. A connect while one is held
+ * displaces it, and the old one is reported as a hangup.
  *
  * This comment used to say a second connect was "accepted and closed
  * immediately", trusting a dead launcher to reach EOF even on SIGKILL. The
@@ -119,7 +119,7 @@ void diatom_proto_send(const char *fmt, ...)
 	buf[n++] = '\n';
 	/* MSG_NOSIGNAL: a launcher that died mid-write must not take Diatom with
 	 * it. The write fails, the next poll reports the hangup, and the game
-	 * keeps running - which is the whole point of ADR-0008. */
+	 * keeps running - which is the whole point of a separate process. */
 	if (send(g_conn, buf, (size_t)n, MSG_NOSIGNAL) < 0 && errno != EAGAIN)
 		log_(DIATOM_LOG_WARN, "proto: send: %s", strerror(errno));
 }
@@ -214,14 +214,14 @@ static void parse_line(char *line, diatom_msg *out)
 		 * making sound can be quieted again, and one stuck silent looks
 		 * broken. */
 		else if (!strcmp(field, "on")) out->on = (strcmp(v, "1") == 0);
-		/* SETLOWBATTERY's second flag, ADR-0040: the battery is critical, and
-		 * the disc blinks. "1" or not, as `on`. */
+		/* SETLOWBATTERY's second flag: the battery is critical, and the
+		 * disc blinks. "1" or not, as `on`. */
 		else if (!strcmp(field, "blink")) out->blink = (strcmp(v, "1") == 0);
 		else if (!strcmp(field, "core")) snprintf(out->core, sizeof out->core, "%s", v);
 		else if (!strcmp(field, "rom"))  snprintf(out->rom,  sizeof out->rom,  "%s", v);
-		/* ADR-0017. A key ADR-0009 did not define, which costs nothing to add
-		 * because unknown keys are ignored: an older Diatom drops it and fails
-		 * the way it always did, a newer one checks before loading. */
+		/* A key the original protocol did not define, which costs nothing to
+		 * add because unknown keys are ignored: an older Diatom drops it and
+		 * fails the way it always did, a newer one checks before loading. */
 		else if (!strcmp(field, "firmware"))
 			snprintf(out->firmware, sizeof out->firmware, "%s", v);
 		else if (!strcmp(field, "tag"))  snprintf(out->tag,  sizeof out->tag,  "%s", v);
@@ -233,9 +233,9 @@ static void parse_line(char *line, diatom_msg *out)
 		else if (!strcmp(field, "preview"))
 			snprintf(out->preview, sizeof out->preview, "%s", v);
 		else if (!strcmp(field, "path")) snprintf(out->path,  sizeof out->path,  "%s", v);
-		/* ADR-0026. `cheevos=` is a path on RUN rather than the set itself:
-		 * a condition string runs to kilobytes and would not survive a line
-		 * protocol, and ADR-0016 already has the launcher passing paths. */
+		/* `cheevos=` is a path on RUN rather than the set itself: a condition
+		 * string runs to kilobytes and would not survive a line protocol, and
+		 * the launcher already passes paths for save states. */
 		else if (!strcmp(field, "cheevos"))
 			snprintf(out->cheevos, sizeof out->cheevos, "%s", v);
 		else if (!strcmp(field, "console")) out->console = (int)strtol(v, NULL, 10);
@@ -270,8 +270,8 @@ static bool take_line(diatom_msg *out)
 	return true;
 }
 
-/* Take the connection that is waiting. True when it displaced one - ADR-0033:
- * the launcher that connected last is the one that is alive, whatever is still
+/* Take the connection that is waiting. True when it displaced one: the
+ * launcher that connected last is the one that is alive, whatever is still
  * holding the other end of the old one. */
 static bool accept_newest(void)
 {
@@ -306,7 +306,7 @@ diatom_msg_kind diatom_proto_poll(diatom_msg *out, int timeout_ms, bool running)
 	if (g_conn >= 0 && take_line(out)) return out->kind;
 
 	/* The listener ALWAYS, connected or not. Watching it only while idle was
-	 * the whole of ADR-0033's lockup: a connect made while one was held was
+	 * the whole of the old lockup: a connect made while one was held was
 	 * never seen, and the launcher making it waited forever. */
 	p[n].fd = g_listen; p[n].events = POLLIN; li = n++;
 	if (g_conn >= 0) { p[n].fd = g_conn; p[n].events = POLLIN; ci = n++; }
@@ -328,36 +328,36 @@ diatom_msg_kind diatom_proto_poll(diatom_msg *out, int timeout_ms, bool running)
 		/* Tell a fresh launcher whether the screen is already spoken for.
 		 * Without this, a launcher restarted by launch.sh while a game runs
 		 * would draw its shelf over live output. */
-		/* proto=2 added ADR-0020's state plane. ADR-0009 already promises
+		/* proto=2 added the state plane. The protocol already promises
 		 * unknown verbs are ignored, so an old launcher is unaffected; this is
 		 * how a NEW launcher discovers the plane is absent rather than
 		 * inferring it from silence.
 		 *
-		 * proto=3 adds ADR-0028's turbo, and had to bump for a different
-		 * reason: it changes the value GRAMMAR of an existing key rather than
-		 * adding one, which the ignore-unknown promise does not cover. The
-		 * degradation is safe in both directions - a Diatom without it reads
-		 * `a~3` as a button name nobody has and rejects the whole map per
-		 * ADR-0020, so an old pairing loses turbo rather than getting a wrong
-		 * map - but a launcher should not have to discover that by trying. */
-		/* proto=4 adds ADR-0029's audio output. Purely additive, so the
-		 * ignore-unknown promise covers an old launcher completely - the bump
-		 * is for the NEW one, which needs to know whether asking is worth it.
-		 * Without it, a launcher that sent SETAUDIO to a Diatom without the
-		 * state would get silence back and could not tell that from a sink
-		 * that failed to open, which is precisely the confusion the fallback
-		 * exists to prevent. */
-		/* proto=5 adds ADR-0031's mute, and bumps for exactly 0029's reason.
+		 * proto=3 adds turbo, and had to bump for a different reason: it
+		 * changes the value GRAMMAR of an existing key rather than adding one,
+		 * which the ignore-unknown promise does not cover. The degradation is
+		 * safe in both directions - a Diatom without it reads `a~3` as a
+		 * button name nobody has and rejects the whole map, so an old pairing
+		 * loses turbo rather than getting a wrong map - but a launcher should
+		 * not have to discover that by trying. */
+		/* proto=4 adds audio output. Purely additive, so the ignore-unknown
+		 * promise covers an old launcher completely - the bump is for the NEW
+		 * one, which needs to know whether asking is worth it. Without it, a
+		 * launcher that sent SETAUDIO to a Diatom without the state would get
+		 * silence back and could not tell that from a sink that failed to
+		 * open, which is precisely the confusion the fallback exists to
+		 * prevent. */
+		/* proto=5 adds mute, and bumps for exactly proto=4's reason.
 		 * Additive, so an old Diatom ignoring SETMUTE is safe in itself - but
 		 * it would leave the device LOUD with the switch down, and a launcher
 		 * could not tell that from a mute that worked. Knowing not to promise
 		 * the player something is the point of the number. */
-		/* proto=6 adds ADR-0032's quiet, for the same reason again: an old
-		 * Diatom ignores SETQUIET and the game plays on under the music, which
-		 * a launcher could not tell from a quiet that worked. */
-		/* proto=7 adds ADR-0034's fast forward. Additive - an old launcher
-		 * ignores SPEED - and bumped so a new one can tell whether MENU+R1
-		 * will answer before telling a player it does. */
+		/* proto=6 adds quiet, for the same reason again: an old Diatom
+		 * ignores SETQUIET and the game plays on under the music, which a
+		 * launcher could not tell from a quiet that worked. */
+		/* proto=7 adds fast forward. Additive - an old launcher ignores
+		 * SPEED - and bumped so a new one can tell whether MENU+R1 will answer
+		 * before telling a player it does. */
 		/* proto=8 adds the channels, for a player who hears with one ear.
 		 * Additive like the rest, and bumped for quiet's reason: an old Diatom
 		 * ignores SETCHANNELS and a game plays half its sound into the ear
@@ -368,9 +368,9 @@ diatom_msg_kind diatom_proto_poll(diatom_msg *out, int timeout_ms, bool running)
 		 * old Diatom ignores it and maps at once, as it always did; an old
 		 * launcher never sends it, and the cores are mapped a few seconds
 		 * later anyway. */
-		/* proto=10 adds ADR-0040's low battery. Additive: an old Diatom
-		 * ignores SETLOWBATTERY and a game shows nothing, as before; bumped
-		 * so a launcher can tell whether the disc will be drawn. */
+		/* proto=10 adds low battery. Additive: an old Diatom ignores
+		 * SETLOWBATTERY and a game shows nothing, as before; bumped so a
+		 * launcher can tell whether the disc will be drawn. */
 		diatom_proto_send("READY\tproto=10\tstate=%s", running ? "running" : "idle");
 		/* A displaced launcher is a vanished one, and every loop already
 		 * knows what that means - the in-game menu resumes the game. Said
@@ -390,7 +390,8 @@ diatom_msg_kind diatom_proto_poll(diatom_msg *out, int timeout_ms, bool running)
 			return DIATOM_MSG_NONE;
 		}
 		/* EOF, including the launcher being SIGKILLed. The game keeps
-		 * running; ADR-0008 exists so a dead launcher cannot end it. */
+		 * running; Diatom is a separate process so a dead launcher cannot
+		 * end it. */
 		log_(DIATOM_LOG_INFO, "proto: launcher disconnected");
 		close(g_conn);
 		g_conn = -1;

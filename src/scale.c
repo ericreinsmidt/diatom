@@ -1,13 +1,13 @@
 /* Where the picture goes.
  *
- * ADR-0007 splits this deliberately: deciding the rect is arithmetic, so it
- * lives here once and every port behaves identically. Performing the blit is
- * hardware, so it belongs to the port. Put both in the port and the maths gets
- * duplicated per device and drifts.
+ * The port interface splits this deliberately: deciding the rect is
+ * arithmetic, so it lives here once and every port behaves identically.
+ * Performing the blit is hardware, so it belongs to the port. Put both in the
+ * port and the math gets duplicated per device and drifts.
  *
  * Seven modes, because "how big should the picture be" has that many
- * defensible answers and no universally right one. The default is `stretch`
- * (ADR-0014), chosen by cycling them on a real panel rather than by argument.
+ * defensible answers and no universally right one. The default is `stretch`,
+ * chosen by cycling them on a real panel rather than by argument.
  *
  * The counter-example that motivated per-device arithmetic still holds: PC
  * Engine's 256x243 at 3x is 768x729, which exceeds the Miniloong's 720 lines

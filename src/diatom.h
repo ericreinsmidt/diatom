@@ -33,7 +33,7 @@ typedef struct {
 
 /* ---- a loaded core ------------------------------------------------------- */
 typedef struct {
-	void       *handle;          /* dlopen'd RTLD_NOW|RTLD_LOCAL - ADR-0010 */
+	void       *handle;          /* dlopen'd RTLD_NOW|RTLD_LOCAL */
 	const char *path;
 	bool        initialized;     /* retro_init has run */
 	bool        game_loaded;
@@ -74,9 +74,9 @@ bool diatom_core_open(diatom_core *c, const char *path);
 bool diatom_core_start(diatom_core *c, const char *rom_path);
 void diatom_core_stop(diatom_core *c);
 
-/* Open once and keep - ADR-0006. Returns the same core for the same path, so a
- * repeat launch skips dlopen and retro_init. Never unloaded. Locked, so the
- * premap's thread and a RUN can both call it. */
+/* Open once and keep. Returns the same core for the same path, so a repeat
+ * launch skips dlopen and retro_init. Never unloaded. Locked, so the premap's
+ * thread and a RUN can both call it. */
 diatom_core *diatom_core_resident(const char *path);
 /* Map every *_libretro.so in `dir`, returning how many are now resident. For
  * the boot path: it costs less than reading them to warm the cache did, and
@@ -110,7 +110,7 @@ void diatom_env_core_log_quiet(bool quiet);
  *
  * Diatom holds the definitions and the values; the LAUNCHER decides what the
  * values should be. Diatom has no opinion about whether a Genesis should be PAL
- * and no way to ask, having no UI (ADR-0009). */
+ * and no way to ask, having no UI. */
 void        diatom_options_bind(const void *owner);
 void        diatom_options_define_v2(const struct retro_core_options_v2 *v2);
 void        diatom_options_define_vars(const struct retro_variable *vars);
@@ -122,9 +122,9 @@ void        diatom_options_emit(void);   /* over the protocol, for a menu */
 /* Drop values the launcher set for a game that is now over - see options.c. */
 void        diatom_options_clear_pending(void);
 
-/* proto.c - the launcher protocol (ADR-0009). One Unix socket, line-based,
- * tab-separated key=value. Diatom is a component the launcher drives; this is
- * the only place it talks back.
+/* proto.c - the launcher protocol. One Unix socket, line-based, tab-separated
+ * key=value. Diatom is a component the launcher drives; this is the only place
+ * it talks back.
  *
  * The governing rule is about the DISPLAY: ERROR means the game never started,
  * EXIT means it ran and stopped. A launcher that hears RUNNING stops drawing. */
@@ -141,9 +141,9 @@ typedef enum {
 	DIATOM_MSG_LOAD,       /* read a state from `path` */
 	DIATOM_MSG_OPTIONS,    /* enumerate this core's options */
 	DIATOM_MSG_SETOPT,     /* set `key` to `value` */
-	/* The state plane - ADR-0020. Each is query / write, and the query verb
-	 * doubles as the unsolicited change event so a launcher parses one shape
-	 * per state rather than two. */
+	/* The state plane. Each is query / write, and the query verb doubles as
+	 * the unsolicited change event so a launcher parses one shape per state
+	 * rather than two. */
 	DIATOM_MSG_INPUTS,     /* enumerate this game's button labels */
 	DIATOM_MSG_MAP,        /* report the active remap table */
 	DIATOM_MSG_SETMAP,     /* replace it whole: `map` = "a:b,x:none" */
@@ -160,14 +160,14 @@ typedef enum {
 	DIATOM_MSG_SETMUTE,    /* hold it off, or release it: `on` = 1 | 0 */
 	DIATOM_MSG_QUIET,      /* report whether the game's own sound is held silent */
 	DIATOM_MSG_SETQUIET,   /* hold it silent, or let it play: `on` = 1 | 0 */
-	DIATOM_MSG_SPEED,      /* report the fast-forward step, 1 to 4 - ADR-0034 */
+	DIATOM_MSG_SPEED,      /* report the fast-forward step, 1 to 4 */
 	DIATOM_MSG_CHANNELS,   /* report which ears hear what */
 	DIATOM_MSG_SETCHANNELS,/* set it: `dmode` = stereo | mono | left | right */
 	DIATOM_MSG_PREMAP,     /* the launcher has drawn: map the cores now */
 	DIATOM_MSG_LOWBATTERY,   /* report whether the low-battery disc is shown */
 	DIATOM_MSG_SETLOWBATTERY,/* show it over the game, or not: `on`, `blink` */
-	/* The launcher went away - or was displaced by a newer one, ADR-0033,
-	 * which means the same thing. The game keeps running. */
+	/* The launcher went away - or was displaced by a newer one, which means
+	 * the same thing. The game keeps running. */
 	DIATOM_MSG_HANGUP
 } diatom_msg_kind;
 
@@ -178,14 +178,14 @@ typedef struct {
 	char firmware[128];    /* RUN: what this content needs in the system dir */
 	char tag[64];
 	char slot[64];
-	/* Session persistence, ADR-0024: the launcher passes explicit paths
-	 * (ADR-0016), and these are how they arrive. All optional. */
+	/* Session persistence: the launcher passes explicit paths, and these
+	 * are how they arrive. All optional. */
 	char resume[1024];     /* RUN: state to load at start, if it exists */
 	char exit_state[1024]; /* RUN: state written on every way out */
 	char preview[1024];    /* RUN: BMP of the frame, on pause and on exit */
-	/* Achievements, ADR-0026. `console` is a RetroAchievements console id and
-	 * is not optional for them: an RA address is an offset into a per-console
-	 * space, so 0x06f3 means nothing until the launcher says which console. */
+	/* Achievements. `console` is a RetroAchievements console id and is not
+	 * optional for them: an RA address is an offset into a per-console space,
+	 * so 0x06f3 means nothing until the launcher says which console. */
 	char cheevos[1024];    /* RUN: a set to watch from the first frame */
 	int  console;          /* RUN / SETCHEEVOS */
 	char path[1024];       /* SAVE / LOAD / SETCHEEVOS */
@@ -193,14 +193,14 @@ typedef struct {
 	char value[128];       /* SETOPT */
 	char map[512];         /* SETMAP */
 	char lkind[32];        /* SETLEVEL: volume | brightness */
-	/* SETMUTE, ADR-0031, and SETQUIET, ADR-0032. Both booleans. The mute
-	 * is a cut measured inaudible at both ends, so nothing ramps it; quiet is
-	 * a step in the samples, so audio.c fades it. */
+	/* SETMUTE and SETQUIET. Both booleans. The mute is a cut measured inaudible
+	 * at both ends, so nothing ramps it; quiet is a step in the samples, so
+	 * audio.c fades it. */
 	int  on;
-	int  blink;            /* SETLOWBATTERY, ADR-0040: the disc blinks */
-	/* SETAUDIO, ADR-0029. An output device named the way the PORT names one,
-	 * passed straight through: the host's business is which, the port's is
-	 * how, and nothing in between reads it. Empty means the default. */
+	int  blink;            /* SETLOWBATTERY: the disc blinks */
+	/* SETAUDIO. An output device named the way the PORT names one, passed
+	 * straight through: the host's business is which, the port's is how,
+	 * and nothing in between reads it. Empty means the default. */
 	char device[128];
 	char dmode[32];        /* SETDISPLAY: a name from diatom_modes[].
 	                        * SETCHANNELS: one from diatom_channels_names[].
@@ -250,7 +250,7 @@ void diatom_proto_emit_fatal(const char *line);
  *
  * SRAM is automatic because it is the game's own data. Save states are opt-in
  * and take explicit PATHS, never slot numbers - Diatom has no concept of a
- * slot, a game or a system, and the launcher owns all three (ADR-0016). */
+ * slot, a game or a system, and the launcher owns all three. */
 bool diatom_save_init(diatom_core *c, const char *save_dir, const char *rom_path);
 void diatom_save_tick(void);       /* once per frame; may schedule a write */
 void diatom_save_flush(void);      /* synchronous; exit and signal paths */
@@ -318,7 +318,7 @@ double   diatom_audio_in_rms(void);
 uint64_t diatom_audio_nonzero(void);
 uint64_t diatom_audio_samples(void);
 
-/* QUIET, ADR-0032: the game's own sound replaced by silence, faded, after the
+/* QUIET: the game's own sound replaced by silence, faded, after the
  * resampler - so the stream, its timing and the device carry on untouched and
  * the port never knows. Held across sessions, because it describes the
  * launcher's situation rather than the game: a session starts at whatever it

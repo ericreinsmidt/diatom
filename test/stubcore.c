@@ -183,14 +183,14 @@ bool retro_load_game(const struct retro_game_info *game)
 	enum retro_pixel_format fmt = RETRO_PIXEL_FORMAT_RGB565;
 	(void)game;                                  /* content is optional here */
 	crash_configure();
-	/* A new game starts at frame zero. The core is resident across games
-	 * (ADR-0006), so without this the counter carries over and every fixture
-	 * built on it - the geometry toggle, the crash frame, sysram - means
-	 * something different on the second game than on the first. */
+	/* A new game starts at frame zero. The core is resident across games,
+	 * so without this the counter carries over and every fixture built on
+	 * it - the geometry toggle, the crash frame, sysram - means something
+	 * different on the second game than on the first. */
 	frame = 0;
-	/* Offered by every real core and discarded by Diatom until ADR-0020. The
-	 * port-1 entry is here so the "port 0 only" filter has something to
-	 * exclude rather than being untested. */
+	/* Offered by every real core and discarded by Diatom until the state
+	 * plane. The port-1 entry is here so the "port 0 only" filter has
+	 * something to exclude rather than being untested. */
 	if (env) env(RETRO_ENVIRONMENT_SET_INPUT_DESCRIPTORS, (void *)descriptors);
 	/* Before RUNNING has gone out, so the frontend owes the launcher an ERROR
 	 * and must keep its hands off the display. */
@@ -208,7 +208,7 @@ bool retro_serialize(void *d, size_t n)
 bool retro_unserialize(const void *d, size_t n)
 { if (n < sizeof frame) return false; memcpy(&frame, d, sizeof frame); return true; }
 
-/* A block of "system RAM", so the achievement path (ADR-0025, ADR-0026) has
+/* A block of "system RAM", so the achievement path has
  * something real to read. Deliberately predictable: an achievement condition
  * is a statement about specific bytes, and a fixture whose bytes move
  * unpredictably proves nothing when one fires.

@@ -239,7 +239,7 @@ struct dm_ctl_elem_value {
 #define SPEAKER_CTL  "HpSpeaker Switch"   /* the speaker's only true mute */
 
 /* Set by the launcher over the state plane, never read from hardware here:
- * what the switch is and what it means are the launcher's, ADR-0031. */
+ * what the switch is and what it means are the launcher's. */
 static bool g_muted;
 #define HP_CTL       "Headphone Volume"   /* 0-7, 6 dB a step, INVERTED */
 #define HP_CTL_QUIET 7                    /* its quiet end, for the cut */
@@ -453,11 +453,11 @@ static void gain_apply(void)
 	 * still audible, and a mic across the room cannot tell it from the room.
 	 * So the speaker switch carries the last step.
 	 *
-	 * AND NEVER BACK ON WHILE MUTED - ADR-0031. This line is where the
-	 * launcher's mute used to die: with the switch down and a game muted, one
-	 * volume press re-enabled the stage and the sound returned. The cut for
-	 * level 0 is still ours; turning it on again is not, while somebody else
-	 * is holding it off. */
+	 * AND NEVER BACK ON WHILE MUTED. This line is where the launcher's mute
+	 * used to die: with the switch down and a game muted, one volume press
+	 * re-enabled the stage and the sound returned. The cut for level 0 is
+	 * still ours; turning it on again is not, while somebody else is
+	 * holding it off. */
 	v = !cut;
 	ctl_io(SPEAKER_CTL, &v, 1);
 	/* The switch cuts the speaker only, so with headphones in neither the
@@ -570,8 +570,8 @@ static void clear_gain_bar(uint8_t *base, diatom_rect dst)
 	}
 }
 
-/* The low-battery disc, ADR-0040: the launcher's, drawn the launcher's way so
- * it reads the same in a game as on the shelf (TortOS's draw_low_battery_dot):
+/* The low-battery disc: the launcher's, drawn the launcher's way so it reads
+ * the same in a game as on the shelf (TortOS's draw_low_battery_dot):
  * horizontal spans of a disc of radius 9, centered 34 px from the top and
  * right edges. Like the bar it goes into the page after the blit, and when it
  * goes, what it covered outside the picture is put back to black - inside, the
@@ -885,7 +885,7 @@ static void *flip_worker(void *arg)
 	return arg;
 }
 
-/* ---------- the audio sink (ADR-0029) ------------------------------------- */
+/* ---------- the audio sink ------------------------------------------------ */
 
 /* What is open now. Empty means the default device; it is also what the host
  * is told, so "" reads as "wherever this device sends sound by default" rather
@@ -1124,11 +1124,11 @@ void diatom_port_shutdown(void)
 	 * turning the volume up there could not undo it, so the machine simply
 	 * appeared to have lost its speaker.
 	 *
-	 * THAT REASONING EXPIRED on 2026-09-16. TortOS reads a hardware mute switch
-	 * and drives this control itself (ADR-0031), so the device is no longer
-	 * stranded by an off speaker - and handing it back unconditionally would
-	 * un-mute a device whose switch is still down, at the exact moment a game
-	 * ends and the launcher's shelf comes back.
+	 * THAT REASONING EXPIRED on 2026-09-16. TortOS reads a hardware mute
+	 * switch and drives this control itself, so the device is no longer
+	 * stranded by an off speaker - and handing it back unconditionally
+	 * would un-mute a device whose switch is still down, at the exact
+	 * moment a game ends and the launcher's shelf comes back.
 	 *
 	 * The volume LEVEL is still deliberately not restored - that is a user
 	 * setting and belongs wherever they left it. */
@@ -1611,7 +1611,7 @@ size_t diatom_port_audio_write(const int16_t *frames, size_t n)
 	 * of range. SDL reports the device STOPPED; falling back happens here
 	 * rather than in a poll of its own because this already runs every frame,
 	 * and the host finds out through diatom_port_audio_get, which is the only
-	 * way it can (ADR-0007: the port cannot announce anything).
+	 * way it can (the port cannot announce anything).
 	 *
 	 * Only when a name was asked for. If the DEFAULT device dies there is
 	 * nowhere better to go, and retrying it every frame would be a reopen
@@ -1696,7 +1696,7 @@ static const struct { int idx; int btn; } joymap[] = {
  * the two front keys. A press is latched until the host has read it, so a tap
  * between two frames counts; a button the events say is held is checked
  * against SDL's own state, so a release this port never saw cannot leave the
- * host repeating. The stepping and the repeat are the host's (ADR-0038). */
+ * host repeating. The stepping and the repeat are the host's. */
 static const struct { int idx; uint32_t key; } level_buttons[] = {
 	{ JOY_VOL_UP, DIATOM_LEVEL_KEY_VOLUME_UP },
 	{ JOY_VOL_DN, DIATOM_LEVEL_KEY_VOLUME_DOWN },
@@ -1826,7 +1826,7 @@ void diatom_port_input_reset(void)
 	if (SDL_JoystickGetAxis(g_joy, AXIS_R2) > AXIS_PRESSED) g_buttons |= DIATOM_BIT(DIATOM_BTN_R2);
 }
 
-/* ---------- levels: the hardware under them (ADR-0038) ---------------------- */
+/* ---------- levels: the hardware under them --------------------------------- */
 
 void diatom_port_level_invalidate(void)
 {
@@ -1837,8 +1837,8 @@ void diatom_port_level_invalidate(void)
 	g_jack_was = -1;
 }
 
-/* Positions, not a maximum index, so one MORE than the internal level
- * ceiling. That off-by-one is the whole reason ADR-0020 pins the word. */
+/* Positions, not a maximum index, so one MORE than the internal level ceiling.
+ * That off-by-one is the whole reason the state plane pins the word. */
 int diatom_port_level_positions(diatom_level_kind kind)
 {
 	switch (kind) {

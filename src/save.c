@@ -1,4 +1,4 @@
-/* Persistence - ADR-0016.
+/* Persistence.
  *
  * Host-side entirely. The port deals in pixels, samples, buttons and time, and
  * a file is none of those.

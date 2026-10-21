@@ -1,4 +1,4 @@
-/* Diatom port interface - ADR-0007.
+/* Diatom port interface.
  *
  * THIS HEADER MUST NOT INCLUDE libretro.h, AND NEITHER MAY ANY PORT.
  * That is the mechanical test for whether the seam holds: a port that needs a
@@ -36,7 +36,7 @@ typedef enum {
 
 /* How to sample when the destination rect is not an exact integer multiple of
  * the source. Choosing is policy (host); sampling is hardware (port), the same
- * split ADR-0007 applies to the rect itself.
+ * split the port interface applies to the rect itself.
  *
  * SHARP is sharp-bilinear: interpolate only across the one destination pixel
  * that straddles a source-pixel boundary, leaving every interior pixel exact.
@@ -62,7 +62,7 @@ typedef struct {
 	bool present_blocks;        /* does present() wait for vblank? */
 } diatom_port_caps;
 
-/* Canonical Diatom buttons. Digital only - ADR-0003, no analog axes anywhere.
+/* Canonical Diatom buttons. Digital only, no analog axes anywhere.
  * Bit positions within diatom_port_input_state(). Deliberately NOT libretro's
  * RETRO_DEVICE_ID_JOYPAD_*: the near-identity mapping is what keeps libretro.h
  * out of the port. Device quirks - the Brick reporting its front keys as
@@ -125,8 +125,8 @@ void diatom_port_overlay(const uint8_t *bgra, int w, int h, unsigned ms);
  * This exists because presenting lifetime and process lifetime came apart.
  * init/shutdown bracket the process and present() is per frame; nothing
  * bracketed one GAME's presenting, which was fine while a frontend ran one
- * game and exited. ADR-0008 made the process long-lived and ADR-0016 handed
- * the display to the launcher per game, and the seam was never grown to
+ * game and exited. Then the process became long-lived and the display was
+ * handed to the launcher per game, and the seam was never grown to
  * match - so `EXIT` and `PAUSED` were sent while this port was still panning,
  * and for a few milliseconds two processes drove the same framebuffer.
  * Measured from the launcher side as a boundary sweeping down the panel
@@ -173,7 +173,7 @@ size_t diatom_port_audio_queued(void);
 /* WHERE the sound goes, named the way this port's audio system names a device -
  * an ALSA device string on the Brick, an SDL device name on the desktop.
  *
- * ADR-0029: the host says WHICH, the port knows HOW. The string crosses here
+ * The host says WHICH, the port knows HOW. The string crosses here
  * exactly as a core path does, and the port never learns what kind of thing it
  * names. "bluetooth" is not a word this interface knows, for the same reason
  * Diatom keeps no core list - which output to use is the host application's
@@ -213,7 +213,7 @@ bool diatom_port_audio_set(const char *name, char *actual, size_t cap);
  * sound. */
 bool diatom_port_audio_start(void);
 
-/* MUTE, which this port OBEYS rather than owns - ADR-0031.
+/* MUTE, which this port OBEYS rather than owns.
  *
  * The launcher reads a hardware switch and cuts the analog stage, which sits
  * below the mixer and silences every producer at once. Nothing about the pin,
@@ -234,7 +234,7 @@ bool diatom_port_mute_get(void);
 /* Where the sound actually is now.
  *
  * Polled, like the level pair below and for the same reason: the port must not
- * know the launcher protocol exists (ADR-0007), so it cannot announce anything.
+ * know the launcher protocol exists, so it cannot announce anything.
  * A sink that dies under the port - a headset switched off, or walking out of
  * range - is noticed here, because the port falls back on its own and the answer
  * changes. The host reads it beside the input bitfield it already polls. */
@@ -256,7 +256,7 @@ void     diatom_port_input_reset(void);
  * volume and brightness on the Brick and the GKD Pixel 2, nothing at all on
  * the desktop.
  *
- * The LEVEL is the host's (src/levels.c, ADR-0038): which position each is at,
+ * The LEVEL is the host's (src/levels.c): which position each is at,
  * stepping it, holding a key to repeat, the shared scale it crosses the socket
  * on. The port is the hardware under it: how many positions a control has on
  * this device, what position the hardware is at, writing one, which level keys
@@ -265,8 +265,8 @@ void     diatom_port_input_reset(void);
  *
  * A position is 0-based over `0 .. positions - 1`, and `positions` is the
  * number of distinct positions rather than a maximum index - the two differ by
- * one, and ADR-0020 pins it because a shared scale that is off by one produces
- * a silent disagreement instead of an error. */
+ * one, and the state plane pins it because a shared scale that is off by one
+ * produces a silent disagreement instead of an error. */
 typedef enum {
 	DIATOM_LEVEL_VOLUME = 0,
 	DIATOM_LEVEL_BRIGHTNESS,
@@ -283,17 +283,17 @@ int  diatom_port_level_positions(diatom_level_kind kind);
 int  diatom_port_level_read(diatom_level_kind kind);
 
 /* Put the hardware at `pos`. What position 0 means (a cut, on a volume control
- * whose minimum is not silence), the launcher's mute (ADR-0031) and re-mapping
- * the volume when the headphone jack changes are all the port's: it keeps what
- * it last wrote for that. */
+ * whose minimum is not silence), the launcher's mute and re-mapping the volume
+ * when the headphone jack changes are all the port's: it keeps what it last
+ * wrote for that. */
 void diatom_port_level_write(diatom_level_kind kind, int pos);
 
 /* The level keys held right now, or pressed since the last call, as
  * DIATOM_LEVEL_KEY_* bits - the second so a tap that goes down and up between
  * two frames still counts. Which physical key is which is the port's: on the
  * GKD Pixel 2 a volume key pressed while MENU is held is a brightness key
- * until it is let go (ADR-0037). The host steps on a press and repeats while
- * held; the port only reports. diatom_port_input_reset clears what is latched. */
+ * until it is let go. The host steps on a press and repeats while held; the
+ * port only reports. diatom_port_input_reset clears what is latched. */
 enum {
 	DIATOM_LEVEL_KEY_VOLUME_UP       = 1u << 0,
 	DIATOM_LEVEL_KEY_VOLUME_DOWN     = 1u << 1,
@@ -307,11 +307,11 @@ uint32_t diatom_port_level_keys(void);
  * a held key keeps it up. */
 void diatom_port_level_shown(diatom_level_kind kind, int pos, int positions);
 
-/* Show the low-battery disc over the game, or take it off (ADR-0040). The
- * launcher decides what low and critical mean; the port draws the disc the
- * launcher draws on its own screens, in the same place: radius 9, centered
- * 34 px from the top and right edges, red (224, 72, 72), on every frame until
- * told otherwise. `blink` (critical): shown in the even seconds of the port's
+/* Show the low-battery disc over the game, or take it off. The launcher
+ * decides what low and critical mean; the port draws the disc the launcher
+ * draws on its own screens, in the same place: radius 9, centered 34 px from
+ * the top and right edges, red (224, 72, 72), on every frame until told
+ * otherwise. `blink` (critical): shown in the even seconds of the port's
  * clock and not in the odd ones, the launcher's rhythm. A port with no screen
  * of its own implements this as a no-op and is correct. */
 void diatom_port_low_battery(bool on, bool blink);
@@ -320,9 +320,9 @@ void diatom_port_low_battery(bool on, bool blink);
  *
  * Needed because Diatom is RESIDENT: the port keeps what it last wrote, to
  * re-apply it on a jack change or a mute, and the launcher owns levels whenever
- * Diatom is not presenting (ADR-0020). So between games, and across a menu, the
- * hardware can be changed underneath it, and re-applying a stale write would
- * put back a level nobody is at.
+ * Diatom is not presenting. So between games, and across a menu, the hardware
+ * can be changed underneath it, and re-applying a stale write would put back a
+ * level nobody is at.
  *
  * That includes the LAST HEADPHONE JACK STATE the port acted on, and forgetting
  * it is not an extra: a port re-maps the level between the speaker and
@@ -339,13 +339,13 @@ void diatom_port_low_battery(bool on, bool blink);
 void diatom_port_level_invalidate(void);
 
 /* True once the port's surface has gone away - a closed window on desktop.
- * Not anticipated by ADR-0007; surfaced during implementation. It concerns the
+ * Not in the original design; surfaced during implementation. It concerns the
  * port's own viability, not anything about games, so it belongs here. */
 bool diatom_port_should_quit(void);
 
 /* Write what was last presented. Pixels and a path, no domain nouns, and both
  * backends want it - on desktop to see what happened, on device because a
- * screenshot is otherwise unobtainable. Also not in ADR-0007: that interface
+ * screenshot is otherwise unobtainable. Also not in the original design: it
  * specified ten functions and implementation has made it twelve within a day,
  * which is worth noticing even though both additions look justified. */
 bool diatom_port_capture(const char *path);

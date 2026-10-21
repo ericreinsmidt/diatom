@@ -1,15 +1,15 @@
 """Does the state plane answer on the wire?
 
-ADR-0020 defines a state as three things - a query verb, a write verb, and the
-query verb repeated unsolicited when Diatom changes it. Every part of that is a
-promise to a launcher in another repository, and none of it is visible to a
-compiler: a verb can be added to the enum, parsed, dispatched, and still never
-reach a socket because one branch returns early.
+The state plane defines a state as three things - a query verb, a write verb,
+and the query verb repeated unsolicited when Diatom changes it. Every part of
+that is a promise to a launcher in another repository, and none of it is visible
+to a compiler: a verb can be added to the enum, parsed, dispatched, and still
+never reach a socket because one branch returns early.
 
 So this speaks the protocol. It starts Diatom with no core and no ROM - the
 resident, idle state a launcher connects to first - and asks.
 
-Audio output (ADR-0029) is what it covers today, because that state's whole
+Audio output is what it covers today, because that state's whole
 point is a device that can FAIL, and the failure has to arrive as an answer
 rather than as an error or a silence. The others predate this file; add them
 here when one of them next needs changing.
@@ -101,9 +101,9 @@ def main():
         r = d.line("AUDIO")
         ck(r == "AUDIO\tdevice=", "AUDIO answers, and the default reads as empty")
 
-        # The write, refused by the hardware. ADR-0029: it falls back and
-        # reports where the sound IS, and it is never an error, because a
-        # launcher treating it as one is what killed the resident emulator.
+        # The write, refused by the hardware. It falls back and reports where
+        # the sound IS, and it is never an error, because a launcher treating
+        # it as one is what killed the resident emulator.
         d.send("SETAUDIO\tdevice=no such sink anywhere")
         r = d.line()
         ck(r == "AUDIO\tdevice=",
@@ -126,9 +126,9 @@ def main():
         ck(r == "AUDIO\tdevice=", "re-stating the same device answers the same")
         ck(r is not None and not r.startswith("ERROR"), "and is not an error")
 
-        # Quiet, ADR-0032: the launcher's to set and nobody else's, so it
-        # starts off, says what it was set to, and a value that is not "1"
-        # lets the game be heard rather than holding it silent.
+        # Quiet: the launcher's to set and nobody else's, so it starts off, says
+        # what it was set to, and a value that is not "1" lets the game be heard
+        # rather than holding it silent.
         d.send("QUIET")
         ck(d.line("QUIET") == "QUIET\ton=0", "QUIET answers, off before anyone sets it")
         d.send("SETQUIET\ton=1")
@@ -156,17 +156,18 @@ def main():
         d.send("SETCHANNELS\tmode=stereo")
         d.line("CHANNELS")
 
-        # ADR-0009's forward-compatibility promise, which is what lets a verb
-        # be added at all. If this ever fails, adding one stops being safe.
+        # The launcher protocol's forward-compatibility promise, which is what
+        # lets a verb be added at all. If this ever fails, adding one stops
+        # being safe.
         d.send("NOSUCHVERB\tdevice=x")
         d.send("AUDIO")
         ck(d.line("AUDIO") is not None, "an unknown verb is ignored, not fatal")
 
-    # ADR-0033: the newest connection wins. On 2026-09-18 a daemon the
-    # launcher had started inherited the launcher's end of this socket and kept
-    # it open after the launcher died. The connection never reached EOF, this
-    # process never looked at the listener while it had one, and the restarted
-    # launcher blocked in connect before its first frame - the Brick froze.
+    # The newest connection wins. On 2026-09-18 a daemon the launcher had
+    # started inherited the launcher's end of this socket and kept it open after
+    # the launcher died. The connection never reached EOF, this process never
+    # looked at the listener while it had one, and the restarted launcher
+    # blocked in connect before its first frame - the Brick froze.
     #
     # So: hold a connection open and never read it again, the way that daemon
     # did, then connect three more times, each while the one before is held.

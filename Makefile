@@ -31,9 +31,9 @@ OBJ   := $(SRC:%.c=$(BUILD)/%.o)
 BIN   := $(BUILD)/diatom
 CONFORM := $(BUILD)/diatom-conform
 
-# rcheevos, vendored under ADR-0025. Listed rather than wildcarded: a file
-# appearing in vendor/ should be a decision recorded in its README, not
-# something the build picks up because it happens to be on disk.
+# rcheevos, vendored as the achievement evaluator. Listed rather than
+# wildcarded: a file appearing in vendor/ should be a decision recorded in its
+# README, not something the build picks up because it happens to be on disk.
 RC_DIR := vendor/rcheevos
 RC_SRC := \
   $(RC_DIR)/src/rc_compat.c $(RC_DIR)/src/rc_util.c $(RC_DIR)/src/rc_version.c \
@@ -88,8 +88,8 @@ ifeq ($(PORT),brick)
 endif
 
 ifeq ($(PORT),pixel2)
-  # GKD Pixel 2 - ADR-0035. Built inside plastron's Buildroot, which sets CC
-  # and puts a pkg-config on PATH that answers for the device system's own
+  # GKD Pixel 2. Built inside plastron's Buildroot, which sets CC and puts a
+  # pkg-config on PATH that answers for the device system's own
   # libraries: its SDL2 (audio and the clock), and Mesa's EGL, GLES and GBM
   # with libdrm for the display.
   PKG_CONFIG ?= pkg-config
@@ -126,8 +126,8 @@ $(BUILD)/%.o: %.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-# The seam test from ADR-0007, mechanized. A port that includes libretro.h can
-# no longer be built without a core, which destroys the reason the desktop
+# The port interface's seam test, mechanized. A port that includes libretro.h
+# can no longer be built without a core, which destroys the reason the desktop
 # backend exists. Cheap to check, so check it.
 # Mechanical checks, each guarding a rule that decays the moment nothing fails
 # when it is broken: check-seam has held since day one for exactly that reason.
@@ -178,8 +178,8 @@ check-proto:
 	$(FRESH_IF_BUILT)
 	@python3 test/proto.py
 
-# ADR-0020's state plane, end to end against the stub core. On the same terms
-# as check-proto: a second of wall time, no core, no ROM, no network.
+# The state plane, end to end against the stub core. On the same terms as
+# check-proto: a second of wall time, no core, no ROM, no network.
 #
 # IT WAS NOT IN `check` UNTIL 2026-09-17, and the cost of that showed the day it
 # was added: it had been asserting `proto=3` since the audio state bumped the
@@ -222,17 +222,18 @@ check-rates:
 check-seam:
 	@if grep -nE '^[[:space:]]*#[[:space:]]*include.*libretro\.h' \
 	        port/*.c include/*.h 2>/dev/null; then \
-		echo "FAIL: a port or the port header includes libretro.h (ADR-0007)"; \
+		echo "FAIL: a port or the port header includes libretro.h"; \
 		exit 1; \
 	else \
 		echo "ok: no port includes libretro.h"; \
 	fi
-	@# ADR-0025 made rcheevos a second thing on the frontend's side of the
-	@# seam, and named this as the check to look at. A port reaching for it
-	@# would be reaching past the frontend for the core's memory.
+	@# Keeping achievements in the frontend made rcheevos a second thing on
+	@# the frontend's side of the seam, and this is the check that guards
+	@# it. A port reaching for it would be reaching past the frontend for
+	@# the core's memory.
 	@if grep -nE '^[[:space:]]*#[[:space:]]*include.*(rc_|rcheevos|rhash)' \
 	        port/*.c include/*.h 2>/dev/null; then \
-		echo "FAIL: a port or the port header includes rcheevos (ADR-0025)"; \
+		echo "FAIL: a port or the port header includes rcheevos"; \
 		exit 1; \
 	else \
 		echo "ok: no port includes rcheevos"; \

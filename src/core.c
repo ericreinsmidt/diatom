@@ -1,9 +1,9 @@
 /* Loading a core, and its lifecycle.
  *
- * ADR-0006: every core is dlopen'd once and NEVER unloaded. dlclose does not
- * appear in this file, or anywhere else in Diatom.
- * ADR-0010: RTLD_LOCAL always. It is the only thing preventing symbol collision
- * between resident cores - measured, picodrive exports 1069 non-retro_* symbols
+ * Every core is dlopen'd once and NEVER unloaded. dlclose does not appear in
+ * this file, or anywhere else in Diatom.
+ * RTLD_LOCAL always. It is the only thing preventing symbol collision between
+ * resident cores - measured, picodrive exports 1069 non-retro_* symbols
  * including a complete static zlib. RTLD_GLOBAL would let its crc32 answer for
  * everyone, silently.
  */
@@ -65,7 +65,7 @@ bool diatom_core_open(diatom_core *c, const char *path)
 	c->path = path;
 
 	t0 = dbg_now_ms();
-	c->handle = dlopen(path, RTLD_NOW | RTLD_LOCAL);   /* ADR-0010 */
+	c->handle = dlopen(path, RTLD_NOW | RTLD_LOCAL);
 	fprintf(stderr, "diatom: dlopen %-28s %6.1f ms\n",
 	        dbg_base(path), dbg_now_ms() - t0);
 	if (!c->handle) {
@@ -97,7 +97,7 @@ bool diatom_core_open(diatom_core *c, const char *path)
 	return true;
 }
 
-/* Resident cores - ADR-0006.
+/* Resident cores.
  *
  * Diatom never calls dlclose, so a core opened once is opened forever. This
  * registry is what makes that true across games: the second RUN naming the same
@@ -226,7 +226,7 @@ bool diatom_core_start(diatom_core *c, const char *rom_path)
 
 	/* Before the core can declare anything. A core re-declares its memory map
 	 * on every load, and a pointer kept from the previous game points into
-	 * memory that core has since freed - ADR-0025. */
+	 * memory that core has since freed. */
 	diatom_cheevos_reset();
 	/* Same reason, one declaration further: forget the last game's pixel
 	 * format so this load's silence can be told from its agreement. */
@@ -327,7 +327,7 @@ bool diatom_core_start(diatom_core *c, const char *rom_path)
 }
 
 /* Stops the GAME, not the core. The core stays initialized and stays mapped -
- * that is the whole of ADR-0006. */
+ * that is the whole of keeping cores resident. */
 void diatom_core_stop(diatom_core *c)
 {
 	if (c->game_loaded) {

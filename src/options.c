@@ -9,11 +9,11 @@
  * Ownership, in the same split as everything else: **Diatom holds the
  * definitions and the current values; the launcher decides what those values
  * are.** Diatom has no opinion about whether a Genesis should be PAL, and no
- * way to ask - it has no UI (ADR-0009).
+ * way to ask - it has no UI.
  *
  * String lifetime: `key` and the values are copied, because a core may build
  * them dynamically. `desc` and the value list are BORROWED, which is safe only
- * because ADR-0006 never calls dlclose - the core's static data outlives every
+ * because Diatom never calls dlclose - the core's static data outlives every
  * game. If cores were ever unloaded, these would dangle.
  *
  * Per-core tables, because a resident process runs many cores and a core asking
@@ -204,8 +204,8 @@ const char *diatom_options_get(const char *key)
  * and the pending value outlived the game it was for. Dragon Warrior III is a
  * 0xC0 cartridge and showed its own "only for Game Boy Color" warning screen.
  *
- * Per-launch is also the right model rather than merely the fixed one: ADR-0009
- * makes the launcher drive, and an option it set for one game is not a standing
+ * Per-launch is also the right model rather than merely the fixed one: the
+ * launcher drives, and an option it set for one game is not a standing
  * instruction about the next. */
 void diatom_options_clear_pending(void)
 {

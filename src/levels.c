@@ -1,9 +1,9 @@
-/* Volume and brightness while a game runs - ADR-0038. See levels.h.
+/* Volume and brightness while a game runs. See levels.h.
  *
  * Until 2026-10-02 all of this was in the ports, each with its own copy: the
  * positions, the step, the rescale, and - in both of the device ports - the
- * same hold-to-repeat. ADR-0007 says a port deals in pixels, samples, buttons
- * and time, and nothing here is any of those. */
+ * same hold-to-repeat. A port deals in pixels, samples, buttons and time, and
+ * nothing here is any of those. */
 #include "levels.h"
 
 #include <stdint.h>
@@ -20,10 +20,10 @@ void diatom_levels_invalidate(void)
 	diatom_port_level_invalidate();
 }
 
-/* ADR-0020's rescale: round-to-nearest, endpoints exact. The endpoints matter
- * most - they are where a user is most likely to sit, and a minimum that drifts
- * off silence after a few round trips is the bug this whole design exists to
- * prevent. */
+/* The state plane's rescale: round-to-nearest, endpoints exact. The endpoints
+ * matter most - they are where a user is most likely to sit, and a minimum
+ * that drifts off silence after a few round trips is the bug this whole design
+ * exists to prevent. */
 static int rescale(int index, int from, int to)
 {
 	if (from <= 1 || to <= 1) return 0;

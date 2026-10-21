@@ -36,7 +36,7 @@ static SDL_AudioDeviceID g_audio;
 static bool          g_quit;
 static uint32_t      g_buttons;
 
-/* ---------- the audio sink (ADR-0029) ------------------------------------- */
+/* ---------- the audio sink ------------------------------------------------ */
 
 /* Empty means the default device. */
 static char g_audio_dev[128];
@@ -186,9 +186,9 @@ bool diatom_port_init(diatom_port_caps *out)
 	 * silence does: Diatom is resident, so a failed open here leaves the
 	 * launcher with no emulator at all and every launch then pays the cold
 	 * cost (~1100 ms) instead of the warm one (~15 ms). That is the worst
-	 * outcome available and it happened by accident - see ADR-0029, which
-	 * needs this to be true before a sink can be chosen at runtime, since
-	 * anything settable while a game runs can fail while a game runs.
+	 * outcome available and it happened by accident - and a sink chosen at
+	 * runtime needs this to be true, since anything settable while a game
+	 * runs can fail while a game runs.
 	 *
 	 * capacity 0 is how the silence is reported rather than hidden: it turns
 	 * off dynamic rate control, which would otherwise read a permanently empty
@@ -340,7 +340,7 @@ size_t diatom_port_audio_write(const int16_t *frames, size_t n)
 	 * of range. SDL reports the device STOPPED; falling back happens here
 	 * rather than in a poll of its own because this already runs every frame,
 	 * and the host finds out through diatom_port_audio_get, which is the only
-	 * way it can (ADR-0007: the port cannot announce anything).
+	 * way it can (the port cannot announce anything).
 	 *
 	 * Only when a name was asked for. If the DEFAULT device dies there is
 	 * nowhere better to go, and retrying it every frame would be a reopen
@@ -470,7 +470,7 @@ void diatom_port_level_shown(diatom_level_kind kind, int pos, int positions)
 void diatom_port_level_invalidate(void) { }
 
 /* No device UI drawn over the game on a desktop: the window is for iteration,
- * and the host half of ADR-0040 is tested through its answers. */
+ * and the host half of the low-battery state is tested through its answers. */
 void diatom_port_low_battery(bool on, bool blink) { (void)on; (void)blink; }
 
 /* Nothing to drain: this port presents synchronously inside

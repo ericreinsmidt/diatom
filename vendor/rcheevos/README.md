@@ -1,12 +1,13 @@
 # rcheevos, vendored
 
 RetroAchievements' own implementation of their achievement condition language,
-carried in under [ADR-0025](../../docs/decisions/0025-achievements-belong-to-the-frontend.md).
+carried in as the frontend's achievement evaluator.
 
 - Upstream: https://github.com/RetroAchievements/rcheevos
 - Version: `f1417fb`, 2026-08-12
 - **MIT licensed** - see `LICENSE`. Same license as diatom, which is what makes
-  vendoring it compatible with ADR-0002 rather than in tension with it.
+  vendoring it compatible with escaping GPL inheritance rather than in tension
+  with it.
 
 This is the second third-party thing in the repository, after `src/libretro.h`,
 and it is the same kind of thing: someone else's definition of an interface
@@ -25,7 +26,7 @@ Vendored: `src/rcheevos/` (the evaluator), plus `rc_compat`, `rc_util`,
 
 | omitted | why |
 |---|---|
-| `rc_client.c` | manages a whole session including its own HTTP. ADR-0025 keeps networking in the launcher; diatom gains no network access. |
+| `rc_client.c` | manages a whole session including its own HTTP. Networking stays in the launcher; diatom gains no network access. |
 | `src/rapi/` | request builders for the RetroAchievements web API. Same reason. |
 | `src/rurl/` | URL construction. Same reason. |
 | `rc_libretro.c` | maps a `retro_memory_map` into RA's address space, but pulls in `rhash`'s internals for playlist and disc hashing that diatom will never call. Upstream's own Swift package excludes this file too. The region tables it would have used are in `rc_consoles.h`, which IS here, so diatom does that mapping itself against vendored data rather than vendoring 244K of CD reader and AES to reach it. |
@@ -65,8 +66,11 @@ Measured 2026-08-29, desktop build, `__TEXT` only:
 | rcheevos as vendored | 77,517 | 11,529 |
 
 **rcheevos is roughly 1.8x the size of the frontend it is going into**, which
-trips ADR-0025's own "revisit if" clause. Recorded rather than smoothed over;
-see that ADR for what the measurement did and did not change.
+trips the size limit set when it was chosen: no larger than the rest of `src/`
+combined. Recorded rather than smoothed over. It does not change the decision:
+both alternatives are larger, and none of the 18 compiled files can be dropped.
+What the size bears on is the RSS budget on the device, which has not been
+re-measured.
 
 ## Updating
 

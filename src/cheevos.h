@@ -16,9 +16,9 @@
  * This lives in Diatom rather than in the launcher because libretro says so:
  * RETRO_ENVIRONMENT_SET_SUPPORT_ACHIEVEMENTS is addressed to the FRONTEND, and
  * the core's only obligation is to expose its address space. The measured
- * reason is in ADR-0025 - conditions compare against the previous frame, and
- * the launcher only sees the socket every 100ms against a 60Hz core, so six
- * frames in seven would be invisible to it.
+ * reason: conditions compare against the previous frame, and the launcher only
+ * sees the socket every 100ms against a 60Hz core, so six frames in seven would
+ * be invisible to it.
  *
  * Diatom evaluates. The launcher does the network: it logs in, identifies the
  * game and hands over a condition set. Nothing here opens a socket.
@@ -80,9 +80,9 @@ uint32_t diatom_cheevos_peek(uint32_t address, uint32_t num_bytes, void *ud);
 
 /* ---- the set, and evaluating it -----------------------------------------
  *
- * ADR-0026. The launcher owns the network and the account; Diatom owns the
- * frame. So the launcher fetches a set, writes it to a file and says where it
- * is, and Diatom evaluates it against every frame the core produces.
+ * The launcher owns the network and the account; Diatom owns the frame. So the
+ * launcher fetches a set, writes it to a file and says where it is, and Diatom
+ * evaluates it against every frame the core produces.
  *
  * The file is one achievement per line, tab separated:
  *
@@ -111,7 +111,7 @@ void diatom_cheevos_frame(void);
  * across it would credit progress that did not happen. */
 void diatom_cheevos_runtime_reset(void);
 
-/* The state plane's query reply (ADR-0020): a CHEEVOS summary followed by one
+/* The state plane's query reply: a CHEEVOS summary followed by one
  * CHEEVO line per achievement. */
 void diatom_cheevos_emit(void);
 

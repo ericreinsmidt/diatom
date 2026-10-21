@@ -1,6 +1,6 @@
 /* The arithmetic between a level's positions and a device's raw values, for
  * the ports. One copy, each port supplying its own numbers - it was written out
- * in every port until 2026-10-02 (ADR-0038).
+ * in every port until 2026-10-02.
  *
  * A WINDOW is a span of raw values with the loudest position at `top` and the
  * quietest at `bottom`, raw growing toward quiet: the Brick's volume register

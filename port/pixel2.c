@@ -1,4 +1,4 @@
-/* GKD Pixel 2 port - ADR-0035 and ADR-0036.
+/* GKD Pixel 2 port.
  *
  * The Pixel 2 is an RK3326S with a Mali-G31 and a 640x480 panel that is
  * physically 480x640 portrait, mounted turned. Its system is plastron:
@@ -7,15 +7,15 @@
  * Presentation is OpenGL ES 3 on a GBM surface, page-flipped through KMS by a
  * thread of its own. present() copies the core's frame into a latest-wins
  * mailbox and returns; the thread uploads it as a texture, draws it scaled and
- * turned in one quad, and flips at the panel's rate. That is ADR-0013's flip
+ * turned in one quad, and flips at the panel's rate. That is the Brick's flip
  * thread with the blit moved to the GPU, because the CPU blit measured 7.7 ms
- * a frame here against a SNES core that already takes 10.5 (ADR-0035).
+ * a frame here against a SNES core that already takes 10.5.
  *
  * The panel's orientation never leaves this file: the surface is reported as
- * 640x480, and the turn is in the quad's vertices (ADR-0007).
+ * 640x480, and the turn is in the quad's vertices.
  *
  * The display is shared with the launcher by DRM master, held only between the
- * first present after a stop and the end of the next present_stop (ADR-0036).
+ * first present after a stop and the end of the next present_stop.
  *
  * SDL2 provides audio and the clock only. Buttons are read straight from the
  * kernel's input devices, found by what they report.
@@ -131,7 +131,7 @@ static bool           g_ov_dirty;           /* a new image to upload */
 
 static uint64_t g_osd_until;
 static int      g_osd_level, g_osd_max, g_osd_kind;   /* kind 0 volume, 1 brightness */
-static bool     g_lowbat, g_lowbat_blink;   /* the low-battery disc, ADR-0040; under g_mx */
+static bool     g_lowbat, g_lowbat_blink;   /* the low-battery disc; under g_mx */
 
 /* ---------- levels ---------------------------------------------------------- */
 
@@ -203,7 +203,7 @@ struct dm_ctl_elem_value {
 #define USB_ATT_TOP     11
 #define USB_ATT_BOTTOM  188
 
-static bool g_muted;                /* the launcher's, ADR-0031 */
+static bool g_muted;                /* the launcher's */
 static int  g_mixer_fd = -1;
 static int  g_level = -1;           /* the position last read or written; -1 none */
 
@@ -469,7 +469,7 @@ static const char *PLAIN_SHADER =
  * boundary mixes. At an integer factor every weight is 0 or 1, so it equals
  * nearest. The edges need no clamp of their own: CLAMP_TO_EDGE blends the
  * border texel with itself, which is brick.c's clamp. UNVERIFIED against
- * brick.c's output until a capture comparison (ADR-0035). */
+ * brick.c's output until a capture comparison. */
 static const char *SHARP_SHADER =
 	"#version 300 es\n"
 	"precision highp float;\n"
@@ -638,9 +638,9 @@ static void draw_level_bar(int kind, int level, int max, bool turned)
 		solid(fill, pad, W - fill, bar, 60 / 255.f, 62 / 255.f, 72 / 255.f, 1, turned);
 }
 
-/* The low-battery disc, ADR-0040: the launcher's, in its place and color, as
- * horizontal spans so it matches TortOS's draw_low_battery_dot to the pixel:
- * radius 9, centered 34 px from the top and right edges of the surface. */
+/* The low-battery disc: the launcher's, in its place and color, as horizontal
+ * spans so it matches TortOS's draw_low_battery_dot to the pixel: radius 9,
+ * centered 34 px from the top and right edges of the surface. */
 static void draw_low_battery(bool turned)
 {
 	const int r = 9, cx = g_surface_w - 34, cy = 34;
@@ -764,7 +764,7 @@ static void bo_destroyed(struct gbm_bo *bo, void *data)
 
 /* The framebuffer for a GBM buffer, made once and kept with it. ARGB8888,
  * because a page flip cannot change format and the launcher's SDL scans out
- * ARGB8888 (ADR-0036, measured as EINVAL otherwise). */
+ * ARGB8888 (measured as EINVAL otherwise). */
 static uint32_t bo_fb(struct gbm_bo *bo)
 {
 	uint32_t fb = (uint32_t)(uintptr_t)gbm_bo_get_user_data(bo);
@@ -783,9 +783,9 @@ static uint32_t bo_fb(struct gbm_bo *bo)
 }
 
 /* Take the display, if it is not ours already, and find out whether anything
- * is scanning out (ADR-0036). With the launcher or the boot splash in front,
- * the CRTC is lit and a flip is all it takes; standalone, nothing is, and the
- * first frame sets the mode. */
+ * is scanning out. With the launcher or the boot splash in front, the CRTC is
+ * lit and a flip is all it takes; standalone, nothing is, and the first frame
+ * sets the mode. */
 static bool take_display(void)
 {
 	drmModeCrtc *crtc;
@@ -859,9 +859,9 @@ static void show_frame(void)
 		g_crtc_lit = true;
 		done = true;
 	} else {
-		/* The previous owner's last frame may still be queued, and the flip
-		 * comes back busy until it lands: measured every time, one refresh
-		 * (ADR-0036). Wait a refresh and retry, a few times at most. */
+		/* The previous owner's last frame may still be queued, and the
+		 * flip comes back busy until it lands: measured every time, one
+		 * refresh. Wait a refresh and retry, a few times at most. */
 		while ((ret = drmModePageFlip(g_drm_fd, g_crtc_id, fb,
 		                              DRM_MODE_PAGE_FLIP_EVENT, &done)) != 0 &&
 		       errno == EBUSY && tries++ < 5)
@@ -1250,12 +1250,12 @@ void diatom_port_present_stop(diatom_park park)
 		drain();
 	}
 	/* KEEP leaves the last frame on glass, and the buffer behind it stays
-	 * allocated: removing a framebuffer that is on glass blanks the panel
-	 * (ADR-0036). The launcher's first flip replaces it. */
+	 * allocated: removing a framebuffer that is on glass blanks the panel.
+	 * The launcher's first flip replaces it. */
 	give_display();
 }
 
-/* ---------- audio, as on the Brick (ADR-0029, ADR-0030) --------------------- */
+/* ---------- audio, as on the Brick ------------------------------------------ */
 
 static bool audio_open(const char *name)
 {
@@ -1391,7 +1391,7 @@ static void input_open(void)
  * press is latched until the host has read it, so a tap between two frames
  * counts; a key the events say is held is checked against the kernel, so a
  * release this port never saw cannot leave the host repeating. The stepping
- * and the repeat are the host's (ADR-0038). */
+ * and the repeat are the host's. */
 static const int level_codes[2] = { KEY_VOLUMEUP, KEY_VOLUMEDOWN };
 static struct {
 	bool down;           /* held, by the events */
@@ -1426,8 +1426,8 @@ void diatom_port_input_poll(void)
 
 	/* The volume keys are level keys, never reported as buttons and never
 	 * sent to a core. With MENU held they are brightness instead, the
-	 * Pixel 2's only way to it (ADR-0037); the host sees the level move and
-	 * treats MENU's release as the end of a chord. */
+	 * Pixel 2's only way to it; the host sees the level move and treats
+	 * MENU's release as the end of a chord. */
 	while (g_keys_fd >= 0 && (n = read(g_keys_fd, ev, sizeof ev)) > 0) {
 		for (i = 0; i < (size_t)n / sizeof ev[0]; i++) {
 			int key;
@@ -1461,7 +1461,7 @@ void diatom_port_input_reset(void)
 	pad_resync();
 }
 
-/* ---------- levels: the hardware under them (ADR-0038) ---------------------- */
+/* ---------- levels: the hardware under them --------------------------------- */
 
 void diatom_port_level_invalidate(void)
 {
@@ -1565,8 +1565,8 @@ void diatom_port_low_battery(bool on, bool blink)
 	pthread_mutex_unlock(&g_mx);
 }
 
-/* No hardware mute on this device, but the launcher may still hold one
- * (ADR-0031): while it does, the level never comes back on. */
+/* No hardware mute on this device, but the launcher may still hold one:
+ * while it does, the level never comes back on. */
 void diatom_port_mute_set(bool on)
 {
 	if (on == g_muted) return;
@@ -1627,8 +1627,8 @@ bool diatom_port_init(diatom_port_caps *out)
 	g_drm_fd = open("/dev/dri/card0", O_RDWR | O_CLOEXEC);
 	if (g_drm_fd < 0) { perror("open /dev/dri/card0"); return false; }
 	/* Opening the device while nobody holds master makes us master, and a
-	 * resident Diatom must not hold the display while the launcher draws
-	 * (ADR-0036). Taken back at the first present. */
+	 * resident Diatom must not hold the display while the launcher draws.
+	 * Taken back at the first present. */
 	drmDropMaster(g_drm_fd);
 
 	if (!kms_find()) {
@@ -1637,7 +1637,7 @@ bool diatom_port_init(diatom_port_caps *out)
 	}
 	g_panel_w = g_mode.hdisplay;
 	g_panel_h = g_mode.vdisplay;
-	/* Portrait panel, landscape surface (ADR-0007). */
+	/* Portrait panel, landscape surface. */
 	g_turned    = g_panel_h > g_panel_w;
 	g_surface_w = g_turned ? g_panel_h : g_panel_w;
 	g_surface_h = g_turned ? g_panel_w : g_panel_h;
@@ -1703,7 +1703,7 @@ void diatom_port_shutdown(void)
 	if (g_audio)         SDL_CloseAudioDevice(g_audio);
 	SDL_Quit();
 	/* The GBM surface and device go with the process: the buffer on glass
-	 * stays allocated until then (ADR-0036). */
+	 * stays allocated until then. */
 	if (g_drm_fd >= 0)   close(g_drm_fd);
 }
 

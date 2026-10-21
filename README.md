@@ -61,7 +61,7 @@ a Brick, diatom peaks at **8.2 to 8.4 MB** with FCEUmm running.
 | Path | What it is |
 |---|---|
 | `src/` | The host: core loading, environment callbacks, frame loop, resampling, saves, the launcher protocol, volume and brightness |
-| `port/` | Per-device backends. `desktop` (SDL2), `brick` (raw fbdev) and `pixel2` (GLES on KMS). Pixels, samples, buttons, time, and the hardware under the levels (ADR-0038) - nothing else |
+| `port/` | Per-device backends. `desktop` (SDL2), `brick` (raw fbdev) and `pixel2` (GLES on KMS). Pixels, samples, buttons, time, and the hardware under the levels - nothing else |
 | `include/diatom_port.h` | The one load-bearing seam, and the rules that keep it honest |
 | `test/stubcore.c` | A libretro core that is not an emulator, so the frontend can be exercised with no third-party binary |
 | `tools/` | The checks, and the allocation counter `conform` links in |

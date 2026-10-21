@@ -1,4 +1,4 @@
-/* Volume and brightness while a game runs - ADR-0038.
+/* Volume and brightness while a game runs.
  *
  * The level is the host's: which position each is at, stepping it from the
  * device's level keys with a held key repeating, and setting it from the
@@ -21,7 +21,7 @@ void diatom_levels_invalidate(void);
 bool diatom_levels_get(diatom_level_kind kind, int *index, int *count);
 
 /* Put `kind` at `index` of `count` positions on the launcher's scale, rescaled
- * to this device's (ADR-0020). False if the device has no control over it. */
+ * to this device's. False if the device has no control over it. */
 bool diatom_levels_set(diatom_level_kind kind, int index, int count);
 
 /* Once a frame: a level key's press steps its level, and holding it repeats at

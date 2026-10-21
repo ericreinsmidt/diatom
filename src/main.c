@@ -1,14 +1,14 @@
 /* Diatom - a minimal libretro frontend.
  *
  * Standalone is the primary mode:  diatom --core X.so --rom game.nes
- * A host application driving a resident Diatom over a socket (ADR-0009) is an
- * additional mode, not the fundamental one. Designing for a program that stands
- * alone is a stricter test than designing for one embedder.
+ * A host application driving a resident Diatom over a socket is an additional
+ * mode, not the fundamental one. Designing for a program that stands alone is
+ * a stricter test than designing for one embedder.
  *
  * The frame is copied inside the core's video callback and presented AFTER
- * retro_run returns - ADR-0007. Cores emit video and audio from inside
- * retro_run in an order that varies, so presenting from the callback means
- * committing to a frame before knowing how much audio it produced.
+ * retro_run returns. Cores emit video and audio from inside retro_run in an
+ * order that varies, so presenting from the callback means committing to a
+ * frame before knowing how much audio it produced.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -31,8 +31,8 @@ static int         g_frame_w, g_frame_h;
 static size_t      g_frame_pitch;
 static bool        g_frame_fresh;
 
-/* ADR-0020's state plane, defined below but reachable from the menu loop that
- * comes first. */
+/* The state plane, defined below but reachable from the menu loop that comes
+ * first. */
 /* The session, up here because menu_pause reads its persistence paths. The
  * lifecycle comment lives with run_session_inner below, which is what actually
  * runs one. */
@@ -40,7 +40,7 @@ typedef struct diatom_session {
 	const char   *core, *rom, *shot, *state_load, *state_exit;
 	const char   *preview;    /* BMP of the frame, written on pause and exit */
 	const char   *firmware;   /* what the launcher says this content needs */
-	const char   *cheevos;    /* an achievement set to watch, ADR-0026 */
+	const char   *cheevos;    /* an achievement set to watch */
 	int           console;    /* which console's address space it is written against */
 	long          limit;
 	int           mode;
@@ -52,7 +52,7 @@ static bool state_plane_msg(const diatom_msg *m);
 static void levels_forget(void);
 static void apply_display(int mode, diatom_filter filter);
 
-static diatom_core     *g_core;   /* resident, never unloaded - ADR-0006 */
+static diatom_core     *g_core;   /* resident, never unloaded */
 static diatom_policy    g_policy;
 
 /* An overlay image, from the launcher, to be composited over the game.
@@ -184,7 +184,7 @@ static bool write_preview(const char *path)
 }
 
 static diatom_port_caps g_caps;
-static diatom_rect      g_dst;   /* locked at load - ADR-0011 */
+static diatom_rect      g_dst;   /* locked at load */
 
 /* Set from a signal handler and read by the frame loop. The handler does NO
  * file I/O: it flips this, the loop notices after retro_run returns and does
@@ -252,10 +252,10 @@ static void terminate_init(void)
 	sigaction(SIGHUP,  &sa, NULL);
 }
 
-/* --- crash reporting - ADR-0009's `EXIT reason=crash` --------------------- */
+/* --- crash reporting - `EXIT reason=crash` -------------------------------- */
 
-/* A core is dlopen'd into this address space (ADR-0006), so a core that dies
- * kills Diatom. That rules out the trick on_terminate uses: there is no "after
+/* A core is dlopen'd into this address space, so a core that dies kills
+ * Diatom. That rules out the trick on_terminate uses: there is no "after
  * retro_run returns" to defer the work to, because the process is going away
  * inside the handler.
  *
@@ -279,7 +279,7 @@ static volatile sig_atomic_t g_phase;
  * alternative is assembling the line in pieces, and a torn write would put a
  * malformed message on the socket at the worst possible moment.
  *
- * `signal=` is an extra key, which ADR-0009 makes free: unknown keys are
+ * `signal=` is an extra key, which the protocol makes free: unknown keys are
  * ignored, so an older launcher sees a plain crash and a newer one can log
  * which signal it was. That name is the only trace that survives - the process
  * is about to die, and nothing else records it. */
@@ -306,7 +306,7 @@ static void on_crash(int sig)
 
 	/* PHASE_IDLE says no game was in flight, so there is nothing to report
 	 * about one. Diatom dying between sessions reaches the launcher as the
-	 * socket closing, which ADR-0009 already relies on for liveness. */
+	 * socket closing, which the protocol already relies on for liveness. */
 	if (g_phase != PHASE_IDLE)
 		for (i = 0; i < sizeof crash_lines / sizeof crash_lines[0]; i++)
 			if (crash_lines[i].sig == sig) {
@@ -396,9 +396,10 @@ static void install_crash_handlers(void)
 #define SETTLE_FRAMES 180
 
 /* Display mode state. The BASE geometry is kept because that, not the current
- * geometry, is what a rect is ever computed from: ADR-0011's invariant is
- * "never recompute from a mid-run SET_GEOMETRY", which a deliberate user-driven
- * mode change does not violate as long as it recomputes from the base. */
+ * geometry, is what a rect is ever computed from: the locked rect's invariant
+ * is "never recompute from a mid-run SET_GEOMETRY", which a deliberate
+ * user-driven mode change does not violate as long as it recomputes from the
+ * base. */
 static int           g_base_w, g_base_h;
 static double        g_base_aspect;
 static int           g_mode;
@@ -442,8 +443,8 @@ void diatom_on_video(const void *data, unsigned w, unsigned h, size_t pitch)
  * startup transient. Dropping this audio deliberately is more honest than
  * queueing it and then having the port refuse it. */
 static bool g_audio_warmup;
-/* Fast forward is muted - ADR-0034. The core's sound is dropped here, and the
- * frame loop pushes silence for the time each fast turn stands for. */
+/* Fast forward is muted. The core's sound is dropped here, and the frame
+ * loop pushes silence for the time each fast turn stands for. */
 static bool g_audio_fast;
 
 void diatom_on_audio_batch_store(const int16_t *data, size_t frames)
@@ -464,16 +465,16 @@ static void usage(void)
 		"              [--load-state <file>] [--state-on-exit <file>]\n"
 		"              [--firmware <name>]  required in --system, checked first\n"
 		"              [--frames <n>] [--shot <file.bmp>] [--preview-on-exit <file.bmp>]\n"
-		"              [--socket <path>]   launcher protocol, ADR-0009\n"
+		"              [--socket <path>]   launcher protocol\n"
 		"              [--cores <dir>]     map every core there before listening\n"
 		"              [--core-option key=value] ...   repeatable\n"
 		"              [--list-options]    what this core offers, then exit\n"
 		"\n--firmware names a file the content needs, e.g. syscard3.pce for a PC\n"
 		"Engine CD. Diatom does not know which content needs what and will not\n"
-		"learn - it has no core list - so whoever launches it says (ADR-0017).\n"
+		"learn - it has no core list - so whoever launches it says.\n"
 		"\nSRAM is automatic: read at load, written when it changes, flushed on\n"
 		"exit and on SIGTERM. Save states take paths, never slot numbers - slots\n"
-		"belong to the launcher (ADR-0016).\n\n");
+		"belong to the launcher.\n\n");
 	for (i = 0; i < diatom_mode_count; i++)
 		fprintf(stderr, "  %-10s %s\n",
 		        diatom_modes[i].name, diatom_modes[i].note);
@@ -496,9 +497,9 @@ static void apply_display(int mode, diatom_filter filter)
 	fflush(stdout);
 
 	/* Reported from the ONE place the mode ever changes, so a launcher hears
-	 * about it whether it asked or the rect settled underneath it (ADR-0021). `rect=` is free here and is what a
-	 * launcher would otherwise have to recompute from geometry it does not
-	 * have. ADR-0022.
+	 * about it whether it asked or the rect settled underneath it. `rect=` is
+	 * free here and is what a launcher would otherwise have to recompute from
+	 * geometry it does not have.
 	 *
 	 * `surface=` says what the rect is measured in. A launcher that draws at
 	 * another size scales the rect to its own: on the GKD Pixel 2 the surface
@@ -511,7 +512,7 @@ static void apply_display(int mode, diatom_filter filter)
 		                  g_caps.surface_w, g_caps.surface_h);
 }
 
-/* The in-game menu handover - ADR-0016.
+/* The in-game menu handover.
  *
  * MENU pauses the game and gives the display to the launcher, which draws its
  * own menu and answers. Diatom draws nothing: it has no UI, and the handoff
@@ -534,7 +535,7 @@ static bool g_pause_requested;
  * turn itself off, and does not know whether it is on a charger or what the
  * player set. It knows one thing the launcher cannot see - whether anybody is
  * pressing anything - because it owns the pad while a game runs and the
- * launcher is blocked on a socket. ADR-0009: the launcher drives.
+ * launcher is blocked on a socket. The launcher drives.
  *
  * A held button counts. Reading a map with a direction pressed is somebody
  * being there.
@@ -582,10 +583,10 @@ static void idle_note_input(bool any)
 	}
 }
 
-/* Fast forward - ADR-0034. The step the player chose with MENU+R1, 1 to 4,
- * reset at every RUN and kept across the menu. A state on ADR-0020's plane
- * that only Diatom writes: `SPEED x=N`, as the reply to `SPEED` and
- * unsolicited on every change, so the launcher can say so on screen. */
+/* Fast forward. The step the player chose with MENU+R1, 1 to 4, reset at
+ * every RUN and kept across the menu. A state on the state plane that only
+ * Diatom writes: `SPEED x=N`, as the reply to `SPEED` and unsolicited on every
+ * change, so the launcher can say so on screen. */
 #define SPEED_MAX 4
 /* What a fast turn leaves spare, for the save tick, the socket and the pad. */
 #define FAST_MARGIN_US 1500.0
@@ -622,7 +623,7 @@ static bool menu_pause(const diatom_session *sn)
 {
 	/* The pause preview goes out BEFORE PAUSED, so by the time the launcher
 	 * hears it owns the display, the frame it will dim and draw its menu over
-	 * is already on disk. The order is the contract. ADR-0024. */
+	 * is already on disk. The order is the contract. */
 	if (sn->preview && write_preview(sn->preview))
 		diatom_proto_send("PREVIEW\tpath=%s", sn->preview);
 
@@ -657,7 +658,7 @@ static bool menu_pause(const diatom_session *sn)
 		case DIATOM_MSG_RESUME:
 			/* The launcher had the display and therefore owned the levels;
 			 * it may have moved either while its menu was up. Re-read rather
-			 * than step from a cached value nobody is at. ADR-0020. */
+			 * than step from a cached value nobody is at. */
 			diatom_levels_invalidate();
 			levels_forget();
 			/* And whatever was pressed in it is the launcher's, already
@@ -714,8 +715,8 @@ static bool menu_pause(const diatom_session *sn)
 		 * with no reply and no log line - silence indistinguishable from the
 		 * launcher never having sent them. Display mode was then the one
 		 * state-plane setting unreachable at the one moment a launcher has a
-		 * menu open to reach it from, which is what ADR-0020 and ADR-0022 say
-		 * it must not be.
+		 * menu open to reach it from, which the state plane's design says it
+		 * must not be.
 		 *
 		 * The running loop always dispatched this way and so could not go
 		 * stale; a hand-kept list here would go stale again the next time
@@ -734,14 +735,14 @@ static bool menu_pause(const diatom_session *sn)
 	return false;
 }
 
-/* One game, start to finish. Extracted so the protocol loop (ADR-0009) can run
- * it repeatedly in a process that never exits - which is what makes a warm
+/* One game, start to finish. Extracted so the protocol loop can run it
+ * repeatedly in a process that never exits - which is what makes a warm
  * launch ~35 ms instead of ~700 ms, measured. Standalone mode calls it once.
  *
  * Returns 0 on a clean run, or a non-zero code that main turns into an exit
  * status or an ERROR message depending on how Diatom was started. */
 
-/* ---- ADR-0020's state plane ------------------------------------------- */
+/* ---- the state plane -------------------------------------------------- */
 
 static const char *const level_kind_name[DIATOM_LEVEL_COUNT] = {
 	"volume", "brightness"
@@ -764,9 +765,9 @@ static void level_emit(int k, int idx, int cnt)
 }
 
 /* Polled with the input bitfield and emitted on change. The port cannot send
- * anything itself - it must not know the protocol exists (ADR-0007) - so this
- * is the whole path by which a volume press during a game reaches a launcher
- * that is not drawing and cannot see it. */
+ * anything itself - it must not know the protocol exists - so this is the
+ * whole path by which a volume press during a game reaches a launcher that is
+ * not drawing and cannot see it. */
 static void levels_tick(void)
 {
 	int k, idx, cnt;
@@ -780,8 +781,8 @@ static void levels_tick(void)
 }
 
 /* Did any level change since the last call? Separate from levels_tick, which
- * runs only with a launcher connected: the MENU chord it serves (ADR-0037)
- * matters standalone too, where MENU's release ends the session. */
+ * runs only with a launcher connected: the MENU chord it serves matters
+ * standalone too, where MENU's release ends the session. */
 static bool levels_moved(void)
 {
 	static int seen[DIATOM_LEVEL_COUNT] = { -1, -1 };
@@ -811,7 +812,7 @@ static void levels_emit_all(void)
 			level_emit(k, idx, cnt);
 }
 
-/* ---- audio output, ADR-0029 --------------------------------------------- */
+/* ---- audio output ------------------------------------------------------- */
 
 /* What was last reported, so a change can be told from a restatement. Empty is
  * a real value here - the default device - so `said` carries "reported at all"
@@ -842,9 +843,9 @@ static void audio_emit(void)
 }
 
 /* Polled beside the levels, and for the identical reason: the port cannot send
- * anything itself (ADR-0007), so this is the whole path by which a sink that
- * died under it - a headset switched off mid-game - reaches a launcher that is
- * not drawing and cannot see it. */
+ * anything itself, so this is the whole path by which a sink that died under
+ * it - a headset switched off mid-game - reaches a launcher that is not
+ * drawing and cannot see it. */
 static void audio_tick(void)
 {
 	char dev[128];
@@ -859,7 +860,7 @@ static void audio_tick(void)
  * the port falls back, keeps the game running, and AUDIO then says where the
  * sound actually ended up. Answering with an error as well would describe the
  * same event twice and invite a launcher to treat it as fatal, which is the
- * behavior ADR-0029 exists to remove. */
+ * behavior the fallback exists to remove. */
 static void audio_set(const diatom_msg *m)
 {
 	char actual[128];
@@ -868,7 +869,7 @@ static void audio_set(const diatom_msg *m)
 	audio_emit();
 }
 
-/* ---- mute, ADR-0031 ------------------------------------------------------
+/* ---- mute ----------------------------------------------------------------
  *
  * The one state on the plane this host does not own. The launcher reads a
  * hardware switch; all this side does is hold the output off and, crucially,
@@ -884,7 +885,7 @@ static void mute_set(const diatom_msg *m)
 	mute_emit();
 }
 
-/* ---- quiet, ADR-0032 -----------------------------------------------------
+/* ---- quiet ---------------------------------------------------------------
  *
  * The launcher decides - it knows what else is playing - and this host does
  * it, in its own stream (audio.c). Never emitted unsolicited: nothing on this
@@ -900,7 +901,7 @@ static void quiet_set(const diatom_msg *m)
 	quiet_emit();
 }
 
-/* ---- low battery, ADR-0040 ------------------------------------------------
+/* ---- low battery ----------------------------------------------------------
  *
  * The launcher decides what counts as low and says so; the port draws the
  * disc over the game. Held across sessions like quiet, and never emitted
@@ -1109,7 +1110,7 @@ static int run_session_inner(const diatom_session *sn)
 
 	/* Every game starts from identity and from an unknown level, so a launcher
 	 * that sends no map gets no map, and the first poll reports where the
-	 * levels actually are without being asked. ADR-0020. */
+	 * levels actually are without being asked. */
 	diatom_input_reset_map();
 	levels_forget();
 	audio_forget();
@@ -1153,7 +1154,7 @@ static int run_session_inner(const diatom_session *sn)
 		diatom_proto_send("ERROR\tcode=rom_unreadable\tmsg=core needs content");
 		return 4;
 	}
-	/* Firmware, checked BEFORE the core is asked to load - ADR-0017.
+	/* Firmware, checked BEFORE the core is asked to load.
 	 *
 	 * Diatom does not know that a PC Engine CD needs `syscard3.pce`, and will
 	 * not learn: it has no core list, and a firmware table is a core list by
@@ -1161,10 +1162,10 @@ static int run_session_inner(const diatom_session *sn)
 	 * thing that knows, and it says so with `firmware=`.
 	 *
 	 * Checked here rather than after a failed load because the distinction
-	 * ADR-0009 draws is about the DISPLAY. A missing System Card means the game
-	 * never started, so the launcher must keep drawing and hear ERROR. The core
-	 * only ever tells us `retro_load_game` returned false, which is the same
-	 * answer it gives for a corrupt ROM. */
+	 * the protocol draws is about the DISPLAY. A missing System Card means
+	 * the game never started, so the launcher must keep drawing and hear
+	 * ERROR. The core only ever tells us `retro_load_game` returned false,
+	 * which is the same answer it gives for a corrupt ROM. */
 	if (sn->firmware && *sn->firmware) {
 		char path[1024];
 		snprintf(path, sizeof path, "%s/%s", g_policy.system_dir, sn->firmware);
@@ -1177,7 +1178,7 @@ static int run_session_inner(const diatom_session *sn)
 
 	/* Before the core starts, because the address space is resolved during
 	 * the load and it cannot be laid out until someone says which console it
-	 * belongs to. ADR-0026: Diatom never guesses this. */
+	 * belongs to. Diatom never guesses this. */
 	diatom_cheevos_set_console((unsigned)sn->console);
 
 	if (!diatom_core_start(g_core, sn->rom)) {
@@ -1214,7 +1215,7 @@ static int run_session_inner(const diatom_session *sn)
 	 * types, and it is the right call for every core here. A core that wants a
 	 * specific device type needs the controller_type field in diatom_policy,
 	 * which is still unused, and a launcher that knows to ask. Digital-only
-	 * (ADR-0003) removes axes, not device types. */
+	 * input removes axes, not device types. */
 	g_core->set_controller_port_device(0, RETRO_DEVICE_JOYPAD);
 
 	/* SRAM first: it is the game's own data and is not optional. A state, if
@@ -1253,7 +1254,7 @@ static int run_session_inner(const diatom_session *sn)
 	diatom_audio_prime();
 
 	/* The rect is computed from BASE geometry and does not move again unless
-	 * the user asks - ADR-0011.
+	 * the user asks.
 	 *
 	 * Cores announce hires by calling SET_GEOMETRY with a larger base_width
 	 * mid-run (measured: 3 of 6 do this). Recomputing an integer factor from
@@ -1294,9 +1295,9 @@ static int run_session_inner(const diatom_session *sn)
 	g_idle_after_ms = 0;
 	idle_restart();
 
-	/* The display handover, and the reason ADR-0009 separates ERROR from EXIT:
-	 * from here the launcher must stop drawing. Announced before the warmup,
-	 * because the warmup already puts frames on the panel. */
+	/* The display handover, and the reason the protocol separates ERROR from
+	 * EXIT: from here the launcher must stop drawing. Announced before the
+	 * warmup, because the warmup already puts frames on the panel. */
 	diatom_proto_send("RUNNING");
 	g_phase = PHASE_RUNNING;   /* a crash from here on is EXIT, not ERROR */
 
@@ -1371,14 +1372,13 @@ static int run_session_inner(const diatom_session *sn)
 	       (sn->limit <= 0 || frames < sn->limit)) {
 		uint64_t now;
 
-		/* ADR-0034. At 1x a turn of this loop is one core frame and one pacing
-		 * period. Fast, a turn covers TWO periods and is drawn once: presenting
-		 * costs ~7 ms on this thread, so drawing every refresh would leave the
-		 * core too little of each. It runs core frames up to the step - two
-		 * periods' worth - or until the next one would not fit in the two
-		 * periods less what presenting costs, whichever comes first. The
-		 * present cost is the running average, so a cheaper display mode buys
-		 * speed by itself. */
+		/* At 1x a turn of this loop is one core frame and one pacing period.
+		 * Fast, a turn covers TWO periods and is drawn once: presenting costs
+		 * ~7 ms on this thread, so drawing every refresh would leave the core
+		 * too little of each. It runs core frames up to the step - two periods'
+		 * worth - or until the next one would not fit in the two periods less
+		 * what presenting costs, whichever comes first. The present cost is the
+		 * running average, so a cheaper display mode buys speed by itself. */
 		const bool fast = g_speed > 1;
 		const int periods = fast ? 2 : 1;
 		const uint64_t batch_t0 = diatom_port_now_us();
@@ -1398,10 +1398,11 @@ static int run_session_inner(const diatom_session *sn)
 			ran++;
 
 			/* Immediately after the frame the core produced, and before
-			 * anything else can touch memory. This is the whole of ADR-0025 in
-			 * one line: conditions compare against the previous frame, so they
-			 * have to be evaluated once per frame, here, and not over a socket
-			 * at 10Hz. Every frame the game runs, fast or not. */
+			 * anything else can touch memory. This one line is why
+			 * achievements belong to the frontend: conditions compare against
+			 * the previous frame, so they have to be evaluated once per frame,
+			 * here, and not over a socket at 10Hz. Every frame the game runs,
+			 * fast or not. */
 			diatom_cheevos_frame();
 
 			if (!fast || ran >= periods * g_speed) break;
@@ -1423,7 +1424,7 @@ static int run_session_inner(const diatom_session *sn)
 			fast_turns++;
 		}
 
-		/* ADR-0011 locked the rect and never moved it. That is right when the
+		/* The rect was locked at load and never moved. That is right when the
 		 * load-time geometry is the mode the game runs in and the change is an
 		 * excursion - SNES and PC Engine hires - and wrong when the load-time
 		 * value is a boot artifact.
@@ -1441,7 +1442,7 @@ static int run_session_inner(const diatom_session *sn)
 		 * displaying turned out to be transient. Genesis corrects itself
 		 * within half a second, during the boot logo. A hires menu opened
 		 * minutes in does not qualify and the rect stays put, which is the
-		 * behavior ADR-0011 exists to protect. */
+		 * behavior locking the rect exists to protect. */
 		if (diatom_env_geometry_changed()) {
 			int nw, nh;
 			double na;
@@ -1458,7 +1459,7 @@ static int run_session_inner(const diatom_session *sn)
 				 * mode the game actually runs in by taking the
 				 * last one. The core facts script took the first and
 				 * recorded Genesis as 256x192 at 1.5238 - twenty-
-				 * nine frames of boot - which ADR-0018's display
+				 * nine frames of boot - which a display
 				 * table was then computed from. */
 				printf("diatom: %dx%d (max %ux%u) aspect %.4f, "
 				       "%.4f fps, %.0f Hz -> %d Hz\n",
@@ -1506,9 +1507,9 @@ static int run_session_inner(const diatom_session *sn)
 				                  ? "OPTSET\tkey=%s"
 				                  : "ERROR\tcode=bad_option\tmsg=%s", m.key);
 				break;
-			/* Also honored while running, not only from the menu. ADR-0016
-			 * puts slot CHOICE in the launcher's menu, but nothing about that
-			 * requires the game to be paused to write a state. */
+			/* Also honored while running, not only from the menu. Slot CHOICE
+			 * belongs in the launcher's menu, but nothing about that requires
+			 * the game to be paused to write a state. */
 			case DIATOM_MSG_SAVE:
 				diatom_proto_send(diatom_state_save(g_core, m.path)
 				                  ? "SAVED\tpath=%s"
@@ -1527,15 +1528,14 @@ static int run_session_inner(const diatom_session *sn)
 				diatom_cheevos_runtime_reset();
 				diatom_proto_send("RESETDONE");
 				break;
-			/* HANGUP is deliberately not a stop. ADR-0008 exists so a
-			 * launcher that died cannot take a running game with it. */
+			/* HANGUP is deliberately not a stop. Diatom is a separate process
+			 * so a launcher that died cannot take a running game with it. */
 			default: state_plane_msg(&m); break;
 			}
 		}
 
 		/* The level keys, stepped here from what the port reports, before the
-		 * tick that reports a move and the MENU chord check that reads one.
-		 * ADR-0038. */
+		 * tick that reports a move and the MENU chord check that reads one. */
 		diatom_levels_frame();
 		levels_tick();
 		audio_tick();
@@ -1552,7 +1552,7 @@ static int run_session_inner(const diatom_session *sn)
 
 		/* R1 belongs to MENU+R1 from the moment MENU is down - not from when
 		 * R1 is, so the frame R1 goes down cannot leak into the game - and
-		 * stays hidden after MENU is let go, until R1 is too. ADR-0034. */
+		 * stays hidden after MENU is let go, until R1 is too. */
 		if (buttons & DIATOM_BIT(DIATOM_BTN_MENU)) chord_hold = DIATOM_BIT(DIATOM_BTN_R1);
 		else                                       chord_hold &= buttons;
 
@@ -1561,7 +1561,7 @@ static int run_session_inner(const diatom_session *sn)
 		diatom_env_suppress(held_at_entry | chord_hold);
 
 		/* MENU+R1 steps the speed. MENU is a modifier, so it is armed by its
-		 * press and acts on its RELEASE - ADR-0034. */
+		 * press and acts on its RELEASE. */
 		{
 			uint32_t pressed = buttons & ~prev_buttons;
 
@@ -1572,7 +1572,7 @@ static int run_session_inner(const diatom_session *sn)
 			/* A level that moves while MENU is held made MENU a modifier
 			 * too: the Pixel 2's brightness is MENU plus the volume keys,
 			 * and letting go of MENU afterwards must not open the menu.
-			 * Read every frame so `levels_moved` stays current. ADR-0037. */
+			 * Read every frame so `levels_moved` stays current. */
 			if (levels_moved() && (buttons & DIATOM_BIT(DIATOM_BTN_MENU)))
 				menu_chorded = true;
 
@@ -1714,7 +1714,7 @@ static int run_session_inner(const diatom_session *sn)
 	/* The frame the player was looking at, for the launcher's card - written
 	 * with the exit state so a card that shows a preview always has a state
 	 * to resume, and announced before EXIT so it is on disk before the
-	 * launcher redraws. ADR-0024. */
+	 * launcher redraws. */
 	if (sn->preview && write_preview(sn->preview))
 		diatom_proto_send("PREVIEW\tpath=%s", sn->preview);
 
@@ -1778,7 +1778,7 @@ static int run_session_inner(const diatom_session *sn)
 	}
 
 	diatom_core_stop(g_core);
-	/* No dlclose. Ever. ADR-0006. */
+	/* No dlclose. Ever. */
 
 	/* Stop presenting BEFORE saying so. The launcher begins drawing the moment
 	 * it reads EXIT, and until this call returned the flip thread could still
@@ -1803,7 +1803,7 @@ static int run_session_inner(const diatom_session *sn)
 	 * Always `user`, and that is not a placeholder. Every way of arriving here
 	 * is someone deciding to stop: STOP or QUIT from the launcher, MENU when
 	 * standalone, a closed window, or SIGTERM - which on the Brick is the power
-	 * button, so still the player. The other two reasons ADR-0009 lists are
+	 * button, so still the player. The other two reasons the protocol lists are
 	 * produced elsewhere: `crash` by the handler above, since a crash never
 	 * reaches this line, and `error` by nothing yet - there is no post-RUNNING
 	 * failure Diatom can currently detect that is not a crash. */
@@ -1827,7 +1827,7 @@ static int run_session(const diatom_session *sn)
 int main(int argc, char **argv)
 {
 	const char *core_path = NULL, *rom_path = NULL, *shot_path = NULL;
-	/* ADR-0014: stretch by default, judged on the panel. A handheld's screen
+	/* Stretch by default, judged on the panel. A handheld's screen
 	 * is its whole interface, and full use of it beat both the letterbox and
 	 * the crop. nearest because sharp earned nothing visible at these factors
 	 * and is the only thing that has made this loop miss a frame. */
@@ -1855,9 +1855,9 @@ int main(int argc, char **argv)
 		else if (!strcmp(argv[i], "--state-on-exit") && i + 1 < argc) state_exit = argv[++i];
 		else if (!strcmp(argv[i], "--preview-on-exit") && i + 1 < argc) preview_path = argv[++i];
 		else if (!strcmp(argv[i], "--firmware") && i + 1 < argc) firmware = argv[++i];
-		/* ADR-0026. Present on the command line as well as the protocol so a
-		 * set can be exercised on the desktop with no launcher at all, which
-		 * is how anything here gets debugged. */
+		/* Present on the command line as well as the protocol so a set can be
+		 * exercised on the desktop with no launcher at all, which is how
+		 * anything here gets debugged. */
 		else if (!strcmp(argv[i], "--cheevos") && i + 1 < argc) cheevos_path = argv[++i];
 		else if (!strcmp(argv[i], "--console") && i + 1 < argc)
 			console = (int)strtol(argv[++i], NULL, 10);
@@ -1911,8 +1911,8 @@ int main(int argc, char **argv)
 	 *
 	 * g_mode is a static and defaults to 0, which is diatom_modes[0] -
 	 * `integer`. The real default is `stretch`, and it was only ever applied
-	 * once a session started. Harmless while nothing could ask; ADR-0022 lets
-	 * a launcher query DISPLAY on an idle Diatom, and it answered
+	 * once a session started. Harmless while nothing could ask; the state
+	 * plane lets a launcher query DISPLAY on an idle Diatom, and it answered
 	 * `mode=integer` for a frontend that would have used `stretch`. Caught on
 	 * hardware 2026-08-26 by asking with no game loaded. */
 	g_mode   = start_mode;
@@ -2011,7 +2011,7 @@ int main(int argc, char **argv)
 			sn.core     = m.core;
 			sn.rom      = m.rom[0] ? m.rom : NULL;
 			sn.firmware = m.firmware[0] ? m.firmware : NULL;
-			/* ADR-0024: the launcher owns where things persist and says so
+			/* The launcher owns where things persist and says so
 			 * per game. resume is load-if-exists - a missing state is a
 			 * fresh start, not an error, which is what makes it safe to
 			 * pass unconditionally. */

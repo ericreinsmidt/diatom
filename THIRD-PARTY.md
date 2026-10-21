@@ -1,7 +1,7 @@
 # Third-party notices
 
-Diatom's own code is intended to be permissively licensed (see ADR-0002 for why
-that matters - escaping GPL inheritance is a founding goal of the project).
+Diatom's own code is intended to be permissively licensed: escaping GPL
+inheritance is a founding goal of the project.
 
 ## `src/libretro.h`
 
@@ -20,13 +20,13 @@ Full text is at the top of the file.
 ## `vendor/rcheevos/`
 
 RetroAchievements' implementation of their achievement condition language,
-vendored under ADR-0025 so the build stays self-contained.
+vendored so the build stays self-contained.
 
 - **Copyright (c) 2018 RetroAchievements.org**
 - **MIT licensed**, full text in `vendor/rcheevos/LICENSE`.
 
 MIT is the whole reason this is possible rather than a problem: it is diatom's
-own license, so ADR-0002's founding goal - escaping GPL inheritance - is
+own license, so the project's founding goal - escaping GPL inheritance - is
 untouched. The networking halves (`rc_client`, `rapi`, `rurl`) are deliberately
 not vendored; `vendor/rcheevos/README.md` lists every omission and why.
 

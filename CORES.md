@@ -28,24 +28,21 @@ Each core also reports its own name and version, which diatom logs at
 load and which usually carries an upstream git hash. Those strings are
 recorded alongside the measurements that used them.
 
-## C++ cores do not run on the Brick as fetched
+## C++ cores on TrimUI's firmware
 
-Measured 2026-08-24/25. `snes9x` (mainline), `gambatte`, `mesen-s` and
-`mednafen_supafaust` all fail to `dlopen` with
+Measured 2026-08-24/25, on the Brick's TrimUI firmware. `snes9x` (mainline),
+`gambatte`, `mesen-s` and `mednafen_supafaust` all failed to `dlopen` with
 `GLIBCXX_3.4.29 not found`. The buildbot builds C++ cores against GCC 11;
-the Brick ships `libstdc++.so.6.0.28`, which tops out at `GLIBCXX_3.4.28`.
-One version short.
+that firmware shipped `libstdc++.so.6.0.28`, which tops out at
+`GLIBCXX_3.4.28`. One version short.
 
 Checking `GLIBC_` alone does not catch this - the C++ runtime versions
 its symbols separately as `GLIBCXX_`, and a core can be clean on one and
 fail on the other.
 
-The fix is already to hand: the toolchain container from ADR-0012 has
-GCC 10.2.1, whose cross `libstdc++.so.6.0.28` provides exactly
-`GLIBCXX_3.4.28` - the same version the device ships. A C++ core built
-there runs unmodified, with provenance pinned to an upstream commit
-rather than to a nightly. Bundling a newer `libstdc++` beside the cores
-would also work and is what other firmwares do.
+plastron, which both devices run now, ships `libstdc++.so.6.0.34` (GCC
+15.2, up to `GLIBCXX_3.4.34`), so the runtime no longer stands in their
+way. They have not been measured on it.
 
 C cores - fceumm, picodrive, genesis_plus_gx, mgba, mednafen_pce_fast -
 are unaffected and load as fetched.

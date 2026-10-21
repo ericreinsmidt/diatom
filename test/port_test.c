@@ -1,7 +1,8 @@
 /* The port's audio contract, exercised against a real port.
  *
- * ADR-0007 says the port owns opening a device and the host owns choosing one,
- * and ADR-0029 leans on three properties that nothing here used to check:
+ * The port owns opening a device and the host owns choosing one, and a sound
+ * device the launcher can change leans on three properties that nothing here
+ * used to check:
  *
  *   it falls back    a device that will not open leaves the port on the
  *                    default and STILL RUNNING, because a sink that can be set

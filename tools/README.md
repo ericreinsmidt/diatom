@@ -24,8 +24,9 @@ own buildbot.
 
 *Do the numbers in `docs/` still describe the cores we actually ship?*
 
-On 2026-08-25 an audit found that **three of the six rows in ADR-0015's aspect
-table described cores the project had rejected the day before.** Genesis went
+On 2026-08-25 an audit found that **three of the six rows in the
+integer-vertical aspect table described cores the project had rejected the day
+before.** Genesis went
 1.3333 to 1.5238 when PicoDrive lost to Genesis Plus GX; SNES 1.3333 to 1.5842
 when snes9x 1.63 lost to snes9x2010; NES 1.2190 to 1.3061 on a rebuilt FCEUmm.
 

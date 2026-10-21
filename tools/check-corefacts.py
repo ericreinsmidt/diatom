@@ -11,13 +11,13 @@ that file describes a binary the project no longer runs, and this fails the
 moment the manifest changes rather than months later when someone notices an
 aspect ratio looks wrong.
 
-That is exactly the failure it was written for. ADR-0015's aspect table was
-measured 2026-08-24, and the core selection a day later replaced the cores three
-of its six rows had been measured against - Genesis went 1.3333 to 1.5238 when
-PicoDrive lost to Genesis Plus GX, SNES 1.3333 to 1.5842 when snes9x 1.63 lost
-to snes9x2010, and NES 1.2190 to 1.3061 on a rebuilt FCEUmm. Nothing failed.
-Nobody could have known without re-measuring by hand, which finally happened a
-day later and only by accident.
+That is exactly the failure it was written for. The integer-vertical aspect
+table was measured 2026-08-24, and the core selection a day later replaced the
+cores three of its six rows had been measured against - Genesis went 1.3333 to
+1.5238 when PicoDrive lost to Genesis Plus GX, SNES 1.3333 to 1.5842 when snes9x
+1.63 lost to snes9x2010, and NES 1.2190 to 1.3061 on a rebuilt FCEUmm. Nothing
+failed. Nobody could have known without re-measuring by hand, which finally
+happened a day later and only by accident.
 
 Worth recording that the hand audit ALSO got it wrong, in both directions: it
 measured a device staging directory that had drifted from CORES.md, so it read

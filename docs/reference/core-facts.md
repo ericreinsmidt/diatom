@@ -6,8 +6,8 @@ Measured on the device by a script kept outside this repository.
 **Every number here was measured, on the device, from a binary whose
 sha256 matched [CORES.md](../../CORES.md) both before and after the push.**
 Cite this file rather than restating its numbers - a figure copied into
-prose cannot be re-checked, which is how ADR-0015 came to describe four
-cores the project no longer runs.
+prose cannot be re-checked, which is how an aspect table came to describe
+four cores the project no longer runs.
 
 Rows are per *content*, not per system: PAL and NTSC differ in both fps
 and aspect, so one row per system cannot be correct.

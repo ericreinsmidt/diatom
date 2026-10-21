@@ -91,14 +91,14 @@ static int      g_peak;
 static uint64_t g_nonzero, g_total;
 static double   g_sq;
 
-/* QUIET, ADR-0032: the game's sound replaced by silence while the launcher has
- * something else playing, with the stream itself carrying on untouched.
+/* QUIET: the game's sound replaced by silence while the launcher has something
+ * else playing, with the stream itself carrying on untouched.
  *
  * A gain walked one step a frame toward its target rather than a switch,
  * because a switch is a step in the waveform, and a step is broadband energy -
  * a click - whatever the waveform was doing. 10 ms is the usual length for a
- * ramp nobody hears and a cut nobody waits for; the ADR leaves the number to
- * the device, so it is set here and checked there.
+ * ramp nobody hears and a cut nobody waits for; the design leaves the number
+ * to the device, so it is set here and checked there.
  *
  * Applied last, after the resampler and after rate control, which therefore
  * never know: the buffer fills and drains exactly as it would have. */
@@ -339,7 +339,7 @@ void diatom_audio_prime(void)
  * until the buffer either empties or overflows - the only question is which,
  * and how long it takes. Nudging the ratio toward keeping the buffer half full
  * closes the loop, and it is why the port must expose capacity and not just
- * occupancy (ADR-0007).
+ * occupancy.
  */
 void diatom_audio_sync(void)
 {

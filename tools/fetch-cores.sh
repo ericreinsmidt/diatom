@@ -11,15 +11,14 @@
 # (see docs/working-agreement.md). Diatom has no core list. But the test matrix
 # is evidence - the geometry, envelope and pacing claims in docs/ rest on
 # specific binaries - and evidence whose provenance is unstated cannot be
-# re-checked. So the bytes stay out of the repository and the manifest goes in,
-# the same trade ADR-0012 made for the sysroot.
+# re-checked. So the bytes stay out of the repository and the manifest goes in.
 #
 # The buildbot publishes to latest/, which is UNPINNED. That is the exact drift
-# ADR-0012 rejected `:latest` for, and it cannot be fixed from this end: the
-# buildbot keeps no archive to pin to. What can be fixed is knowing what was
-# actually used, which is what CORES.md is for. A core's own reported version
-# string, logged whenever Diatom runs it, usually carries an upstream git hash
-# and is the stronger record of the two.
+# pinning by digest rather than `:latest` prevents, and it cannot be fixed from
+# this end: the buildbot keeps no archive to pin to. What can be fixed is
+# knowing what was actually used, which is what CORES.md is for. A core's own
+# reported version string, logged whenever Diatom runs it, usually carries an
+# upstream git hash and is the stronger record of the two.
 #
 # THIS SCRIPT VERIFIES. IT DOES NOT DISCOVER.
 #
@@ -163,7 +162,7 @@ for c in $CORES; do
 	elif [ "$lic" != "$want_lic" ]; then
 		echo "  NOTE: core-info now says \"$lic\" for $c, pinned as \"$want_lic\"." >&2
 		echo "        Same bytes, so this is a metadata correction upstream." >&2
-		echo "        Check it against ADR-0023 and update the pin if it stands." >&2
+		echo "        Check the new license and update the pin if it stands." >&2
 		warned=1
 	fi
 done
@@ -187,8 +186,7 @@ done
 	echo
 	echo "Licenses are pinned with the hashes and re-checked on every run against"
 	echo "libretro's core-info. The set is **not uniformly GPL** and the"
-	echo "differences matter to anyone shipping an image - see"
-	echo "[ADR-0023](docs/decisions/0023-core-licensing.md)."
+	echo "differences matter to anyone shipping an image."
 	echo
 	echo "| Core | License | Bytes | sha256 |"
 	echo "|---|---|---|---|"
@@ -200,24 +198,21 @@ done
 	echo "load and which usually carries an upstream git hash. Those strings are"
 	echo "recorded alongside the measurements that used them."
 	echo
-	echo "## C++ cores do not run on the Brick as fetched"
+	echo "## C++ cores on TrimUI's firmware"
 	echo
-	echo "Measured 2026-08-24/25. \`snes9x\` (mainline), \`gambatte\`, \`mesen-s\` and"
-	echo "\`mednafen_supafaust\` all fail to \`dlopen\` with"
+	echo "Measured 2026-08-24/25, on the Brick's TrimUI firmware. \`snes9x\` (mainline),"
+	echo "\`gambatte\`, \`mesen-s\` and \`mednafen_supafaust\` all failed to \`dlopen\` with"
 	echo "\`GLIBCXX_3.4.29 not found\`. The buildbot builds C++ cores against GCC 11;"
-	echo "the Brick ships \`libstdc++.so.6.0.28\`, which tops out at \`GLIBCXX_3.4.28\`."
-	echo "One version short."
+	echo "that firmware shipped \`libstdc++.so.6.0.28\`, which tops out at"
+	echo "\`GLIBCXX_3.4.28\`. One version short."
 	echo
 	echo "Checking \`GLIBC_\` alone does not catch this - the C++ runtime versions"
 	echo "its symbols separately as \`GLIBCXX_\`, and a core can be clean on one and"
 	echo "fail on the other."
 	echo
-	echo "The fix is already to hand: the toolchain container from ADR-0012 has"
-	echo "GCC 10.2.1, whose cross \`libstdc++.so.6.0.28\` provides exactly"
-	echo "\`GLIBCXX_3.4.28\` - the same version the device ships. A C++ core built"
-	echo "there runs unmodified, with provenance pinned to an upstream commit"
-	echo "rather than to a nightly. Bundling a newer \`libstdc++\` beside the cores"
-	echo "would also work and is what other firmwares do."
+	echo "plastron, which both devices run now, ships \`libstdc++.so.6.0.34\` (GCC"
+	echo "15.2, up to \`GLIBCXX_3.4.34\`), so the runtime no longer stands in their"
+	echo "way. They have not been measured on it."
 	echo
 	echo "C cores - fceumm, picodrive, genesis_plus_gx, mgba, mednafen_pce_fast -"
 	echo "are unaffected and load as fetched."

@@ -1,4 +1,4 @@
-"""ADR-0020's state plane, end to end against the stub core.
+"""The state plane, end to end against the stub core.
 
 Every case here is one that was actually got wrong while building it, which is
 why they are cases rather than a smoke test:
@@ -8,9 +8,9 @@ why they are cases rather than a smoke test:
   - a refused SETMAP left the table cleared rather than unchanged.
   - labels have to follow a remap, or a remap screen shows the wrong verbs.
 
-Since extended past ADR-0020's four states to whatever else the plane carries -
-session persistence (ADR-0024) and achievements (ADR-0026) - because the
-harness and the fixture are the same and a second copy of both would drift.
+Since extended past the plane's first four states to whatever else it carries -
+session persistence and achievements - because the harness and the fixture are
+the same and a second copy of both would drift.
 
 The level half cannot be tested here: a desktop has no volume or brightness of
 its own, so `LEVELS count=0` is the whole of it. Levels are exercised on
@@ -101,11 +101,11 @@ check("bad pair refuses whole message", got,
 
 send("SETMAP\tmap=identity"); check("identity clears", drain(), ["MAP\tmap=identity"])
 
-# ADR-0028: a pulse is part of a binding, so it travels in the same field and
-# obeys the same all-or-nothing rule. The rate itself cannot be checked here -
-# the desktop port reads the live keyboard, so no script can hold a button - and
-# is measured on hardware instead. What IS checkable is the grammar, which is
-# where the bugs live.
+# A pulse is part of a binding, so it travels in the same field and obeys the
+# same all-or-nothing rule. The rate itself cannot be checked here - the desktop
+# port reads the live keyboard, so no script can hold a button - and is measured
+# on hardware instead. What IS checkable is the grammar, which is where the bugs
+# live.
 send("SETMAP\tmap=x:a~3")
 check("turbo binding echoes with its period", drain(), ["MAP\tmap=x:a~3"])
 
@@ -124,7 +124,7 @@ for bad, why in (("x:a~0",    "a zero period is a plain binding in a costume"),
                  ("x:a~3x",   "trailing junk after the period"),
                  ("x:a~",     "empty period"),
                  ("x:none~3", "a pulse on an unbound button"),
-                 ("x:menu~3", "a pulse cannot smuggle menu past ADR-0019")):
+                 ("x:menu~3", "a pulse cannot make menu mappable")):
     send("SETMAP\tmap=" + bad); got = drain()
     check("refused, unchanged: " + why, got,
           ["ERROR\tcode=bad_map\tmsg=" + bad, "MAP\tmap=a:a~2"])
@@ -169,7 +169,7 @@ send("RESET"); check("reset while running", drain(), ["RESETDONE"])
 
 send("STOP"); print("STOP ->", drain(2.0))
 
-# --- ADR-0024: session persistence over the protocol -----------------------
+# --- Session persistence over the protocol ---------------------------------
 import tempfile, pathlib
 tmp = tempfile.mkdtemp(prefix="diatom-persist-")
 st, pv = f"{tmp}/game.state", f"{tmp}/game.bmp"
@@ -194,7 +194,7 @@ check_that("resume path accepted, game reaches RUNNING",
 before = pathlib.Path(pv).stat().st_mtime_ns
 send("STOP"); drain(2.0)
 
-# --- ADR-0026: achievements over the protocol ------------------------------
+# --- Achievements over the protocol ----------------------------------------
 # The unit test (make check-cheevos) proves the mapping and the evaluation.
 # This proves the WIRING: that a set named on RUN is read, that the frame call
 # is actually in the loop, and that an unlock reaches the launcher. Every one
@@ -238,7 +238,7 @@ send("SETCHEEVOS\tpath="); got = drain(2.0)
 summary = next((l for l in got if l.startswith("CHEEVOS\t")), "")
 check_that("an empty path unloads", "count=0" in summary, summary)
 
-# --- ADR-0027: an overlay composited over a running game -------------------
+# --- An overlay composited over a running game -----------------------------
 # The launcher cannot draw while Diatom owns the display, so a notice has to
 # be handed over as pixels. This checks the carrying, not the look: that the
 # format is read, that a malformed one is refused rather than drawn, and that
@@ -287,9 +287,9 @@ send("DISPLAY"); got = drain(2.0)
 check_that("the game is running again after RESUME",
            any(l.startswith("DISPLAY\t") for l in got), got)
 
-# Mute, ADR-0031. The one state this host obeys rather than owns, so what is
-# checked is that it answers honestly and remembers - not that anything went
-# quiet, which a desktop has no analog stage to do.
+# Mute: the one state this host obeys rather than owns, so what is checked is
+# that it answers honestly and remembers - not that anything went quiet, which a
+# desktop has no analog stage to do.
 send("MUTE"); got = drain(2.0)
 check_that("MUTE answers before anyone has set it",
            any(l == "MUTE\ton=0" for l in got), got)
@@ -309,8 +309,8 @@ send("SETMUTE\ton=true"); got = drain(2.0)
 check_that("a value that is not 1 releases rather than holds",
            any(l == "MUTE\ton=0" for l in got), got)
 
-# Quiet, ADR-0032. Unlike mute this one IS this host's to do, so the sound
-# itself is checked, below, once the process has gone and the tap is flushed.
+# Quiet. Unlike mute this one IS this host's to do, so the sound itself is
+# checked, below, once the process has gone and the tap is flushed.
 send("SPEED"); got = drain(1.0)
 check_that("SPEED answers 1x before anyone has stepped it",
            any(l == "SPEED\tx=1" for l in got), got)
@@ -323,8 +323,8 @@ check_that("SETQUIET is acknowledged with the new state",
 send("SETQUIET\ton=0"); got = drain(1.0)
 check_that("and released", any(l == "QUIET\ton=0" for l in got), got)
 
-# Low battery, ADR-0040: the launcher's to say, the port's to draw. The host
-# half is what a desktop can check: it answers what it was told, and holds it.
+# Low battery: the launcher's to say, the port's to draw. The host half is what
+# a desktop can check: it answers what it was told, and holds it.
 send("LOWBATTERY"); got = drain(1.0)
 check_that("LOWBATTERY answers before anyone has set it",
            any(l == "LOWBATTERY\ton=0\tblink=0" for l in got), got)

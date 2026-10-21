@@ -112,7 +112,7 @@ static bool env_cb(unsigned cmd, void *data)
 		else if (f == RETRO_PIXEL_FORMAT_XRGB8888)
 			g_policy->pixfmt = DIATOM_PIX_XRGB8888;
 		else
-			return false;              /* 0RGB1555 refused - ADR-0007 */
+			return false;              /* 0RGB1555 refused */
 		g_policy->pixfmt_set = true;
 		return true;
 	}
@@ -120,7 +120,7 @@ static bool env_cb(unsigned cmd, void *data)
 	case MASK(RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO): {
 		/* The new geometry is CARRIED now, not just flagged.
 		 *
-		 * ADR-0011 locked the rect from load-time geometry on the theory that a
+		 * The rect was locked from load-time geometry on the theory that a
 		 * mid-run change is a hires excursion. Measured 2026-08-26, that is
 		 * false for Genesis: genesis_plus_gx reports 256x192 at load and
 		 * switches to 320x224 at frame 1 (Phantasy Star IV) or 29 (Herzog
@@ -208,7 +208,7 @@ static bool env_cb(unsigned cmd, void *data)
 	case MASK(RETRO_ENVIRONMENT_SET_INPUT_DESCRIPTORS):
 		/* "B = Jump" for this game, offered free on every load. Kept rather
 		 * than discarded because it is what makes a remap screen readable:
-		 * without it a launcher can only offer `B -> ?`. ADR-0020. */
+		 * without it a launcher can only offer `B -> ?`. */
 		capture_descriptors((const struct retro_input_descriptor *)data);
 		return true;
 
@@ -217,7 +217,7 @@ static bool env_cb(unsigned cmd, void *data)
 	case MASK(RETRO_ENVIRONMENT_SET_CONTROLLER_INFO):
 		return true;
 
-	/* ---- kept for achievements (ADR-0025) -------------------------------- */
+	/* ---- kept for achievements ------------------------------------------- */
 	/* Both were in the ignore list above until 2026-08-29. The map in
 	 * particular had to be captured rather than noted: the header says the
 	 * frontend must keep its own copy, because the core's is valid only for
@@ -260,8 +260,8 @@ static void cb_input_poll(void)
 }
 
 /* Canonical button names. The protocol speaks these, never retropad numbers,
- * so libretro's numbering stops at this file exactly as it stops at the port
- * (ADR-0007, ADR-0020). Order matches the enum. */
+ * so libretro's numbering stops at this file exactly as it stops at the port.
+ * Order matches the enum. */
 static const char *const button_names[DIATOM_BTN_COUNT] = {
 	"up", "down", "left", "right", "a", "b", "x", "y",
 	"l1", "r1", "l2", "r2", "select", "start", "menu"
@@ -270,8 +270,8 @@ static const char *const button_names[DIATOM_BTN_COUNT] = {
 /* Canonical Diatom buttons -> retropad. Near-identity by design; its purpose is
  * keeping libretro.h out of the port, not translation.
  *
- * No longer const: ADR-0019 makes this the ONE layer a remap touches, so there
- * is one implementation of remapping however many ports exist. It is data, and
+ * No longer const: this is the ONE layer a remap touches, so there is one
+ * implementation of remapping however many ports exist. It is data, and
  * `identity_map` below is what RUN resets it to. */
 static int button_map[DIATOM_BTN_COUNT] = {
 	[DIATOM_BTN_UP]     = RETRO_DEVICE_ID_JOYPAD_UP,
@@ -294,10 +294,10 @@ static int button_map[DIATOM_BTN_COUNT] = {
 static int identity_map[DIATOM_BTN_COUNT];
 static bool g_map_saved;
 
-/* Turbo, ADR-0028. A pulse is a property of a BINDING, so this table is written
- * and reset in lockstep with button_map above and never on its own: two tables
- * that both answer "what does X do" would be free to disagree, and preventing
- * that class of disagreement is what ADR-0020 is for.
+/* Turbo. A pulse is a property of a BINDING, so this table is written and
+ * reset in lockstep with button_map above and never on its own: two tables
+ * that both answer "what does X do" would be free to disagree, and that class
+ * of disagreement is why the state plane gives each item one owner.
  *
  * turbo_period[b] is half a cycle in FRAMES - `x:a~3` is three frames pressed,
  * three released - and 0 means an ordinary binding. Frames rather than
@@ -339,8 +339,8 @@ static void relabel(void)
 static void capture_descriptors(const struct retro_input_descriptor *d)
 {
 	memset(g_retro_label, 0, sizeof g_retro_label);
-	/* Port 0 only. Multiple controller ports are not in scope (ADR-0003 keeps
-	 * input digital; nothing here has asked for a second pad yet), and taking
+	/* Port 0 only. Multiple controller ports are not in scope (input is
+	 * digital only; nothing here has asked for a second pad yet), and taking
 	 * port 0's labels is right for the single-player case that does exist. */
 	for (; d && d->description; d++)
 		if (d->port == 0 && d->device == RETRO_DEVICE_JOYPAD &&
@@ -370,7 +370,7 @@ static void ensure_identity(void)
  * called exactly once per retro_run and before any input_state query. Doing it
  * here rather than inside cb_input_state is the whole reason two buttons cannot
  * disagree about where in the cycle they are: that function runs several times
- * a frame, once per queried id. ADR-0028. */
+ * a frame, once per queried id. */
 static void turbo_tick(void)
 {
 	uint32_t held;
@@ -387,7 +387,7 @@ static void turbo_tick(void)
 
 /* RUN resets the map. Diatom is resident, so without this a table sent for one
  * game silently governs the next - a footgun that fires only on the games the
- * user did NOT configure, which is the worst possible place for it. ADR-0020. */
+ * user did NOT configure, which is the worst possible place for it. */
 void diatom_input_reset_map(void)
 {
 	ensure_identity();
@@ -398,7 +398,7 @@ void diatom_input_reset_map(void)
 	relabel();
 }
 
-/* `spec` is ADR-0020's whole-table form: `a:b,x:none`, or `identity`.
+/* `spec` is the state plane's whole-table form: `a:b,x:none`, or `identity`.
  * Applied whole or not at all - a half-applied map is unplayable in a way that
  * is hard to diagnose, so a single bad pair rejects the message. */
 bool diatom_input_set_map(const char *spec)
@@ -426,13 +426,13 @@ bool diatom_input_set_map(const char *spec)
 		if (!colon) return false;
 		*colon = '\0';
 		from = button_by_name(pair);
-		/* MENU is unmappable BY CONSTRUCTION, not by policy - ADR-0019's
-		 * fourth rule. Refusing it on either side is the only place that rule
-		 * can actually be enforced, and letting it through would let a user
-		 * map away the button that opens the screen which would undo it. */
+		/* MENU is unmappable BY CONSTRUCTION, not by policy. Refusing it on
+		 * either side is the only place that rule can actually be enforced,
+		 * and letting it through would let a user map away the button that
+		 * opens the screen which would undo it. */
 		if (from < 0 || from == DIATOM_BTN_MENU) return false;
 
-		/* ADR-0028's pulse. Split the target from its period BEFORE naming the
+		/* The turbo pulse. Split the target from its period BEFORE naming the
 		 * target, so `a~3` reads as the button `a` at period 3 rather than as a
 		 * button nobody has - which is also exactly why a Diatom older than
 		 * this rejects the whole map instead of misreading it. */
@@ -559,7 +559,7 @@ static int16_t cb_input_state(unsigned port, unsigned device,
 	 * finished: holding A while a turbo-X also targets A must give a
 	 * continuously held A rather than an interference pattern between the two.
 	 * So a source in its OFF half-cycle keeps looking instead of returning 0.
-	 * ADR-0028. */
+	 */
 	for (b = 0; b < DIATOM_BTN_COUNT; b++) {
 		if (button_map[b] != (int)id || !(state & DIATOM_BIT(b))) continue;
 		if (!turbo_period[b]) return 1;
@@ -570,8 +570,8 @@ static int16_t cb_input_state(unsigned port, unsigned device,
 }
 
 /* Video and audio callbacks live in main.c, which owns the frame buffer and
- * the pacing decision - ADR-0007 has the frame consumed after retro_run
- * returns, not from inside the callback. */
+ * the pacing decision - the frame is consumed after retro_run returns, not
+ * from inside the callback. */
 extern void diatom_on_video(const void *data, unsigned w, unsigned h, size_t pitch);
 extern void diatom_on_audio_batch_store(const int16_t *data, size_t frames);
 
@@ -593,7 +593,7 @@ static void cb_audio_sample(int16_t l, int16_t r)
 /* THE PIXEL FORMAT IS THE ONE THING A CORE DOES NOT RE-DECLARE.
  *
  * A core announces it from retro_init, which runs ONCE for the life of the
- * process: ADR-0006 keeps every core dlopen'd and never unloads it, so the
+ * process: Diatom keeps every core dlopen'd and never unloads it, so the
  * second game on a core skips straight to load_game. Everything else a core
  * says about itself it says again every load, which is why
  * diatom_cheevos_reset can simply throw the old answer away. The format is the
@@ -621,7 +621,7 @@ void diatom_env_pixfmt_begin(void)
 	if (!g_policy) return;
 	/* Back to the default rather than left on the last game's answer, so a
 	 * core that has never declared one gets something documented instead of
-	 * something inherited. libretro's own default is 0RGB1555, which ADR-0007
+	 * something inherited. libretro's own default is 0RGB1555, which Diatom
 	 * refuses. */
 	g_policy->pixfmt     = DIATOM_PIX_RGB565;
 	g_policy->pixfmt_set = false;

@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: MIT */
 /* Does a RetroAchievements address reach the byte it is supposed to?
  *
- * ADR-0025 moved achievements into Diatom on the strength of one claim: that
+ * Achievements moved into Diatom on the strength of one claim: that
  * conditions compare against the PREVIOUS FRAME, so only something running at
  * frame rate can evaluate them. This is that claim, executed. It runs a real
  * condition out of Blaster Master's set through the vendored runtime, against
@@ -238,10 +238,11 @@ static void on_event(const rc_runtime_event_t *e)
 }
 
 /* Blaster Master, achievement 76195, fetched from RetroAchievements
- * 2026-08-29. The last term is the whole argument of ADR-0025: `d0xH06f0` is
- * that byte's value on the PREVIOUS FRAME, so the condition is true only on
- * the single frame the value goes down. A launcher polling a socket at 10Hz
- * against a 60Hz core sees one frame in six and would miss it. */
+ * 2026-08-29. The last term is the whole argument for keeping achievements in
+ * the frontend: `d0xH06f0` is that byte's value on the PREVIOUS FRAME, so the
+ * condition is true only on the single frame the value goes down. A launcher
+ * polling a socket at 10Hz against a 60Hz core sees one frame in six and
+ * would miss it. */
 static const char *BLASTER_MASTER =
 	"0xH06f3=0_0xH0400=3_0xH00ba=0_0xH06f0<d0xH06f0";
 

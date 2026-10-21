@@ -1,8 +1,8 @@
 /* SPDX-License-Identifier: MIT */
 /* Achievements: the address space, and reading from it.
  *
- * See cheevos.h for why this is Diatom's job and not the launcher's, and
- * ADR-0025 for the measurement behind it.
+ * See cheevos.h for why this is Diatom's job and not the launcher's, and for
+ * the measurement behind it.
  *
  * A RetroAchievements condition names an address like `0x06f3`. That address
  * is not the core's, and it is not the console's either: it is an offset into
@@ -31,13 +31,13 @@
  *
  * PROVENANCE. The descriptor decoding and the region-splitting below follow
  * rcheevos' own src/rc_libretro.c, which is MIT like the rest of it and like
- * Diatom. ADR-0025 records why that one file is not vendored - it drags in
- * rhash's disc and archive readers for playlist hashing Diatom will never do -
- * but not vendoring it is not a license to guess. The console tables it reads
- * ARE vendored and are used here unmodified; what is rewritten is the plumbing
- * between them and libretro's descriptors, and it is rewritten to match. The
- * bit-collapsing loop in desc_for() is upstream's, which took it in turn from
- * RetroArch's mmap_reduce.
+ * Diatom. That one file is not vendored - it drags in rhash's disc and archive
+ * readers for playlist hashing Diatom will never do - but not vendoring it is
+ * not a license to guess. The console tables it reads ARE vendored and are
+ * used here unmodified; what is rewritten is the plumbing between them and
+ * libretro's descriptors, and it is rewritten to match. The bit-collapsing
+ * loop in desc_for() is upstream's, which took it in turn from RetroArch's
+ * mmap_reduce.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -116,8 +116,8 @@ void diatom_cheevos_set_console(unsigned ra_console_id)
 	/* The address space is laid out per console, so changing the console
 	 * changes every address in it. Re-resolving here rather than leaving it to
 	 * the caller, for the same reason note_map does: a launcher that hands
-	 * over a set mid-game - which ADR-0026 makes the normal path when the set
-	 * was still downloading - would otherwise get a console it named and a map
+	 * over a set mid-game - the normal path when the set was still
+	 * downloading - would otherwise get a console it named and a map
 	 * laid out for the one before it.
 	 *
 	 * Seen on the device: a SNES game started with no set, resolved as
@@ -625,8 +625,8 @@ uint32_t diatom_cheevos_peek(uint32_t address, uint32_t num_bytes, void *ud)
 /* ------------------------------------------------- the set, and the frames */
 
 /* The evaluator. Everything about a condition - deltas, hit counts, alt
- * groups, AndNext chains - is rcheevos' problem, which is the whole reason
- * ADR-0025 vendored it. Diatom's side is memory and a clock. */
+ * groups, AndNext chains - is rcheevos' problem, which is the whole reason it
+ * is vendored. Diatom's side is memory and a clock. */
 static rc_runtime_t g_rt;
 static bool         g_rt_live;
 
@@ -678,9 +678,9 @@ static const char *state_name(uint8_t state)
  *
  * PRIMED and UNPRIMED are not reported yet. They would let a launcher show
  * "one condition away", but they are edge events on game state and can arrive
- * often. Adding an event later costs nothing, because ADR-0009 promises
- * unknown verbs are ignored; removing chatter from a launcher that came to
- * depend on it costs a great deal. */
+ * often. Adding an event later costs nothing, because the launcher protocol
+ * promises unknown verbs are ignored; removing chatter from a launcher that
+ * came to depend on it costs a great deal. */
 static void on_event(const rc_runtime_event_t *e)
 {
 	char msg[96];

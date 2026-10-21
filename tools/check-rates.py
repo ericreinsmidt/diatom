@@ -12,25 +12,16 @@ So: any `NNNN Hz` in a file that claims to describe how things are NOW must be a
 rate core-facts records, or half of one - a Nyquist figure is the only derived
 value that keeps turning up.
 
-Deliberately NOT checked:
-
-  docs/decisions/   ADRs are immutable once accepted and several correctly
-                    record rates that have since been superseded. Failing on
-                    those would mean editing history to satisfy a checker.
-  docs/discussion/  dated logs; same argument.
-  libretro-cores-survey.md
-                    surveys cores that were evaluated and NOT pinned, so its
-                    rates are real measurements of software we do not ship.
-
-That exclusion list is the honest boundary of this check: it catches a stale
-rate in code or in a current claim, and cannot catch one in a historical record.
+Only tracked files are read. The dated records - decisions, logs, the survey
+of cores that were evaluated and not pinned - correctly record rates that have
+since been superseded, and they are kept outside the repository, so they never
+reach this check. It catches a stale rate in code or in a current claim, and
+cannot catch one in a historical record.
 """
 import pathlib, re, subprocess, sys
 
 ROOT  = pathlib.Path(__file__).resolve().parent.parent
 FACTS = ROOT / "docs/reference/core-facts.md"
-SKIP  = ("docs/decisions/", "docs/discussion/",
-         "docs/reference/libretro-cores-survey.md")
 LOOK  = ("*.c", "*.h", "*.md")
 
 if not FACTS.exists():
@@ -57,7 +48,7 @@ files = subprocess.run(["git", "ls-files", *LOOK], cwd=ROOT,
                        capture_output=True, text=True).stdout.split()
 bad = []
 for rel in files:
-    if rel.startswith(SKIP) or rel == "tools/check-rates.py":
+    if rel == "tools/check-rates.py":
         continue
     for n, line in enumerate((ROOT / rel).read_text(errors="ignore").splitlines(), 1):
         # (?<![\d.]) keeps "50.0070 Hz" out of this: that is a frame rate, and
