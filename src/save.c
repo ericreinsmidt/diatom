@@ -319,9 +319,8 @@ bool diatom_state_save(diatom_core *c, const char *path)
  * WHEN TO REMOVE IT: as soon as github.com/libretro/mgba carries 543a1975 and
  * TortOS goes back to the fetched core. Then this table is not merely dead, it
  * is WRONG - it would let a genuinely foreign state through. Delete the table,
- * delete version_twins, and restore the plain strcmp above. See TortOS's
- * MGBA-MBC2.md and mk/build-mgba-bridge.sh, which are deleted at the same
- * time. */
+ * delete version_twins, and restore the plain strcmp above, at the same time
+ * as TortOS deletes its mk/build-mgba-bridge.sh. */
 static const struct { const char *a, *b; } STATE_TWINS[] = {
 	{ "0.11.0", "0.11-219-e31759b" },   /* the MBC2 bridge, and what it patches */
 };

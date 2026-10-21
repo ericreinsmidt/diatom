@@ -272,7 +272,7 @@ static bool g_muted;
  * The first rung is the panel's measured floor - 0 and 1 are black, and the
  * driver clamps neither. TortOS's own bottom level is raw 1 and is deliberately
  * not copied. This table is also the only clamp there is: no arithmetic here
- * can produce a value off its ends. See docs/spikes/2026-08-26-backlight-floor.md */
+ * can produce a value off its ends. */
 static const unsigned char bright_ladder[] = {
 	2, 4, 8, 16, 32, 48, 72, 96, 128, 160, 192, 255
 };

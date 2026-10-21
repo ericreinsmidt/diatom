@@ -7,8 +7,8 @@
 #
 # Why this exists, and why it records rather than vendors:
 #
-# Cores are THIRD-PARTY binaries that Diatom does not ship, build or depend on
-# (see docs/working-agreement.md). Diatom has no core list. But the test matrix
+# Cores are THIRD-PARTY binaries that Diatom does not ship, build or depend on.
+# Diatom has no core list. But the test matrix
 # is evidence - the geometry, envelope and pacing claims in docs/ rest on
 # specific binaries - and evidence whose provenance is unstated cannot be
 # re-checked. So the bytes stay out of the repository and the manifest goes in.
@@ -56,13 +56,15 @@ MANIFEST=CORES.md
 # THE PIN, and the date it was established. Nothing here changes on its own.
 #
 # The five cores cover all nine in-scope systems and actually run on the device.
-# snes9x2010 rather than mainline snes9x: mainline is C++ and wants
-# GLIBCXX_3.4.29 (see below), while 2010 is pure C, holds frame rate, and is the
-# only light fork that reports the correct 50.0070 PAL rate - 2002 and 2005 say
-# 50.3197, which runs PAL content 0.62% fast. genesis_plus_gx rather than
-# picodrive: see docs/spikes/2026-08-25-sega-core-comparison.md. No gambatte:
-# mGBA covers GB and GBC identically, from a smaller binary, and gambatte is C++
-# so it cannot run here anyway.
+# snes9x2010 rather than mainline snes9x: mainline is C++ and wanted
+# GLIBCXX_3.4.29, which TrimUI's firmware did not have (see below), while 2010
+# is pure C, holds frame rate, and is the only light fork that reports the
+# correct 50.0070 PAL rate - 2002 and 2005 say 50.3197, which runs PAL content
+# 0.62% fast. genesis_plus_gx rather than picodrive: both hold frame rate, and
+# Genesis Plus GX is the correct one of the two, picodrive's only advantage
+# being 32X, which is out of scope. No gambatte: mGBA covers GB and GBC
+# identically, from a smaller binary, and gambatte is C++, which also kept it
+# off TrimUI's firmware.
 #
 # To adopt a republished core: decide to, rather than letting a fetch decide for
 # you. Then change the line here AND in TortOS's mk/fetch-vendor.sh together,

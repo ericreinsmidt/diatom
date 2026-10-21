@@ -3,7 +3,7 @@
  * Scope comes from measurement, not guesswork. The env-inventory spike ran six
  * cores through a full lifecycle: of libretro's 77 environment commands, 34
  * appear, ~17 need real answers, 17 are declined by every core with nothing
- * breaking, and 43 never appear at all. See docs/spikes/2026-08-23-env-inventory.md
+ * breaking, and 43 never appear at all.
  *
  * Declining is a legitimate answer and cores handle it. Everything not listed
  * here returns false deliberately.
