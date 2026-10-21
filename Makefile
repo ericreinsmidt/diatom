@@ -20,7 +20,8 @@ CFLAGS  += -Iinclude -Isrc -Ivendor/rcheevos/include
 # serialize_size() into a call to a different function entirely and made state
 # saving report "no state" while every freshly built file was correct.
 CFLAGS  += -MMD -MP
-LDFLAGS +=
+# zlib for zipped ROMs (src/zip.c), on every port
+LDFLAGS += -lz
 
 # Objects live under build/$(PORT)/ so host and cross builds cannot collide:
 # a leftover x86 main.o in a device link fails late and confusingly.

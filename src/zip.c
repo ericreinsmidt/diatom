@@ -10,51 +10,16 @@
  * file archives (cue+bin) ship unzipped for the same reason they do on every
  * other firmware: the cue names its bin by path.
  *
- * zlib arrives by dlopen at first use, not by linking. The device ships
- * libz.so.1 in firmware and the cross toolchain does not carry an aarch64
- * zlib to link against - and a STORED entry needs no zlib at all, so the
- * dependency is honestly optional rather than pretend-optional.
+ * A deflated entry goes through zlib; a stored one is copied as it is.
  */
-#include <dlfcn.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <zlib.h>
 
 #include "diatom.h"
-
-/* raw inflate, resolved at runtime */
-typedef struct z_dummy { 
-	const unsigned char *next_in;  unsigned avail_in;  unsigned long total_in;
-	unsigned char *next_out;       unsigned avail_out; unsigned long total_out;
-	const char *msg; void *state;
-	void *zalloc, *zfree, *opaque;
-	int data_type; unsigned long adler, reserved;
-} z_streamish;
-
-static int (*p_inflateInit2_)(z_streamish *, int, const char *, int);
-static int (*p_inflate)(z_streamish *, int);
-static int (*p_inflateEnd)(z_streamish *);
-
-static bool zlib_ready(void)
-{
-	static void *h;
-	static bool tried;
-
-	if (h) return true;
-	if (tried) return false;
-	tried = true;
-	h = dlopen("libz.so.1", RTLD_NOW | RTLD_LOCAL);
-	if (!h) h = dlopen("libz.so", RTLD_NOW | RTLD_LOCAL);
-	if (!h) h = dlopen("libz.1.dylib", RTLD_NOW | RTLD_LOCAL);
-	if (!h) h = dlopen("libz.dylib", RTLD_NOW | RTLD_LOCAL);
-	if (!h) { fprintf(stderr, "diatom: zip: no zlib on this system\n"); return false; }
-	p_inflateInit2_ = dlsym(h, "inflateInit2_");
-	p_inflate       = dlsym(h, "inflate");
-	p_inflateEnd    = dlsym(h, "inflateEnd");
-	return p_inflateInit2_ && p_inflate && p_inflateEnd;
-}
 
 static uint16_t rd16(const unsigned char *p) { return (uint16_t)(p[0] | (p[1] << 8)); }
 static uint32_t rd32(const unsigned char *p)
@@ -149,22 +114,21 @@ bool diatom_zip_load(const char *path, void **out, size_t *out_len,
 		if (best_method == 0) {
 			memcpy(un, comp, best_usize);
 		} else {
-			z_streamish z;
+			z_stream z;
 			int rc;
 
-			if (!zlib_ready()) { free(comp); free(un); return false; }
 			memset(&z, 0, sizeof z);
 			z.next_in   = comp;
 			z.avail_in  = best_csize;
 			z.next_out  = un;
 			z.avail_out = best_usize;
 			/* -15: raw deflate, no zlib wrapper - what zip stores. */
-			if (p_inflateInit2_(&z, -15, "1.2.8", (int)sizeof z) != 0) {
+			if (inflateInit2(&z, -15) != Z_OK) {
 				free(comp); free(un); return false;
 			}
-			rc = p_inflate(&z, 4 /* Z_FINISH */);
-			p_inflateEnd(&z);
-			if (rc != 1 /* Z_STREAM_END */ || z.total_out != best_usize) {
+			rc = inflate(&z, Z_FINISH);
+			inflateEnd(&z);
+			if (rc != Z_STREAM_END || z.total_out != best_usize) {
 				fprintf(stderr, "diatom: zip: inflate failed on %s\n", best_name);
 				free(comp); free(un); return false;
 			}
