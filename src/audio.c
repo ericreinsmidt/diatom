@@ -307,13 +307,19 @@ void diatom_audio_configure(double src_rate, int dst_rate, int capacity_frames)
 	g_sq = g_in_sq = 0.0;
 }
 
-/* Fill the buffer to target before the first frame runs.
+/* Fill the buffer to target: before the first frame runs, and again when a game
+ * resumes from the launcher's menu.
  *
  * Without this the buffer starts empty and stays there: the core produces
  * exactly one frame of audio per video frame, so production matches consumption
  * and nothing ever fills the gap. Rate control can only pull at 0.5%, which
  * takes about eight seconds to accumulate 2048 frames - and until it does, every
  * scheduling hiccup underruns. Measured before this existed: `queued min 0`.
+ * The menu is the same case again: no frames run while it is open, the device
+ * plays the buffer out, and the game came back to an empty one and stuttered.
+ *
+ * Only what is missing, so a buffer that still holds sound after a quick trip
+ * to the menu is not pushed past full, which drops what does not fit.
  *
  * Priming with silence costs one buffer of latency at startup, which is the
  * latency we were going to have anyway once the buffer filled.
@@ -322,6 +328,8 @@ void diatom_audio_prime(void)
 {
 	int16_t silence[512 * 2];
 	int remaining = g_capacity / 2;
+
+	if (g_capacity > 0) remaining -= (int)diatom_port_audio_queued();
 
 	memset(silence, 0, sizeof silence);
 	while (remaining > 0) {

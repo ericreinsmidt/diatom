@@ -1623,6 +1623,10 @@ static int run_session_inner(const diatom_session *sn)
 					 * next second catching up. */
 					next_us = (double)diatom_port_now_us();
 
+					/* And the device played the sound buffer out meanwhile, so
+					 * it is filled back to target before the first frame. */
+					diatom_audio_prime();
+
 					/* Re-read input and treat it as already-seen, so a key still
 					 * held is not a fresh press.
 					 *
