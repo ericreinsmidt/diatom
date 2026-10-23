@@ -83,7 +83,7 @@ static bool             g_flip_running;
 static bool             g_presented;
 
 static SDL_AudioDeviceID g_audio;
-static SDL_Joystick     *g_joy;
+static int               g_pad_fd = -1;  /* "Brick Gamepad": every button */
 static bool              g_quit;
 static uint32_t          g_buttons;
 static bool              g_input_debug;
@@ -312,30 +312,45 @@ static bool     g_osd_painted[FB_PAGES];
  * is an enumeration order rather than a promise, and being wrong would mean a
  * ladder calibrated for the wrong output with no sign that anything is off. */
 #define BITS_PER_LONG   (8 * (int)sizeof(long))
-#define SW_NLONGS       ((SW_MAX + BITS_PER_LONG) / BITS_PER_LONG)
+#define NLONGS(max)     (((max) + BITS_PER_LONG) / BITS_PER_LONG)
+#define SW_NLONGS       NLONGS(SW_MAX)
 #define BIT_IS_SET(a,b) (((a)[(b) / BITS_PER_LONG] >> ((b) % BITS_PER_LONG)) & 1UL)
 
 static int g_jack_fd = -1;
 
-static void jack_open(void)
+/* The gamepad and the headphone jack, in one pass, as the Pixel 2's port finds
+ * its own, keeping the nodes it wants and closing only the rest: closing an
+ * evdev descriptor waits out an RCU grace period in the kernel. */
+static void input_scan(void)
 {
-	unsigned long bits[SW_NLONGS];
+	unsigned long keys[NLONGS(KEY_MAX)], sw[SW_NLONGS];
 	char path[32];
 	int i, fd;
 
 	for (i = 0; i < 32; i++) {
+		bool kept = true;
+
 		snprintf(path, sizeof path, "/dev/input/event%d", i);
-		if ((fd = open(path, O_RDONLY | O_NONBLOCK)) < 0) continue;
-		memset(bits, 0, sizeof bits);
-		if (ioctl(fd, EVIOCGBIT(EV_SW, sizeof bits), bits) >= 0 &&
-		    BIT_IS_SET(bits, SW_HEADPHONE_INSERT)) {
-			g_jack_fd = fd;
-			return;
-		}
-		close(fd);
+		if ((fd = open(path, O_RDONLY | O_NONBLOCK | O_CLOEXEC)) < 0) continue;
+		memset(keys, 0, sizeof keys);
+		memset(sw, 0, sizeof sw);
+		ioctl(fd, EVIOCGBIT(EV_KEY, sizeof keys), keys);
+		ioctl(fd, EVIOCGBIT(EV_SW, sizeof sw), sw);
+		if      (g_pad_fd < 0  && BIT_IS_SET(keys, BTN_SOUTH))          g_pad_fd = fd;
+		else if (g_jack_fd < 0 && BIT_IS_SET(sw, SW_HEADPHONE_INSERT))  g_jack_fd = fd;
+		else kept = false;
+		if (!kept) close(fd);
 	}
-	fprintf(stderr, "diatom: no headphone jack input node; "
-	                "volume will use the speaker ladder\n");
+}
+
+static void input_open(void);
+
+static void jack_open(void)
+{
+	if (g_jack_fd < 0) input_scan();
+	if (g_jack_fd < 0)
+		fprintf(stderr, "diatom: no headphone jack input node; "
+		                "volume will use the speaker ladder\n");
 }
 
 static int jack_present(void)
@@ -1019,7 +1034,7 @@ bool diatom_port_init(diatom_port_caps *out)
 	 * open below for why silence beats refusing to start. Rolled into one
 	 * SDL_Init, a missing or busy audio device is indistinguishable from a
 	 * missing display and kills both. */
-	if (SDL_Init(SDL_INIT_EVENTS | SDL_INIT_JOYSTICK) != 0) {
+	if (SDL_Init(SDL_INIT_EVENTS) != 0) {
 		fprintf(stderr, "SDL_Init: %s\n", SDL_GetError());
 		return false;
 	}
@@ -1071,23 +1086,16 @@ bool diatom_port_init(diatom_port_caps *out)
 	/* No audio here: it opens once the launcher has drawn, or at the first
 	 * game; see diatom_port_audio_start. */
 
-	/* The Brick's buttons arrive as one joystick (kernel name "TRIMUI
-	 * Player1"; the firmware's SDL reports it as "Xbox 360 Controller").
-	 * The keyboard-class devices carry only volume and power keys - measured
-	 * from the kernel capability bitmasks, see the mapping tables below. */
-	if (SDL_NumJoysticks() > 0)
-		g_joy = SDL_JoystickOpen(0);
-	if (!g_joy)
-		diatom_port_log(DIATOM_LOG_WARN, "no joystick found; no game input");
+	input_open();
 
 	{
 		char msg[160];
 		snprintf(msg, sizeof msg,
-		         "brick: fb %ux%u stride %u, %d page(s), rgba at %u/%u/%u/%u+%u, audio %d Hz, joystick %s",
+		         "brick: fb %ux%u stride %u, %d page(s), rgba at %u/%u/%u/%u+%u, audio %d Hz, gamepad %s",
 		         g_vinfo.xres, g_vinfo.yres, g_finfo.line_length, g_pages,
 		         g_vinfo.red.offset, g_vinfo.green.offset, g_vinfo.blue.offset,
 		         g_vinfo.transp.offset, g_vinfo.transp.length,
-		         AUDIO_RATE, g_joy ? SDL_JoystickName(g_joy) : "none");
+		         AUDIO_RATE, g_pad_fd >= 0 ? "found" : "none");
 		diatom_port_log(DIATOM_LOG_INFO, msg);
 	}
 
@@ -1144,7 +1152,7 @@ void diatom_port_shutdown(void)
 	if (g_disp_fd >= 0) { close(g_disp_fd); g_disp_fd = -1; }
 	if (g_fb)         munmap(g_fb, g_fb_size);
 	if (g_fb_fd >= 0) close(g_fb_fd);
-	if (g_joy)        SDL_JoystickClose(g_joy);
+	if (g_pad_fd >= 0) close(g_pad_fd);
 	if (g_audio)      SDL_CloseAudioDevice(g_audio);
 	SDL_Quit();
 }
@@ -1640,80 +1648,46 @@ size_t diatom_port_audio_queued(void)
 	return SDL_GetQueuedAudioSize(g_audio) / AUDIO_FRAME_BYTES;
 }
 
-/* SDL joystick button index -> Diatom button.
- *
- * The index side is DERIVED: the kernel capability bitmask for "TRIMUI
- * Player1" (/proc/bus/input/devices, B: KEY=) decodes to exactly these
- * codes, and SDL's Linux joystick driver assigns indices in ascending code
- * order, gamepad range before low keycodes:
- *
- *   0  304 BTN_SOUTH    4  310 BTN_TL      8  316 BTN_MODE    12  60 KEY_F2
- *   1  305 BTN_EAST     5  311 BTN_TR      9  317 BTN_THUMBL  13 114 VOL_DN
- *   2  307 BTN_NORTH    6  314 BTN_SELECT 10  318 BTN_THUMBR  14 115 VOL_UP
- *   3  308 BTN_WEST     7  315 BTN_START  11   59 KEY_F1
- *
- * The label side is MEASURED: every cap pressed in a known order under
- * DIATOM_INPUT_DEBUG, twice, 2026-08-24, firmware 1.1.1. A and B follow the
- * positional reading (EAST = right cap = A, SOUTH = bottom = B), but X and Y
- * are the other way around from position: the top cap (X) emits BTN_WEST and
- * the left cap (Y) emits BTN_NORTH. Positional reasoning got exactly those
- * two wrong, which is why this table is measured and not argued.
- *
- * The dpad is ABS_HAT0 - hat values are semantic, no attribution needed.
- * THUMBL/THUMBR/F1/F2 exist in the mask because the same driver serves
- * stick-bearing siblings; volume is the host OS's business. All unmapped. */
-static const struct { int idx; int btn; } joymap[] = {
-	{ 0, DIATOM_BTN_B },      { 1, DIATOM_BTN_A },
-	{ 2, DIATOM_BTN_Y },      { 3, DIATOM_BTN_X },
-	{ 4, DIATOM_BTN_L1 },     { 5, DIATOM_BTN_R1 },
-	{ 6, DIATOM_BTN_SELECT }, { 7, DIATOM_BTN_START },
-	{ 8, DIATOM_BTN_MENU },
+/* Kernel code -> Diatom button. brick-pad sends the GKD Pixel 2's codes, so
+ * this is the Pixel's table: the caps marked A, B, X, Y send SOUTH, EAST,
+ * NORTH, WEST, named for their labels, which puts the right-hand button on the
+ * game's A as on a SNES pad; L2 and R2 are keys, the d-pad four keys. MENU is
+ * the Brick's own (BTN_MODE). */
+static const struct { int code; int btn; } keymap[] = {
+	{ BTN_DPAD_UP,    DIATOM_BTN_UP },    { BTN_DPAD_DOWN,  DIATOM_BTN_DOWN },
+	{ BTN_DPAD_LEFT,  DIATOM_BTN_LEFT },  { BTN_DPAD_RIGHT, DIATOM_BTN_RIGHT },
+	{ BTN_SOUTH,      DIATOM_BTN_A },     { BTN_EAST,       DIATOM_BTN_B },
+	{ BTN_NORTH,      DIATOM_BTN_X },     { BTN_WEST,       DIATOM_BTN_Y },
+	{ BTN_TL,         DIATOM_BTN_L1 },    { BTN_TR,         DIATOM_BTN_R1 },
+	{ BTN_TL2,        DIATOM_BTN_L2 },    { BTN_TR2,        DIATOM_BTN_R2 },
+	{ BTN_SELECT,     DIATOM_BTN_SELECT },{ BTN_START,      DIATOM_BTN_START },
+	{ BTN_MODE,       DIATOM_BTN_MENU },
 };
 
-/* L2/R2 are digital switches surfaced as axes (the KEY mask has no
- * BTN_TL2/TR2, the ABS mask advertises X Y Z RX RY RZ). Measured 2026-08-24:
- * L2 is SDL axis 2 (ABS_Z), R2 is axis 5 (ABS_RZ), resting at -32768 and
- * slamming to +32767 when pressed - a digital switch in axis clothing, so
- * half travel is a comfortable threshold. The other four axes belong to the
- * stick-bearing siblings this driver also serves. */
-/* Volume, from the same measured table: SDL indices 13 and 14 are VOL_DN and
- * VOL_UP. Absent from joymap[] on purpose - they are not game inputs. */
-#define JOY_VOL_DN 13
-#define JOY_VOL_UP 14
-
-/* The two front keys, reported as BTN_THUMBL/THUMBR - SDL indices 9 and 10,
- * which minarch calls L3/R3. They are not game inputs; the firmware spends
- * them on brightness and so do we. Absent from joymap[] on purpose: mapping
- * them would send every brightness press to the core. */
-#define JOY_FN_L   9
-#define JOY_FN_R   10
-
-#define AXIS_L2 2
-#define AXIS_R2 5
-#define AXIS_PRESSED 16384
-
 /* The four level buttons, as level keys: volume on its own two, brightness on
- * the two front keys. A press is latched until the host has read it, so a tap
- * between two frames counts; a button the events say is held is checked
- * against SDL's own state, so a release this port never saw cannot leave the
- * host repeating. The stepping and the repeat are the host's. */
-static const struct { int idx; uint32_t key; } level_buttons[] = {
-	{ JOY_VOL_UP, DIATOM_LEVEL_KEY_VOLUME_UP },
-	{ JOY_VOL_DN, DIATOM_LEVEL_KEY_VOLUME_DOWN },
-	{ JOY_FN_R,   DIATOM_LEVEL_KEY_BRIGHTNESS_UP },
-	{ JOY_FN_L,   DIATOM_LEVEL_KEY_BRIGHTNESS_DOWN },
+ * the two front keys (BTN_THUMBL and BTN_THUMBR), all on the gamepad. Never
+ * reported as buttons, so no brightness press reaches a core. A press is
+ * latched until the host has read it, so a tap between two frames counts; a
+ * key the events say is held is checked against the kernel, so a release this
+ * port never saw cannot leave the host repeating. The stepping and the repeat
+ * are the host's. */
+static const struct { int code; uint32_t key; } level_buttons[] = {
+	{ KEY_VOLUMEUP,   DIATOM_LEVEL_KEY_VOLUME_UP },
+	{ KEY_VOLUMEDOWN, DIATOM_LEVEL_KEY_VOLUME_DOWN },
+	{ BTN_THUMBR,     DIATOM_LEVEL_KEY_BRIGHTNESS_UP },
+	{ BTN_THUMBL,     DIATOM_LEVEL_KEY_BRIGHTNESS_DOWN },
 };
 #define LEVEL_BUTTONS (sizeof level_buttons / sizeof level_buttons[0])
 static uint32_t g_level_down;      /* held, by the events */
 static uint32_t g_level_pressed;   /* went down since the host last asked */
 
-/* Whether `button` is a level button, recorded here if so. */
-static bool level_button(int button, bool down)
+/* Whether `code` is a level button, recorded here if so. */
+static bool level_button(int code, bool down)
 {
 	size_t k;
 
 	for (k = 0; k < LEVEL_BUTTONS; k++) {
-		if (level_buttons[k].idx != button) continue;
+		if (level_buttons[k].code != code) continue;
 		if (down) {
 			g_level_down    |= level_buttons[k].key;
 			g_level_pressed |= level_buttons[k].key;
@@ -1725,105 +1699,82 @@ static bool level_button(int button, bool down)
 	return false;
 }
 
-static void debug_event(const char *what, int a, int b)
+/* The pad's keys as they are right now, for a start or after the kernel
+ * dropped events (SYN_DROPPED): the held-at-entry rule needs to know about a
+ * key that was already down. */
+static void pad_resync(void)
 {
-	char msg[96];
-	if (!g_input_debug) return;
-	snprintf(msg, sizeof msg, "%s %d -> %d", what, a, b);
-	diatom_port_log(DIATOM_LOG_DEBUG, msg);
+	unsigned long keys[NLONGS(KEY_MAX)];
+	size_t i;
+
+	if (g_pad_fd < 0) return;
+	memset(keys, 0, sizeof keys);
+	if (ioctl(g_pad_fd, EVIOCGKEY(sizeof keys), keys) < 0) return;
+	g_buttons = 0;
+	for (i = 0; i < sizeof keymap / sizeof keymap[0]; i++)
+		if (BIT_IS_SET(keys, keymap[i].code))
+			g_buttons |= DIATOM_BIT(keymap[i].btn);
+}
+
+/* Normally found already, by jack_open's scan, which runs first. */
+static void input_open(void)
+{
+	if (g_pad_fd < 0) input_scan();
+	if (g_pad_fd < 0)
+		diatom_port_log(DIATOM_LOG_WARN, "brick: no gamepad found; no game input");
+	pad_resync();
 }
 
 void diatom_port_input_poll(void)
 {
-	SDL_Event ev;
-	size_t i;
+	struct input_event ev[32];
+	SDL_Event sev;
+	ssize_t n;
+	size_t i, k;
 
 	/* The jack, checked once a frame here for the same reason the launcher
 	 * checks it in plat_input_poll: whoever is pumping input owns the level,
 	 * and this stops being called the moment the game ends. */
 	gain_jack_poll();
 
-	while (SDL_PollEvent(&ev)) {
-		switch (ev.type) {
-		case SDL_QUIT:
-			g_quit = true;
-			break;
+	while (SDL_PollEvent(&sev))
+		if (sev.type == SDL_QUIT) g_quit = true;
 
-		case SDL_JOYBUTTONDOWN:
-		case SDL_JOYBUTTONUP: {
-			bool down = (ev.type == SDL_JOYBUTTONDOWN);
-			debug_event("joy button", ev.jbutton.button, down);
-
-			/* Volume and brightness are the port's, and stop here.
-			 * Whoever owns the input loop during a game has to handle
-			 * these, because nothing else sees them - the device UI is
-			 * not running. They are never reported upward and never
-			 * reach a core. */
-			if (level_button(ev.jbutton.button, down)) break;
-
-			for (i = 0; i < sizeof joymap / sizeof joymap[0]; i++) {
-				if (joymap[i].idx != ev.jbutton.button) continue;
-				if (down) g_buttons |=  DIATOM_BIT(joymap[i].btn);
-				else      g_buttons &= ~DIATOM_BIT(joymap[i].btn);
+	while (g_pad_fd >= 0 && (n = read(g_pad_fd, ev, sizeof ev)) > 0) {
+		for (i = 0; i < (size_t)n / sizeof ev[0]; i++) {
+			if (ev[i].type == EV_SYN && ev[i].code == SYN_DROPPED) {
+				pad_resync();
+				continue;
 			}
-			break;
-		}
-
-		case SDL_JOYHATMOTION: {
-			uint32_t dpad = 0;
-			debug_event("joy hat", ev.jhat.hat, ev.jhat.value);
-			if (ev.jhat.value & SDL_HAT_UP)    dpad |= DIATOM_BIT(DIATOM_BTN_UP);
-			if (ev.jhat.value & SDL_HAT_DOWN)  dpad |= DIATOM_BIT(DIATOM_BTN_DOWN);
-			if (ev.jhat.value & SDL_HAT_LEFT)  dpad |= DIATOM_BIT(DIATOM_BTN_LEFT);
-			if (ev.jhat.value & SDL_HAT_RIGHT) dpad |= DIATOM_BIT(DIATOM_BTN_RIGHT);
-			g_buttons = (g_buttons
-			             & ~(DIATOM_BIT(DIATOM_BTN_UP)   | DIATOM_BIT(DIATOM_BTN_DOWN)
-			               | DIATOM_BIT(DIATOM_BTN_LEFT) | DIATOM_BIT(DIATOM_BTN_RIGHT)))
-			            | dpad;
-			break;
-		}
-
-		case SDL_JOYAXISMOTION: {
-			bool pressed = ev.jaxis.value > AXIS_PRESSED;
-			debug_event("joy axis", ev.jaxis.axis, ev.jaxis.value);
-			if (ev.jaxis.axis == AXIS_L2) {
-				if (pressed) g_buttons |=  DIATOM_BIT(DIATOM_BTN_L2);
-				else         g_buttons &= ~DIATOM_BIT(DIATOM_BTN_L2);
-			} else if (ev.jaxis.axis == AXIS_R2) {
-				if (pressed) g_buttons |=  DIATOM_BIT(DIATOM_BTN_R2);
-				else         g_buttons &= ~DIATOM_BIT(DIATOM_BTN_R2);
+			if (ev[i].type != EV_KEY || ev[i].value == 2) continue;
+			if (g_input_debug) {
+				char msg[48];
+				snprintf(msg, sizeof msg, "key %d -> %d", ev[i].code, ev[i].value);
+				diatom_port_log(DIATOM_LOG_DEBUG, msg);
 			}
-			break;
-		}
+			/* Volume and brightness are the port's, and stop here: during
+			 * a game nothing else sees them, the device UI not running. */
+			if (level_button(ev[i].code, ev[i].value != 0)) continue;
+			for (k = 0; k < sizeof keymap / sizeof keymap[0]; k++) {
+				if (keymap[k].code != ev[i].code) continue;
+				if (ev[i].value) g_buttons |=  DIATOM_BIT(keymap[k].btn);
+				else             g_buttons &= ~DIATOM_BIT(keymap[k].btn);
+			}
 		}
 	}
 }
 
 uint32_t diatom_port_input_state(void) { return g_buttons; }
 
-/* SDL keeps the joystick's own state current as it pumps, so after the queued
- * events are dropped, the buttons, the hat and the two trigger axes are read
- * back from it as they are now. */
 void diatom_port_input_reset(void)
 {
-	uint8_t hat;
-	size_t i;
+	struct input_event ev[32];
 
 	SDL_PumpEvents();
 	SDL_FlushEvents(SDL_FIRSTEVENT, SDL_LASTEVENT);
+	while (g_pad_fd >= 0 && read(g_pad_fd, ev, sizeof ev) > 0) { }
 	g_level_down = g_level_pressed = 0;
-	g_buttons = 0;
-	if (!g_joy) return;
-	for (i = 0; i < sizeof joymap / sizeof joymap[0]; i++)
-		if (SDL_JoystickGetButton(g_joy, joymap[i].idx))
-			g_buttons |= DIATOM_BIT(joymap[i].btn);
-	hat = SDL_JoystickGetHat(g_joy, 0);
-	if (hat & SDL_HAT_UP)    g_buttons |= DIATOM_BIT(DIATOM_BTN_UP);
-	if (hat & SDL_HAT_DOWN)  g_buttons |= DIATOM_BIT(DIATOM_BTN_DOWN);
-	if (hat & SDL_HAT_LEFT)  g_buttons |= DIATOM_BIT(DIATOM_BTN_LEFT);
-	if (hat & SDL_HAT_RIGHT) g_buttons |= DIATOM_BIT(DIATOM_BTN_RIGHT);
-	if (SDL_JoystickGetAxis(g_joy, AXIS_L2) > AXIS_PRESSED) g_buttons |= DIATOM_BIT(DIATOM_BTN_L2);
-	if (SDL_JoystickGetAxis(g_joy, AXIS_R2) > AXIS_PRESSED) g_buttons |= DIATOM_BIT(DIATOM_BTN_R2);
+	pad_resync();
 }
 
 /* ---------- levels: the hardware under them --------------------------------- */
@@ -1886,13 +1837,19 @@ void diatom_port_level_write(diatom_level_kind kind, int pos)
 
 uint32_t diatom_port_level_keys(void)
 {
+	unsigned long keys[NLONGS(KEY_MAX)];
 	uint32_t out;
 	size_t k;
 
-	for (k = 0; k < LEVEL_BUTTONS; k++)
-		if ((g_level_down & level_buttons[k].key) &&
-		    (!g_joy || !SDL_JoystickGetButton(g_joy, level_buttons[k].idx)))
-			g_level_down &= ~level_buttons[k].key;
+	if (g_level_down) {
+		memset(keys, 0, sizeof keys);
+		if (g_pad_fd < 0 || ioctl(g_pad_fd, EVIOCGKEY(sizeof keys), keys) < 0)
+			memset(keys, 0, sizeof keys);
+		for (k = 0; k < LEVEL_BUTTONS; k++)
+			if ((g_level_down & level_buttons[k].key) &&
+			    !BIT_IS_SET(keys, level_buttons[k].code))
+				g_level_down &= ~level_buttons[k].key;
+	}
 	out = g_level_down | g_level_pressed;
 	g_level_pressed = 0;
 	return out;
