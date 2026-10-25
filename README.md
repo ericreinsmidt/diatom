@@ -7,9 +7,11 @@ the emulator behind [TortOS](https://github.com/ericreinsmidt/TortOS), which
 drives it over a Unix socket, and a permissively licensed base for any other
 firmware that wants one.
 
-**MIT licensed.** Diatom loads whatever core it is handed and ships none of
-them, so a permissive frontend can host cores under any license - which is
-what `libretro.h` is permissive for.
+**Mozilla Public License 2.0** ([LICENSE](LICENSE)). Diatom's own files stay
+open: whoever changes them and shares the result shares their changes too. But
+the license stops at Diatom's files, so Diatom can still host cores under any
+license - which is what `libretro.h` is permissive for - and it loads whatever
+core it is handed and ships none of them. It was MIT until 2026-10-25.
 
 **Status: running on hardware, shipping in TortOS.** Eleven systems across six
 cores on a TrimUI Brick (TG3040): NES · SNES · Genesis · Master System ·

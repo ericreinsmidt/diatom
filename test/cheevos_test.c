@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: MIT */
+/* SPDX-License-Identifier: MPL-2.0 */
 /* Does a RetroAchievements address reach the byte it is supposed to?
  *
  * Achievements moved into Diatom on the strength of one claim: that

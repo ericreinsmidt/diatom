@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: MIT */
+/* SPDX-License-Identifier: MPL-2.0 */
 #ifndef DIATOM_CHEEVOS_H
 #define DIATOM_CHEEVOS_H
 

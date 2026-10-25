@@ -1,7 +1,8 @@
 # Third-party notices
 
-Diatom's own code is intended to be permissively licensed: escaping GPL
-inheritance is a founding goal of the project.
+Diatom's own code is under the Mozilla Public License 2.0: its own files stay
+open, and the license reaches no further than them, so Diatom escapes GPL
+inheritance either way, which is a founding goal of the project.
 
 ## `src/libretro.h`
 
@@ -25,8 +26,8 @@ vendored so the build stays self-contained.
 - **Copyright (c) 2018 RetroAchievements.org**
 - **MIT licensed**, full text in `vendor/rcheevos/LICENSE`.
 
-MIT is the whole reason this is possible rather than a problem: it is diatom's
-own license, so the project's founding goal - escaping GPL inheritance - is
+MIT is the whole reason this is possible rather than a problem: it fits beside
+diatom's own license, so the project's founding goal - escaping GPL inheritance - is
 untouched. The networking halves (`rc_client`, `rapi`, `rurl`) are deliberately
 not vendored; `vendor/rcheevos/README.md` lists every omission and why.
 
