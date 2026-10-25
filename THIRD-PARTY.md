@@ -25,6 +25,8 @@ vendored so the build stays self-contained.
 
 - **Copyright (c) 2018 RetroAchievements.org**
 - **MIT licensed**, full text in `vendor/rcheevos/LICENSE`.
+- From https://github.com/RetroAchievements/rcheevos at `f1417fb` (2026-08-12);
+  `vendor/rcheevos/README.md` says what was taken and what was left out.
 
 MIT is the whole reason this is possible rather than a problem: it fits beside
 diatom's own license, so the project's founding goal - escaping GPL inheritance - is
@@ -39,3 +41,12 @@ the responsibility of whoever distributes them.
 
 `test/stubcore.c` is diatom's own code: a libretro core that is not an emulator,
 so the frontend can be exercised with no third-party binary present.
+
+## Libraries it links
+
+None are carried in this repository or shipped with diatom. It links against
+zlib (zipped games), SDL2 (the window, input and sound where SDL drives them)
+and, on each device, the system's ALSA and graphics libraries (OpenGL ES and
+EGL), all provided by the system it runs on: on the GKD Pixel 2 and the TrimUI
+Brick that is plastron, whose package list on a card is
+`Licenses/plastron-packages.md`.

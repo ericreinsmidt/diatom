@@ -5,9 +5,10 @@ carried in as the frontend's achievement evaluator.
 
 - Upstream: https://github.com/RetroAchievements/rcheevos
 - Version: `f1417fb`, 2026-08-12
-- **MIT licensed** - see `LICENSE`. Same license as diatom, which is what makes
-  vendoring it compatible with escaping GPL inheritance rather than in tension
-  with it.
+- **MIT licensed** - see `LICENSE`. It sits beside diatom's own license, the
+  Mozilla Public License 2.0 (MIT until 2026-10-25), with no copyleft of its
+  own, which is what makes vendoring it compatible with escaping GPL
+  inheritance rather than in tension with it.
 
 This is the second third-party thing in the repository, after `src/libretro.h`,
 and it is the same kind of thing: someone else's definition of an interface
