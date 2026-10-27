@@ -1779,6 +1779,7 @@ static int run_session_inner(const diatom_session *sn)
 		       g_caps.audio_buffer_frames / 2, g_caps.audio_buffer_frames);
 		printf("diatom: rate control drift %+.3f%% (max %+.3f%%)\n",
 		       diatom_audio_ratio_drift() * 100.0, 0.5);
+		diatom_env_core_log_summary();
 	}
 
 	diatom_core_stop(g_core);

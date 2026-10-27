@@ -69,8 +69,24 @@ bool diatom_env_new_geometry(int *w, int *h, double *aspect)
  *
  * Load-time INFO is kept - that is where a core announces its version, which is
  * worth having in a log. Only the per-frame flood is dropped, and
- * DIATOM_CORE_LOG=1 keeps everything for anyone debugging a core. */
+ * DIATOM_CORE_LOG=1 keeps everything for anyone debugging a core.
+ *
+ * WARN and ERROR still go through, but each only the first time while a game
+ * runs. Warnings were assumed rare, and a game can make one every frame:
+ * Apotris writes to cartridge hardware mGBA doesn't give it, and mGBA warned
+ * twice a frame, 2,120 pairs in 2,119 frames, measured 2026-10-27 on the
+ * Pixel 2 - 4.4 MB of log in four minutes, the card write above in every
+ * frame. A repeat is counted instead, and the counts are said at exit
+ * (diatom_env_core_log_summary). */
 static bool g_core_log_quiet;
+
+/* The warnings said so far this game. Sixteen distinct ones is far more than
+ * any game has needed; past that they are only counted, so a core whose
+ * messages differ every time still can't write a line a frame. */
+#define WARN_SLOTS 16
+static struct { char text[160]; unsigned long repeats; } g_warned[WARN_SLOTS];
+static int           g_warned_n;
+static unsigned long g_warn_unlisted;
 
 void diatom_env_core_log_quiet(bool quiet)
 {
@@ -80,6 +96,42 @@ void diatom_env_core_log_quiet(bool quiet)
 		forced = (e && *e && *e != '0') ? 1 : 0;
 	}
 	g_core_log_quiet = forced ? false : quiet;
+	/* Raised at the start of every game, so each game's count starts empty */
+	g_warned_n = 0;
+	g_warn_unlisted = 0;
+}
+
+/* True when a warning should be written: the first of its kind this game. */
+static bool warn_first(const char *text)
+{
+	int i;
+
+	for (i = 0; i < g_warned_n; i++)
+		if (!strncmp(g_warned[i].text, text, sizeof g_warned[i].text - 1)) {
+			g_warned[i].repeats++;
+			return false;
+		}
+	if (g_warned_n == WARN_SLOTS) {
+		g_warn_unlisted++;
+		return false;
+	}
+	snprintf(g_warned[g_warned_n].text, sizeof g_warned[g_warned_n].text, "%s", text);
+	g_warned[g_warned_n].repeats = 0;
+	g_warned_n++;
+	return true;
+}
+
+void diatom_env_core_log_summary(void)
+{
+	int i;
+
+	for (i = 0; i < g_warned_n; i++)
+		if (g_warned[i].repeats)
+			printf("diatom: core warning repeated %lu more time(s), not logged: %s\n",
+			       g_warned[i].repeats, g_warned[i].text);
+	if (g_warn_unlisted)
+		printf("diatom: %lu more core warning(s) of other kinds, not logged\n",
+		       g_warn_unlisted);
 }
 
 static void core_log(enum retro_log_level level, const char *fmt, ...)
@@ -97,7 +149,9 @@ static void core_log(enum retro_log_level level, const char *fmt, ...)
 	va_end(ap);
 
 	buf[strcspn(buf, "\n")] = '\0';
-	if (buf[0]) diatom_port_log(l, buf);
+	if (!buf[0]) return;
+	if (g_core_log_quiet && !warn_first(buf)) return;
+	diatom_port_log(l, buf);
 }
 
 static bool env_cb(unsigned cmd, void *data)
