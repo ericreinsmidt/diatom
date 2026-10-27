@@ -1394,38 +1394,36 @@ static int run_session_inner(const diatom_session *sn)
 
 		g_frame_fresh = false;
 		g_audio_fast = fast;
+		/* Only the last frame of a turn is drawn on the panel, so fast, a core
+		 * with a frameskip runs the frames before it unshown and skips their
+		 * drawing (env.c, diatom_env_frame_shown). A frame runs unshown while
+		 * the turn has room after it for one more unshown and the shown one to
+		 * end on; otherwise it is the shown one, and the turn ends with it. So
+		 * the frame on the panel is always one the core drew, never a guess
+		 * that was wrong.
+		 *
+		 * A core without a frameskip keeps the rule from before it: frames
+		 * until the next would not fit, judged after each one. The first try
+		 * gave both kinds of core the new rule, with each cost timed inside
+		 * retro_run alone, and that left out the step's other work: it fitted
+		 * one frame too many now and then, and the overrun turn took a third
+		 * refresh. Sonic at 4x on the Pixel 2 reached 2.05x against 2.24x
+		 * before, measured 2026-10-27. Each cost is now the whole step's, on
+		 * the wall clock, as the old rule's always was. */
+		const bool skips = fast && diatom_env_frame_skippable();
 		for (;;) {
-			/* Only the last frame of a turn is drawn on the panel, so fast,
-			 * the frames before it are run unshown: a core with a frameskip
-			 * skips their drawing (env.c, diatom_env_frame_shown). A frame
-			 * runs unshown while the turn has room after it for one more
-			 * unshown and the shown one to end on; otherwise it is the shown
-			 * one, and the turn ends with it. So the frame on the panel is
-			 * always one the core drew, never a guess that was wrong. For a
-			 * core that doesn't skip, the two costs are the same and this is
-			 * the old rule: frames until the next would not fit. */
 			bool     shown = true;
-			uint64_t f0;
+			uint64_t s0 = diatom_port_now_us();
 			double   cost;
 
-			if (fast && ran + 1 < periods * g_speed &&
-			    !(sn->limit > 0 && frames + 1 >= sn->limit)) {
-				double spent = (double)(diatom_port_now_us() - batch_t0);
-				shown = spent + unshown_us + shown_us > budget;
-			}
+			if (skips && ran + 1 < periods * g_speed &&
+			    !(sn->limit > 0 && frames + 1 >= sn->limit))
+				shown = (double)(s0 - batch_t0) + unshown_us + shown_us > budget;
 			diatom_env_frame_shown(shown);
 
-			f0 = diatom_port_now_us();
 			g_core->run();
-			cost = (double)(diatom_port_now_us() - f0);
 			frames++;
 			ran++;
-			/* A running average, an eighth new, of each kind. The first one
-			 * measured seeds both, so the first fast turn has a figure. */
-			if (shown) shown_us = shown_us > 0.0 ? shown_us + (cost - shown_us) / 8.0 : cost;
-			else       unshown_us = unshown_us + (cost - unshown_us) / 8.0;
-			if (unshown_us <= 0.0) unshown_us = shown_us;
-			if (!shown) fast_unshown++;
 
 			/* Immediately after the frame the core produced, and before
 			 * anything else can touch memory. This one line is why
@@ -1435,7 +1433,24 @@ static int run_session_inner(const diatom_session *sn)
 			 * fast or not. */
 			diatom_cheevos_frame();
 
-			if (shown) break;
+			/* A running average, an eighth new, of each kind. The first one
+			 * measured seeds both, so the first fast turn has a figure. */
+			cost = (double)(diatom_port_now_us() - s0);
+			if (shown) shown_us = shown_us > 0.0 ? shown_us + (cost - shown_us) / 8.0 : cost;
+			else       unshown_us = unshown_us + (cost - unshown_us) / 8.0;
+			if (unshown_us <= 0.0) unshown_us = shown_us;
+
+			if (skips) {
+				if (!shown) fast_unshown++;
+				if (shown) break;
+			} else {
+				double spent;
+
+				if (!fast || ran >= periods * g_speed) break;
+				if (sn->limit > 0 && frames >= sn->limit) break;
+				spent = (double)(diatom_port_now_us() - batch_t0);
+				if (spent + spent / ran > budget) break;
+			}
 		}
 		step_frames += ran;
 		step_periods += periods;
@@ -1776,11 +1791,9 @@ static int run_session_inner(const diatom_session *sn)
 			       fast_frames, fast_secs,
 			       fast_secs > 0 ? fast_frames / fast_secs / av.timing.fps : 0.0);
 		if (fast_unshown)
-			printf("diatom: %ld of them run unshown, %s; a frame %.1f ms shown, %.1f ms unshown\n",
-			       fast_unshown,
-			       diatom_env_frame_skippable() ? "the core told to skip drawing them"
-			                                    : "the core drawing them anyway",
-			       shown_us / 1000.0, unshown_us / 1000.0);
+			printf("diatom: %ld of them run unshown, the core told to skip drawing them; "
+			       "a frame %.1f ms shown, %.1f ms unshown\n",
+			       fast_unshown, shown_us / 1000.0, unshown_us / 1000.0);
 		/* Stated rather than silently subtracted, so the line cannot be read
 		 * as wall clock by anyone who does not know it is not. */
 		if (paused_us)
