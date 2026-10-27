@@ -75,6 +75,7 @@ static double   g_pos;              /* read position within g_buf */
 
 static double   g_base_ratio = 1.0; /* src frames per dst frame, nominal */
 static double   g_ratio      = 1.0; /* nominal, adjusted by rate control */
+static int      g_dst_rate;         /* the device's, 0 when there is none */
 static int      g_capacity;
 static double   g_integral;
 static uint64_t g_dropped;      /* frames the port would not take */
@@ -278,6 +279,7 @@ void diatom_audio_configure(double src_rate, int dst_rate, int capacity_frames)
 	memcpy(g_mix, CHANNEL_MIX[g_channels], sizeof g_mix);
 
 	if (src_rate <= 0.0 || dst_rate <= 0) {
+		g_dst_rate = 0;
 		g_base_ratio = g_ratio = 1.0;
 		build_kernel();
 		memset(g_buf, 0, sizeof g_buf);
@@ -285,6 +287,7 @@ void diatom_audio_configure(double src_rate, int dst_rate, int capacity_frames)
 		g_pos  = HALF;
 		return;
 	}
+	g_dst_rate   = dst_rate;
 	g_base_ratio = src_rate / (double)dst_rate;
 	g_ratio      = g_base_ratio;
 	g_capacity   = capacity_frames;
@@ -390,6 +393,30 @@ void diatom_audio_sync(void)
 double diatom_audio_ratio_drift(void)
 {
 	return g_base_ratio > 0.0 ? (g_ratio / g_base_ratio) - 1.0 : 0.0;
+}
+
+/* The rate the core really sends, where it is not the one it announced, set
+ * half a second into the game and every ten seconds after (main.c measures
+ * it).
+ *
+ * Rate control can only pull 0.5%, and a core can be wrong by more. mGBA runs
+ * an SGB-flagged game in the GBC folder as a Super Game Boy, whose clock is the
+ * SNES's and 2.4% fast: it announces 61.1679 fps, the SGB's, and 131072 Hz,
+ * the plain Game Boy's, and sends 2.4% more sound than that. Measured on the
+ * Brick 2026-10-27: 85995 frames dropped in 89 s, heard as crackle (TortOS#60).
+ *
+ * Rate control's nudge is kept as a fraction, so the buffer goes on being
+ * steered from where it was. The kernel is rebuilt because its cutoff follows
+ * the nominal ratio; once a session, at a cost of a frame's time or so. */
+void diatom_audio_rebase(double src_rate)
+{
+	double nudge;
+
+	if (src_rate <= 0.0 || g_dst_rate <= 0) return;
+	nudge = g_ratio / g_base_ratio;
+	g_base_ratio = src_rate / (double)g_dst_rate;
+	g_ratio      = g_base_ratio * nudge;
+	build_kernel();
 }
 
 static double sinc(double x)

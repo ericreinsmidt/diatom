@@ -595,6 +595,35 @@ static void idle_note_input(bool any)
 #define FAST_PRESENT_GUESS_US 7000.0
 static int  g_speed = 1;
 
+/* The core's sound rate, checked against what it sends: over this many frames
+ * at 1x, half a second's worth, and taken when it is out by more than
+ * RATE_TRUST, twice what rate control can pull. Inside that, the announced
+ * rate stands and nothing changes; past RATE_SANE it is not believed either
+ * way, so a core that says nothing while it boots cannot set a rate. See
+ * diatom_audio_rebase.
+ *
+ * Half a second is enough to stop the drops and not enough to be exact,
+ * because what a frame carries depends on what the game is doing. A Game Boy
+ * game that turns its screen off and on makes frames longer or shorter than
+ * the 70224 cycles of a normal one, and Donkey Kong does it on its title
+ * screen and between levels. In the GBC folder, on 2026-10-27, against the
+ * 134233 its SGB clock makes at 70224 cycles a frame (over 32, at 61.1679
+ * fps): the first second read 134667 on the Brick and 136233 on the Pixel 2,
+ * the first ten seconds 134250 and 135137, and the Pixel 2's whole game
+ * 134375. The whole game is what the buffer sees. So a corrected rate goes on
+ * being checked every RATE_REFINE_FRAMES, ten seconds, each time over every
+ * frame since the start, and is taken again when it is out by more than
+ * RATE_REFINE. A core whose announced rate stood is not checked again.
+ *
+ * The first check went from a second to half of one for the Pixel 2's run:
+ * its title screen sent 3.9% over the announced rate, which fills the
+ * buffer's spare half faster than a second, and 1003 frames were dropped. */
+#define RATE_CHECK_FRAMES  30
+#define RATE_REFINE_FRAMES 600
+#define RATE_TRUST         0.01
+#define RATE_REFINE        0.001
+#define RATE_SANE          0.10
+
 /* One step's measurement: frames run against the pacing periods that passed,
  * so a step that hit the budget says how far short it fell. Wall time
  * includes the menu; the speed does not. */
@@ -1111,6 +1140,15 @@ static int run_session_inner(const diatom_session *sn)
 	long     step_frames = 0, step_periods = 0;
 	uint64_t step_t0 = 0, step_drop0 = 0;
 	long     locked_at = 0;     /* frame the current rect was computed on */
+	/* The sound rate in force, the announced one until the check below says
+	 * otherwise, and the check's count: frames at 1x, and the input samples
+	 * counted when it started. The checks still to come: the first, then
+	 * one every RATE_REFINE_FRAMES for a rate the first corrected, or none;
+	 * and the frame count the next one is due at. */
+	double   audio_rate = 0.0;
+	long     rate_frames = 0, rate_due = RATE_CHECK_FRAMES;
+	uint64_t rate_in0 = 0;
+	enum { RATE_FIRST, RATE_AGAIN, RATE_DONE } rate_check = RATE_FIRST;
 
 	/* Every game starts from identity and from an unknown level, so a launcher
 	 * that sends no map gets no map, and the first poll reports where the
@@ -1255,6 +1293,7 @@ static int run_session_inner(const diatom_session *sn)
 	 * when it will not open, which turns rate control off. */
 	diatom_audio_configure(av.timing.sample_rate, g_caps.audio_rate,
 	                       diatom_port_audio_start() ? g_caps.audio_buffer_frames : 0);
+	audio_rate = av.timing.sample_rate;
 	diatom_audio_prime();
 
 	/* The rect is computed from BASE geometry and does not move again unless
@@ -1371,6 +1410,7 @@ static int run_session_inner(const diatom_session *sn)
 	next_us = (double)t_start;
 	step_t0 = t_start;
 	step_drop0 = diatom_audio_dropped();
+	rate_in0 = diatom_audio_in_samples();
 
 	while (!diatom_port_should_quit() && !g_terminate && !stop &&
 	       (sn->limit <= 0 || frames < sn->limit)) {
@@ -1454,11 +1494,54 @@ static int run_session_inner(const diatom_session *sn)
 		}
 		step_frames += ran;
 		step_periods += periods;
+
+		/* What the core sends, against what it said it would: samples per
+		 * frame times the frame rate, the true rate whatever the device's
+		 * clock does. Only frames at 1x count: fast forward drops the core's
+		 * sound before it is counted, and the menu runs no frames. */
+		if (rate_check != RATE_DONE && !fast && av.timing.fps > 0.0 &&
+		    audio_rate > 0.0) {
+			rate_frames += ran;
+			if (rate_frames >= rate_due) {
+				double sent = (double)(diatom_audio_in_samples() - rate_in0) / 2.0 /
+				              (double)rate_frames * av.timing.fps;
+				double off = sent / audio_rate - 1.0;
+
+				rate_due = rate_frames + RATE_REFINE_FRAMES;
+				if (rate_check == RATE_AGAIN) {
+					if (fabs(off) > RATE_REFINE && fabs(off) <= RATE_SANE) {
+						printf("diatom: core sends %.0f Hz over %ld frames, "
+						       "not %.0f (%+.2f%%); resampling from that\n",
+						       sent, rate_frames, audio_rate, off * 100.0);
+						diatom_audio_rebase(sent);
+						audio_rate = sent;
+					}
+				} else if (fabs(off) > RATE_SANE) {
+					rate_check = RATE_DONE;
+					printf("diatom: core sent %.0f Hz over %ld frames against "
+					       "the %.0f Hz it announced, %+.1f%%; not believed, "
+					       "the announced rate stands\n",
+					       sent, rate_frames, audio_rate, off * 100.0);
+				} else if (fabs(off) > RATE_TRUST) {
+					rate_check = RATE_AGAIN;
+					printf("diatom: core sends %.0f Hz, not the %.0f Hz it "
+					       "announced (%+.2f%%); resampling from what it sends\n",
+					       sent, audio_rate, off * 100.0);
+					diatom_audio_rebase(sent);
+					audio_rate = sent;
+				} else {
+					rate_check = RATE_DONE;
+				}
+			}
+		}
+
 		if (fast) {
 			/* Silence for the time this turn stands for, so the queue holds
-			 * its target and the rate control never sees fast forward. */
+			 * its target and the rate control never sees fast forward. At the
+			 * rate the resampler is using, which is not always the announced
+			 * one. */
 			static const int16_t quiet[2 * 4096];
-			size_t n = (size_t)(periods * av.timing.sample_rate / av.timing.fps);
+			size_t n = (size_t)(periods * audio_rate / av.timing.fps);
 
 			if (n > 4096) n = 4096;
 			diatom_audio_push(quiet, n);

@@ -308,6 +308,7 @@ size_t diatom_audio_push(const int16_t *in, size_t frames);
 void   diatom_audio_prime(void);           /* fill to target: frame one, menu */
 void   diatom_audio_sync(void);            /* once per frame, after pushing */
 double diatom_audio_ratio_drift(void);     /* current DRC correction, for reporting */
+void   diatom_audio_rebase(double src_rate); /* the rate the core really sends */
 /* Frames the port refused, this session. Nonzero means rate control is not
  * keeping up - the buffer is hitting a wall rather than being steered. */
 uint64_t diatom_audio_dropped(void);
