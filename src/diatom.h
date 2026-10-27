@@ -109,6 +109,12 @@ void diatom_env_core_log_quiet(bool quiet);
 /* At a game's exit: how many times each warning repeated without being logged. */
 void diatom_env_core_log_summary(void);
 
+/* Before each retro_run: whether the frame about to run will be shown, so a
+ * core's frameskip can skip drawing one that won't. Whether the running core
+ * listens at all is diatom_env_frame_skippable. See env.c. */
+void diatom_env_frame_shown(bool shown);
+bool diatom_env_frame_skippable(void);
+
 /* options.c - what a core can be configured with, and what it currently is.
  *
  * Diatom holds the definitions and the values; the LAUNCHER decides what the

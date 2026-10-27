@@ -1101,7 +1101,11 @@ static int run_session_inner(const diatom_session *sn)
 	uint32_t buttons = 0, prev_buttons = 0, held_at_entry = 0;
 	uint32_t chord_hold = 0;    /* R1, while it belongs to MENU+R1 */
 	bool     menu_armed = false, menu_chorded = false;
-	long     fast_frames = 0, fast_turns = 0;
+	long     fast_frames = 0, fast_turns = 0, fast_unshown = 0;
+	/* What a core frame costs, run to be shown and run to be skipped, kept
+	 * apart because skipping the drawing is the point (see the batch below).
+	 * For a core that doesn't skip they come out the same. */
+	double   shown_us = 0.0, unshown_us = 0.0;
 	/* The step in force, measured: what it reached, how long it was held, and
 	 * any audio dropped while it was - logged when it changes and at exit. */
 	long     step_frames = 0, step_periods = 0;
@@ -1391,11 +1395,37 @@ static int run_session_inner(const diatom_session *sn)
 		g_frame_fresh = false;
 		g_audio_fast = fast;
 		for (;;) {
-			double spent;
+			/* Only the last frame of a turn is drawn on the panel, so fast,
+			 * the frames before it are run unshown: a core with a frameskip
+			 * skips their drawing (env.c, diatom_env_frame_shown). A frame
+			 * runs unshown while the turn has room after it for one more
+			 * unshown and the shown one to end on; otherwise it is the shown
+			 * one, and the turn ends with it. So the frame on the panel is
+			 * always one the core drew, never a guess that was wrong. For a
+			 * core that doesn't skip, the two costs are the same and this is
+			 * the old rule: frames until the next would not fit. */
+			bool     shown = true;
+			uint64_t f0;
+			double   cost;
 
+			if (fast && ran + 1 < periods * g_speed &&
+			    !(sn->limit > 0 && frames + 1 >= sn->limit)) {
+				double spent = (double)(diatom_port_now_us() - batch_t0);
+				shown = spent + unshown_us + shown_us > budget;
+			}
+			diatom_env_frame_shown(shown);
+
+			f0 = diatom_port_now_us();
 			g_core->run();
+			cost = (double)(diatom_port_now_us() - f0);
 			frames++;
 			ran++;
+			/* A running average, an eighth new, of each kind. The first one
+			 * measured seeds both, so the first fast turn has a figure. */
+			if (shown) shown_us = shown_us > 0.0 ? shown_us + (cost - shown_us) / 8.0 : cost;
+			else       unshown_us = unshown_us + (cost - unshown_us) / 8.0;
+			if (unshown_us <= 0.0) unshown_us = shown_us;
+			if (!shown) fast_unshown++;
 
 			/* Immediately after the frame the core produced, and before
 			 * anything else can touch memory. This one line is why
@@ -1405,10 +1435,7 @@ static int run_session_inner(const diatom_session *sn)
 			 * fast or not. */
 			diatom_cheevos_frame();
 
-			if (!fast || ran >= periods * g_speed) break;
-			if (sn->limit > 0 && frames >= sn->limit) break;
-			spent = (double)(diatom_port_now_us() - batch_t0);
-			if (spent + spent / ran > budget) break;
+			if (shown) break;
 		}
 		step_frames += ran;
 		step_periods += periods;
@@ -1748,6 +1775,12 @@ static int run_session_inner(const diatom_session *sn)
 			       "excluded from the rate above\n",
 			       fast_frames, fast_secs,
 			       fast_secs > 0 ? fast_frames / fast_secs / av.timing.fps : 0.0);
+		if (fast_unshown)
+			printf("diatom: %ld of them run unshown, %s; a frame %.1f ms shown, %.1f ms unshown\n",
+			       fast_unshown,
+			       diatom_env_frame_skippable() ? "the core told to skip drawing them"
+			                                    : "the core drawing them anyway",
+			       shown_us / 1000.0, unshown_us / 1000.0);
 		/* Stated rather than silently subtracted, so the line cannot be read
 		 * as wall clock by anyone who does not know it is not. */
 		if (paused_us)

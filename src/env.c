@@ -134,6 +134,32 @@ void diatom_env_core_log_summary(void)
 		       g_warn_unlisted);
 }
 
+/* Fast forward draws one frame in several, and a core that renders in software
+ * spends much of each frame drawing it: in a heavy GBA game at 2x to 4x, mGBA
+ * reached 1.44x to 1.53x on the Pixel 2, measured 2026-10-27. A core can skip
+ * the drawing and still run the game, but it has to be told which frames, and
+ * the only way libretro gives a frontend to tell it is the audio buffer status
+ * callback: a core's frameskip in "auto" skips a frame reported as about to
+ * underrun. So Diatom reports "underrun" for a frame it won't show, and nothing
+ * else: at 1x every frame is shown, so a core never skips one there, whatever
+ * the audio is doing.
+ *
+ * GET_AUDIO_VIDEO_ENABLE, the call meant for this, does nothing for mGBA: its
+ * libretro core never asks. */
+static retro_audio_buffer_status_callback_t g_frame_status;
+
+bool diatom_env_frame_skippable(void)
+{
+	return g_frame_status != NULL;
+}
+
+void diatom_env_frame_shown(bool shown)
+{
+	/* Full when shown, empty when not, so a frameskip by threshold
+	 * ("auto_threshold") answers the same as "auto" */
+	if (g_frame_status) g_frame_status(true, shown ? 100 : 0, !shown);
+}
+
 static void core_log(enum retro_log_level level, const char *fmt, ...)
 {
 	char buf[512];
@@ -211,6 +237,13 @@ static bool env_cb(unsigned cmd, void *data)
 	case MASK(RETRO_ENVIRONMENT_GET_AUDIO_VIDEO_ENABLE):
 		*(int *)data = 3;              /* both enabled; asked every frame */
 		return true;
+	case MASK(RETRO_ENVIRONMENT_SET_AUDIO_BUFFER_STATUS_CALLBACK): {
+		/* Not for the audio: it is how a core's frameskip learns which frames
+		 * to skip. See diatom_env_frame_shown. NULL takes it back. */
+		const struct retro_audio_buffer_status_callback *cb = data;
+		g_frame_status = cb ? cb->callback : NULL;
+		return true;
+	}
 
 	/* ---- paths - supplied by the host, never by the port ----------------- */
 	case MASK(RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY):
@@ -697,6 +730,9 @@ void diatom_env_bind(diatom_core *c, diatom_policy *p, diatom_port_caps *caps)
 {
 	g_policy = p;
 	g_caps   = caps;
+	/* The last core's, and never this one's: a core that wants it hands it
+	 * over again as it loads the game (mGBA does, in retro_load_game). */
+	g_frame_status = NULL;
 
 	/* Bind the option table BEFORE set_environment: a core declares its
 	 * options from inside that call, and they must land in its own table. */
