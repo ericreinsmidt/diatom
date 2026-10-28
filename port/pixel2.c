@@ -837,7 +837,7 @@ static void show_frame(void)
 	struct gbm_bo *bo = gbm_surface_lock_front_buffer(g_gbm_surface);
 	uint32_t fb;
 	bool done = false;
-	int tries = 0, ret;
+	int tries = 0, ret, flip_err;
 
 	if (!bo) {
 		diatom_port_log(DIATOM_LOG_ERROR, "pixel2: no front buffer after swap");
@@ -866,8 +866,24 @@ static void show_frame(void)
 		                              DRM_MODE_PAGE_FLIP_EVENT, &done)) != 0 &&
 		       errno == EBUSY && tries++ < 5)
 			wait_vblank();
+		/* What is lit is in another format, and a flip cannot change it:
+		 * the boot splash's frame is XRGB8888, and a game resumed at boot
+		 * comes before the launcher has put up anything of its own. Every
+		 * flip came back EINVAL until the launcher drew its resume menu,
+		 * 8 to 11 frames, seen 2026-10-27 on the Pixel 2 and in a player's
+		 * logs. A mode-set can change it, as the standalone path's does,
+		 * and after it the frames flip as usual. */
+		flip_err = errno;
+		if (ret != 0 && flip_err == EINVAL &&
+		    drmModeSetCrtc(g_drm_fd, g_crtc_id, fb, 0, 0, &g_connector_id, 1,
+		                   &g_mode) == 0) {
+			port_logf(DIATOM_LOG_INFO, "pixel2: what was lit would not take "
+			          "a flip; set the mode with this frame instead");
+			ret = 0;
+			done = true;
+		}
 		if (ret != 0) {
-			port_logf(DIATOM_LOG_WARN, "pixel2: page flip: %s", strerror(errno));
+			port_logf(DIATOM_LOG_WARN, "pixel2: page flip: %s", strerror(flip_err));
 			gbm_surface_release_buffer(g_gbm_surface, bo);
 			return;
 		}
