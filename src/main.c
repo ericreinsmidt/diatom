@@ -1425,6 +1425,8 @@ static int run_session_inner(const diatom_session *sn)
 		 * running average, so a cheaper display mode buys speed by itself. */
 		const bool fast = g_speed > 1;
 		const int periods = fast ? 2 : 1;
+		/* Fast, at the top clock; see diatom_port_fast_clock. */
+		diatom_port_fast_clock(fast);
 		const uint64_t batch_t0 = diatom_port_now_us();
 		const double budget = periods * frame_us - FAST_MARGIN_US -
 		                      (g_present_frames ? (double)g_present_us /
@@ -1730,7 +1732,12 @@ static int run_session_inner(const diatom_session *sn)
 				stop = true;
 			} else {
 				uint64_t pause_t0 = diatom_port_now_us();
-				bool resumed = menu_pause(sn);
+				bool resumed;
+
+				/* The menu is the launcher's, at the governor's clock; a fast
+				 * game takes the top one back on its next turn. */
+				diatom_port_fast_clock(false);
+				resumed = menu_pause(sn);
 
 				/* The summary line divides frames by wall clock, and an open
 				 * menu produces no frames, so without this a long menu reads
@@ -1834,6 +1841,7 @@ static int run_session_inner(const diatom_session *sn)
 	 * costume of a pacing bug. */
 	if (g_terminate)
 		printf("diatom: terminated by signal; saving\n");
+	diatom_port_fast_clock(false);
 
 	/* Both paths, and in this order: the game's own save first, because losing
 	 * it is a defect, then the state, which is a convenience. */
@@ -2070,6 +2078,7 @@ int main(int argc, char **argv)
 		fprintf(stderr, "diatom: port init failed\n");
 		return 2;
 	}
+	diatom_port_fast_clock(false);
 
 	/* Once for the life of the process, not per session: the first thing a
 	 * session does is dlopen and start a core, and a core that dies there is

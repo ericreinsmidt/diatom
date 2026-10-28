@@ -316,6 +316,21 @@ void diatom_port_level_shown(diatom_level_kind kind, int pos, int positions);
  * of its own implements this as a no-op and is correct. */
 void diatom_port_low_battery(bool on, bool blink);
 
+/* Hold the CPU at its top clock, or give the clock back to the governor. The
+ * host says true while a game runs fast, and false at 1x, in the menu, at the
+ * end of a session and once at start, which clears a hold a crashed Diatom
+ * left behind. It may say it every turn; the port acts on a change.
+ *
+ * Fast forward is the one time a game needs the top clock and ondemand does
+ * not give it: a fast turn waits out what is left of its periods, so the CPU
+ * looks idle enough to be clocked down, and a turn that no longer fits drops
+ * the speed by a whole step, not a little. Measured on the Pixel 2,
+ * 2026-10-28, a heavy GBA game at 4x for a minute and more: 2.36x with the
+ * clock pinned at 1296 MHz, 1.71x pinned at 1008, and 1.48x to 2.17x left to
+ * ondemand, which moved between the two. A port with no clock of its own to
+ * set implements this as a no-op and is correct. */
+void diatom_port_fast_clock(bool on);
+
 /* Forget everything the port remembers about the output state.
  *
  * Needed because Diatom is RESIDENT: the port keeps what it last wrote, to

@@ -43,6 +43,7 @@
 #include "diatom_port.h"
 #include "ladder.h"
 #include "port_clock.h"
+#include "port_cpufreq.h"
 
 #define AUDIO_RATE 48000
 /* Capacity in FRAMES (one frame = two int16 samples). 4096 at 48kHz is ~85ms,
@@ -1929,3 +1930,13 @@ void diatom_port_mute_set(bool on)
 }
 
 bool diatom_port_mute_get(void) { return g_muted; }
+
+void diatom_port_fast_clock(bool on)
+{
+	static bool said;
+
+	if (!diatom_cpufreq_hold_top(on) && !said) {
+		said = true;
+		diatom_port_log(DIATOM_LOG_WARN, "brick: could not set the CPU's lowest clock");
+	}
+}
