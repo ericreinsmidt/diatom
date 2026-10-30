@@ -57,6 +57,17 @@
 #define AUDIO_BUFFER_FRAMES 4096
 #define AUDIO_FRAME_BYTES   (2 * (int)sizeof(int16_t))
 
+/* 2 dB down for the RK817, the speaker and headphone jack. Sound near full
+ * scale is clipped past Diatom on its way out: Metroid Zero Mission's intro
+ * peaks at -1.8 dB and crackled on and off on the speaker, 20 clicks in 17 s
+ * on a recording, none of them in what Diatom handed over, no underruns, the
+ * Brick clean with the same game. Two volume steps lower still crackled, so
+ * the clipping comes before the volume; 2 dB less going in did not crackle
+ * (2026-10-30). Muse plays everything 2 dB down too (for its own overs, in
+ * October), so a game and a song sound alike. Not a USB-C DAC, which has its
+ * own path and has not been heard to clip. */
+#define RK817_HEADROOM 0.7943f
+
 /* ---------- the display ---------------------------------------------------- */
 
 static int                 g_drm_fd = -1;
@@ -1362,6 +1373,13 @@ size_t diatom_port_audio_write(const int16_t *frames, size_t n)
 	       ? 0 : (size_t)AUDIO_BUFFER_FRAMES - queued;
 	if (n > room) n = room;
 	if (!n) return 0;
+	if (!g_audio_dev[0]) {
+		static int16_t down[AUDIO_BUFFER_FRAMES * 2];
+		size_t i;
+
+		for (i = 0; i < n * 2; i++) down[i] = (int16_t)(frames[i] * RK817_HEADROOM);
+		frames = down;
+	}
 	SDL_QueueAudio(g_audio, frames, (Uint32)(n * AUDIO_FRAME_BYTES));
 	return n;
 }
