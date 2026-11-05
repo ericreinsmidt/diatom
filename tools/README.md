@@ -8,57 +8,10 @@ The device instruments that produced the measurements cited in docs/ (the
 probes, and the scripts that ran them on a Brick) are kept outside this
 repository: they are for development on a device, not for building diatom.
 
-## `check-rates.py`
-
-Fails on any sample rate stated in the source or docs that the pinned cores, as
-measured in docs/reference/core-facts.md, do not produce. Rates had been
-recalled from memory and got wrong: a spike table once labeled 32040 as NES (it
-is SNES).
-
 ## `fetch-cores.sh`
 
-Verifies the cores CORES.md pins, fetching any that are missing from libretro's
-own buildbot.
-
-## `check-corefacts.py` - measured facts, not remembered ones
-
-*Do the numbers in `docs/` still describe the cores we actually ship?*
-
-On 2026-08-25 an audit found that **three of the six rows in the
-integer-vertical aspect table described cores the project had rejected the day
-before.** Genesis went
-1.3333 to 1.5238 when PicoDrive lost to Genesis Plus GX; SNES 1.3333 to 1.5842
-when snes9x 1.63 lost to snes9x2010; NES 1.2190 to 1.3061 on a rebuilt FCEUmm.
-
-Nothing could detect it, because that table was keyed on the **system**. A
-system does not report an aspect ratio - a specific core build does, and the
-number had been separated from the binary that produced it. CORES.md already
-stated the intent: *"this file exists so the measurements in docs/ name the
-exact bytes that produced them."* Stating it was not enough.
-
-So docs/reference/core-facts.md is measured on the device, by a script kept
-outside this repository, and `make check-corefacts` runs on every build.
-
-The measuring script verifies every core's sha256 against CORES.md **on the
-host, then again on the device after the push**, and refuses to measure
-anything unpinned.
-That is not belt-and-braces. The hand audit that started this made exactly that
-mistake: it measured a device staging directory that had drifted, read mGBA's
-rate as 48000 when the pinned build reports 65536, and wrongly called the Game
-Boy row stale. A careful audit was still wrong, because carefulness cannot
-verify a hash.
-
-`check-corefacts.py` is what runs without a device. It asserts one thing - that
-the pinned set recorded in `core-facts.md` is still the pinned set in CORES.md -
-so swapping a core fails immediately instead of quietly aging every measurement
-that cited it.
-
-A first version also tried to forbid docs from restating any number the facts
-file owns. It fired on `50.0070` a dozen times, which is not a core's opinion
-but the correct PAL frame rate. Removed: a check that cannot tell a legitimate
-reference from a stale copy is one people learn to ignore. Citing the file by
-link is therefore a **convention**, and the tooling says so rather than
-pretending to enforce it.
+Verifies the cores CORES.md pins, fetching any that are missing from scutes
+(github.com/ericreinsmidt/scutes), which keeps the exact files TortOS ships.
 
 ## Making a core die on purpose
 

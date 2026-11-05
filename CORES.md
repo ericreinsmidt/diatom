@@ -1,16 +1,16 @@
 # Cores the test matrix was verified against
 
-Pinned 2026-08-26. Generated from the table in
+Pinned 2026-11-04. Generated from the table in
 `tools/fetch-cores.sh`, which is where the pin lives; this file is the
 readable copy of it, and the script fails rather than rewriting it.
 
-**Not part of diatom.** These are third-party binaries; diatom neither
+**Not part of Diatom.** These are third-party binaries; Diatom neither
 ships nor depends on them, and loads whatever core it is handed. This file
-exists so the measurements in `docs/` name the exact bytes that produced
-them. The binaries themselves are gitignored.
+names the exact bytes it is tested against, the same TortOS ships. The
+binaries themselves are gitignored.
 
-Source: `https://buildbot.libretro.com/nightly/linux/aarch64/latest` - libretro's own buildbot. The path is **unpinned**;
-these hashes are the pin.
+Source: `https://github.com/ericreinsmidt/scutes/releases/download/v1` - scutes' v1 release, which can't change. The
+hashes are the pin.
 
 Licenses are pinned with the hashes and re-checked on every run against
 libretro's core-info. The set is **not uniformly GPL** and the
@@ -20,13 +20,13 @@ differences matter to anyone shipping an image.
 |---|---|---|---|
 | `fceumm` | GPLv2 | 4451672 | `1b13b00d4680394dad8000d5175f97be727107e0945bc9b412da91d70c07b267` |
 | `snes9x2010` | Non-commercial | 2859704 | `3933890f520abb9dbb0e5276460785b20ce54d25f552b369cafeca270b9dd44c` |
-| `mgba` | MPLv2.0 | 3280408 | `abde7a0764f08fa0cc2c7d3d9a29b9d1245a9f3b7df0e7a594b74df642ee53c6` |
+| `mgba` | MPLv2.0 | 2540864 | `1c180827774f1941565ac82a173633edf4553ac2809a4851c9eee627f2775ff9` |
 | `genesis_plus_gx` | Non-commercial | 12589216 | `3673a22b906509461e23a5a118b1d1bec15cbda105f260cbcbc08a16b2124e48` |
 | `mednafen_pce_fast` | GPLv2 | 4465432 | `aca90a14b18108c86398da2267ef40d5145eaddbc1c1b310614d745b258552b1` |
+| `mednafen_ngp` | GPLv2 | 375872 | `a2015668f9a9403b8bf6941b550fae2c618f37b79173e8ba27c95b95f96bdd99` |
 
-Each core also reports its own name and version, which diatom logs at
-load and which usually carries an upstream git hash. Those strings are
-recorded alongside the measurements that used them.
+Each core also reports its own name and version, which Diatom logs at
+load and which usually carries an upstream git hash.
 
 ## C++ cores on TrimUI's firmware
 
@@ -45,4 +45,5 @@ plastron, which both devices run now, ships `libstdc++.so.6.0.34` (GCC
 way. They have not been measured on it.
 
 C cores - fceumm, picodrive, genesis_plus_gx, mgba, mednafen_pce_fast -
-are unaffected and load as fetched.
+are unaffected and load as fetched. `mednafen_ngp` is C++ but asks only
+for `GLIBCXX_3.4`, so it loaded on TrimUI's firmware too.

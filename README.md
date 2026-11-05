@@ -17,9 +17,9 @@ core it is handed and ships none of them. It was MIT until 2026-10-25.
 cores on the TrimUI Brick and the GKD Pixel 2: NES · SNES · Genesis ·
 Master System · Game Gear · Game Boy · Game Boy Color · GBA · PC Engine
 (HuCard and CD) · Neo Geo Pocket · Neo Geo Pocket Color. All 2D, all digital input, all light
-enough to keep every core resident at once. Five of the cores are pinned and
-measured here ([CORES.md](CORES.md)); the sixth, `mednafen_ngp` for the two
-Pocket systems, is pinned by TortOS and not yet measured here.
+enough to keep every core resident at once. The six cores are pinned in
+[CORES.md](CORES.md) and kept, as the exact files, on
+[scutes](https://github.com/ericreinsmidt/scutes).
 
     diatom --core snes9x2010_libretro.so --rom parodius.sfc
 
@@ -68,4 +68,3 @@ a Brick, diatom peaks at **8.2 to 8.4 MB** with FCEUmm running.
 | `test/stubcore.c` | A libretro core that is not an emulator, so the frontend can be exercised with no third-party binary |
 | `tools/` | The checks, and the allocation counter `conform` links in |
 | `test/` | The stub core, and the suites that exercise the frontend against it |
-| `docs/reference/core-facts.md` | What the shipped cores actually report, measured on the device rather than transcribed |

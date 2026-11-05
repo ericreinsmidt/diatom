@@ -1,6 +1,6 @@
 #!/bin/sh
-# Verifies the cores Diatom's measurements were made against, fetching any that
-# are missing, from libretro's own buildbot.
+# Verifies the cores Diatom is tested against, the ones TortOS ships, fetching
+# any that are missing, from scutes (github.com/ericreinsmidt/scutes).
 #
 #   tools/fetch-cores.sh                 the whole test matrix
 #   tools/fetch-cores.sh gambatte mgba   just these
@@ -8,17 +8,18 @@
 # Why this exists, and why it records rather than vendors:
 #
 # Cores are THIRD-PARTY binaries that Diatom does not ship, build or depend on.
-# Diatom has no core list. But the test matrix
-# is evidence - the geometry, envelope and pacing claims in docs/ rest on
-# specific binaries - and evidence whose provenance is unstated cannot be
-# re-checked. So the bytes stay out of the repository and the manifest goes in.
+# Diatom has no core list. But a test is only worth as much as knowing which
+# core it ran, so the bytes stay out of the repository and the manifest goes
+# in.
 #
-# The buildbot publishes to latest/, which is UNPINNED. That is the exact drift
-# pinning by digest rather than `:latest` prevents, and it cannot be fixed from
-# this end: the buildbot keeps no archive to pin to. What can be fixed is
-# knowing what was actually used, which is what CORES.md is for. A core's own
+# scutes keeps the exact files on its v1 release, which can't change (its
+# releases are immutable). They came from libretro's buildbot, apart from mGBA,
+# which is TortOS's build (mk/build-mgba-bridge.sh there) of the same commit
+# plus mGBA's own fix for MBC2 cartridges; scutes' LICENSE says what each was
+# built from. The buildbot itself keeps only latest/, so a pin on it broke
+# whenever upstream changed anything, which is why scutes exists. A core's own
 # reported version string, logged whenever Diatom runs it, usually carries an
-# upstream git hash and is the stronger record of the two.
+# upstream git hash and is the second record of what was used.
 #
 # THIS SCRIPT VERIFIES. IT DOES NOT DISCOVER.
 #
@@ -42,8 +43,7 @@
 # narrow the file.
 set -eu
 
-ARCH=${ARCH:-linux/aarch64}
-BASE="https://buildbot.libretro.com/nightly/$ARCH/latest"
+BASE="https://github.com/ericreinsmidt/scutes/releases/download/v1"
 # Licenses are pinned below with the hashes, and re-checked on every run against
 # libretro's own core-info repo, which is where the `license` field a frontend
 # would display is maintained. Pinned rather than simply recorded: the question
@@ -55,7 +55,8 @@ MANIFEST=CORES.md
 
 # THE PIN, and the date it was established. Nothing here changes on its own.
 #
-# The five cores cover all nine in-scope systems and actually run on the device.
+# The six cores cover all eleven systems TortOS plays and actually run on the
+# device.
 # snes9x2010 rather than mainline snes9x: mainline is C++ and wanted
 # GLIBCXX_3.4.29, which TrimUI's firmware did not have (see below), while 2010
 # is pure C, holds frame rate, and is the only light fork that reports the
@@ -66,28 +67,30 @@ MANIFEST=CORES.md
 # identically, from a smaller binary, and gambatte is C++, which also kept it
 # off TrimUI's firmware.
 #
-# To adopt a republished core: decide to, rather than letting a fetch decide for
-# you. Then change the line here AND in TortOS's mk/fetch-vendor.sh together,
-# and re-measure every row in docs/reference/core-facts.md that used it, because
-# each of those numbers was made against the old bytes.
+# These don't change. A save state records the version of the core that wrote
+# it and Diatom refuses any other, so a new core costs players every state for
+# that console. A core changes only to fix a bug players hit, as the same
+# source plus the fix (mGBA's MBC2 fix, 2026-09-12, is the one so far). Then:
+# a new file on scutes, and the line here AND in TortOS's mk/fetch-vendor.sh
+# changed together.
 #
 # Fields: name, sha256, bytes, license. License is last so it may contain
 # spaces.
-PINNED_ON=2026-08-26
+PINNED_ON=2026-11-04
 pins() {
 	cat <<-'EOF'
 	fceumm            1b13b00d4680394dad8000d5175f97be727107e0945bc9b412da91d70c07b267 4451672 GPLv2
 	snes9x2010        3933890f520abb9dbb0e5276460785b20ce54d25f552b369cafeca270b9dd44c 2859704 Non-commercial
-	mgba              abde7a0764f08fa0cc2c7d3d9a29b9d1245a9f3b7df0e7a594b74df642ee53c6 3280408 MPLv2.0
+	mgba              1c180827774f1941565ac82a173633edf4553ac2809a4851c9eee627f2775ff9 2540864 MPLv2.0
 	genesis_plus_gx   3673a22b906509461e23a5a118b1d1bec15cbda105f260cbcbc08a16b2124e48 12589216 Non-commercial
 	mednafen_pce_fast aca90a14b18108c86398da2267ef40d5145eaddbc1c1b310614d745b258552b1 4465432 GPLv2
+	mednafen_ngp      a2015668f9a9403b8bf6941b550fae2c618f37b79173e8ba27c95b95f96bdd99 375872 GPLv2
 	EOF
 }
 
 CORES=${*:-$(pins | awk '{print $1}')}
 
 command -v curl   >/dev/null || { echo "fetch-cores: need curl" >&2; exit 1; }
-command -v unzip  >/dev/null || { echo "fetch-cores: need unzip" >&2; exit 1; }
 command -v shasum >/dev/null || { echo "fetch-cores: need shasum" >&2; exit 1; }
 
 mkdir -p "$OUT"
@@ -119,27 +122,27 @@ for c in $CORES; do
 		continue
 	fi
 
-	z="$tmp/$c.zip"
+	dl="$tmp/${c}_libretro.so"
 	# A failed fetch is fatal. It used to `continue`, which dropped that core's
 	# row from the manifest and still exited 0.
-	if ! curl -sSfL --max-time 120 -o "$z" "$BASE/${c}_libretro.so.zip"; then
+	if ! curl -sSfL --max-time 120 -o "$dl" "$BASE/${c}_libretro.so"; then
 		echo "FAILED"
 		echo "fetch-cores: could not fetch $c from $BASE" >&2
 		exit 1
 	fi
-	unzip -oq "$z" -d "$OUT"
 
-	got=$(shasum -a 256 "$so" | cut -d' ' -f1)
+	# Checked before it goes in place, so a wrong file never sits in $OUT
+	got=$(shasum -a 256 "$dl" | cut -d' ' -f1)
 	if [ "$got" != "$want" ]; then
 		echo "MISMATCH"
 		echo "fetch-cores: $c does not match the pin" >&2
 		echo "    want $want" >&2
 		echo "    got  $got" >&2
-		echo "  The buildbot republished this core. Verify it, then update the" >&2
-		echo "  hash here and in TortOS's mk/fetch-vendor.sh together, and" >&2
-		echo "  re-measure the core-facts.md rows that used it." >&2
+		echo "  scutes' v1 files can't change (its releases are immutable): find" >&2
+		echo "  out why before trusting it." >&2
 		exit 1
 	fi
+	mv "$dl" "$so"
 
 	got_sz=$(wc -c < "$so" | tr -d ' ')
 	if [ "$got_sz" != "$want_sz" ]; then
@@ -180,11 +183,11 @@ done
 	echo
 	echo "**Not part of Diatom.** These are third-party binaries; Diatom neither"
 	echo "ships nor depends on them, and loads whatever core it is handed. This file"
-	echo "exists so the measurements in \`docs/\` name the exact bytes that produced"
-	echo "them. The binaries themselves are gitignored."
+	echo "names the exact bytes it is tested against, the same TortOS ships. The"
+	echo "binaries themselves are gitignored."
 	echo
-	echo "Source: \`$BASE\` - libretro's own buildbot. The path is **unpinned**;"
-	echo "these hashes are the pin."
+	echo "Source: \`$BASE\` - scutes' v1 release, which can't change. The"
+	echo "hashes are the pin."
 	echo
 	echo "Licenses are pinned with the hashes and re-checked on every run against"
 	echo "libretro's core-info. The set is **not uniformly GPL** and the"
@@ -197,8 +200,7 @@ done
 	done
 	echo
 	echo "Each core also reports its own name and version, which Diatom logs at"
-	echo "load and which usually carries an upstream git hash. Those strings are"
-	echo "recorded alongside the measurements that used them."
+	echo "load and which usually carries an upstream git hash."
 	echo
 	echo "## C++ cores on TrimUI's firmware"
 	echo
@@ -217,7 +219,8 @@ done
 	echo "way. They have not been measured on it."
 	echo
 	echo "C cores - fceumm, picodrive, genesis_plus_gx, mgba, mednafen_pce_fast -"
-	echo "are unaffected and load as fetched."
+	echo "are unaffected and load as fetched. \`mednafen_ngp\` is C++ but asks only"
+	echo "for \`GLIBCXX_3.4\`, so it loaded on TrimUI's firmware too."
 } > "$MANIFEST"
 
 echo

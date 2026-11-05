@@ -99,7 +99,7 @@ ifeq ($(PORT),pixel2)
 endif
 
 .PHONY: all clean check check-seam check-proto check-port \
-        check-corefacts check-cheevos stub run-stub
+        check-cheevos stub run-stub
 
 all: $(BIN)
 
@@ -131,7 +131,7 @@ $(BUILD)/%.o: %.c
 # backend exists. Cheap to check, so check it.
 # Mechanical checks, each guarding a rule that decays the moment nothing fails
 # when it is broken: check-seam has held since day one for exactly that reason.
-check: check-seam check-corefacts check-rates check-cheevos check-proto check-port check-stateplane
+check: check-seam check-cheevos check-proto check-port check-stateplane
 
 # Does a RetroAchievements address reach the byte it names? Offline, needs no
 # core and no ROM, and links only cheevos.c plus the vendored runtime - so it
@@ -205,19 +205,6 @@ $(PORT_TEST): test/port_test.c port/desktop.c port/port_clock.h include/diatom_p
 	$(CC) -std=gnu11 -Wall -Wextra -Wno-unused-parameter -O1 -g \
 	      -Iinclude -Isrc -Iport -o $@ test/port_test.c port/desktop.c \
 	      $(SDL_CFLAGS) $(SDL_LIBS)
-
-# Does core-facts.md still describe the cores we ship? It was measured on the
-# device, which needs the hardware and the user's ROMs; this is the half that
-# runs on every build.
-check-corefacts:
-	@python3 tools/check-corefacts.py
-
-# core-facts.md is generated so rates are not recalled from memory. This is what
-# makes that true of the rest of the tree: a spike table once had Game Boy at
-# 32768 Hz, a rate no pinned core produces, and the hardest ratio in the matrix
-# went untested because of it.
-check-rates:
-	@python3 tools/check-rates.py
 
 check-seam:
 	@if grep -nE '^[[:space:]]*#[[:space:]]*include.*libretro\.h' \

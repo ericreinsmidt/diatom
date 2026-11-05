@@ -1,10 +1,10 @@
 /* Resampling.
  *
  * Cores emit whatever rate their hardware ran at; the device runs at whatever
- * it runs at. Measured from the pinned set - docs/reference/core-facts.md, which
- * is generated rather than transcribed: 32040 (SNES), 44100 (Sega, PC Engine),
- * 48000 (NES), 65536 (GBA) and 131072 Hz (Game Boy). The last is 2.73x the
- * device rate, so this resamples in both directions and never by a tidy ratio.
+ * it runs at. Measured from the pinned cores (CORES.md) on the device: 32040
+ * (SNES), 44100 (Sega, PC Engine), 48000 (NES), 65536 (GBA) and 131072 Hz
+ * (Game Boy). The last is 2.73x the device rate, so this resamples in both
+ * directions and never by a tidy ratio.
  *
  * A POLYPHASE WINDOWED-SINC FIR, 32 taps over 512 phases. It replaced linear
  * interpolation, which was a placeholder that measurement caught: on Contra,

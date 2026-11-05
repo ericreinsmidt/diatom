@@ -294,7 +294,7 @@ bool diatom_state_save(diatom_core *c, const char *path)
  *
  * Two builds that write interchangeable states. This is the ONLY thing in
  * Diatom that knows a particular core by name and version, and it is here
- * against its own scope on purpose and temporarily.
+ * against its own scope on purpose.
  *
  * WHY IT EXISTS. libretro's mGBA segfaults on every MBC2 Game Boy cartridge -
  * a regression in mgba a1b2b23, reported as mgba-emu/mgba#3859 and fixed
@@ -310,17 +310,15 @@ bool diatom_state_save(diatom_core *c, const char *path)
  * re-derives the pointer on load, so the fix makes loading MORE correct rather
  * than incompatible. Nothing about the serialized layout differs.
  *
- * WHAT IT BUYS. Without it, swapping between the two rejects every save state
- * - gracefully, the game just starts normally - so the day the official core
- * becomes usable again, every player silently loses their resume points.
- * Battery saves are unaffected either way; .srm is raw cartridge RAM with no
- * version in it.
+ * WHAT IT BUYS. Without it, the two reject each other's save states -
+ * gracefully, the game just starts normally - so a state made on either is
+ * lost to the other. Battery saves are unaffected either way; .srm is raw
+ * cartridge RAM with no version in it.
  *
- * WHEN TO REMOVE IT: as soon as github.com/libretro/mgba carries 543a1975 and
- * TortOS goes back to the fetched core. Then this table is not merely dead, it
- * is WRONG - it would let a genuinely foreign state through. Delete the table,
- * delete version_twins, and restore the plain strcmp above, at the same time
- * as TortOS deletes its mk/build-mgba-bridge.sh. */
+ * IT STAYS. TortOS's cores don't change (the exact files are kept on scutes,
+ * github.com/ericreinsmidt/scutes), so the bridge build is the mGBA TortOS
+ * ships for good, not until libretro syncs. A newer libretro mGBA would report
+ * another version, which this table rightly doesn't cover. */
 static const struct { const char *a, *b; } STATE_TWINS[] = {
 	{ "0.11.0", "0.11-219-e31759b" },   /* the MBC2 bridge, and what it patches */
 };
