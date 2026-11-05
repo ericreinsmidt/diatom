@@ -99,7 +99,7 @@ ifeq ($(PORT),pixel2)
 endif
 
 .PHONY: all clean check check-seam check-proto check-port \
-        check-cheevos stub run-stub
+        check-cheevos check-asan stub run-stub
 
 all: $(BIN)
 
@@ -132,6 +132,27 @@ $(BUILD)/%.o: %.c
 # Mechanical checks, each guarding a rule that decays the moment nothing fails
 # when it is broken: check-seam has held since day one for exactly that reason.
 check: check-seam check-cheevos check-proto check-port check-stateplane
+
+# The checks that run without SDL, built with AddressSanitizer and
+# UndefinedBehaviorSanitizer into build/asan, so an overrun, a use after free
+# or undefined behavior fails instead of passing. Not part of `check`, being a
+# full rebuild; run it before a release and after touching the cheevos code.
+#
+# check-port, check-proto and check-stateplane are left out: on a Mac,
+# Homebrew's SDL2 is sdl2-compat, which can't load SDL3 inside a sanitized
+# process and says so in a dialog box, one per run. Leaks aren't caught
+# either: macOS's AddressSanitizer has no leak detection.
+#
+# tools/sanitize-ignore.txt keeps UBSan out of the vendored rcheevos, whose
+# sizing pass takes a field's address through a null pointer without reading
+# it (condset.c, still so upstream on 2026-10-30). AddressSanitizer still
+# covers it.
+SANITIZE = -fsanitize=address,undefined -fno-omit-frame-pointer \
+           -fno-sanitize-recover=undefined \
+           -fsanitize-ignorelist=$(CURDIR)/tools/sanitize-ignore.txt
+check-asan:
+	@$(MAKE) --no-print-directory BUILD=build/asan check-cheevos \
+	         CC="$(CC) $(SANITIZE)"
 
 # Does a RetroAchievements address reach the byte it names? Offline, needs no
 # core and no ROM, and links only cheevos.c plus the vendored runtime - so it

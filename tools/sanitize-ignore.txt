@@ -1,0 +1,4 @@
+# Files UndefinedBehaviorSanitizer leaves alone in `make check-asan`. See the
+# Makefile's check-asan for why.
+[undefined]
+src:*vendor/rcheevos/*
