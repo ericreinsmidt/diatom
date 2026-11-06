@@ -1935,8 +1935,8 @@ void diatom_port_fast_clock(bool on)
 {
 	static bool said;
 
-	if (!diatom_cpufreq_hold_top(on) && !said) {
+	if (!diatom_cpufreq_hold_top(on, false) && !said) {
 		said = true;
-		diatom_port_log(DIATOM_LOG_WARN, "brick: could not set the CPU's lowest clock");
+		diatom_port_log(DIATOM_LOG_WARN, "brick: could not set the CPU's clock");
 	}
 }
