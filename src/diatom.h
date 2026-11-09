@@ -185,6 +185,7 @@ typedef struct {
 	char core[1024];
 	char rom[1024];
 	char firmware[128];    /* RUN: what this content needs in the system dir */
+	char tz[64];           /* RUN: the zone a game's clock reads, "" to leave it */
 	char tag[64];
 	char slot[64];
 	/* Session persistence: the launcher passes explicit paths, and these

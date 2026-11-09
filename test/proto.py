@@ -253,6 +253,21 @@ def main():
             d.send("AUDIO")
             ck(d.line("AUDIO") is not None, "PREMAP has no answer and changes nothing else")
 
+    # The zone comes with each game. No core is needed: it's applied on the way
+    # to loading one, before a core could read a clock.
+    with tempfile.TemporaryFile() as err:
+        with Diatom(stderr=err) as d:
+            d.line("READY")
+            for zone in ("Asia/Tokyo", "Asia/Tokyo", "America/Chicago", ""):
+                d.send("RUN\tcore=/nonexistent.so" + ("\ttz=" + zone if zone else ""))
+                d.line("ERROR")
+        err.seek(0)
+        log = err.read().decode(errors="replace")
+    ck("time zone Asia/Tokyo, +0900" in log, "RUN's zone sets local time")
+    ck(log.count("time zone Asia/Tokyo") == 1, "the same zone again changes nothing")
+    ck("time zone America/Chicago, -0" in log, "a new zone takes its place")
+    ck(log.count("time zone") == 2, "a RUN with no zone leaves it alone")
+
     if fails:
         print(f"\n{len(fails)} protocol check(s) failed")
         return 1

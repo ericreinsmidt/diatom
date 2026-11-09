@@ -224,6 +224,7 @@ static void parse_line(char *line, diatom_msg *out)
 		 * fails the way it always did, a newer one checks before loading. */
 		else if (!strcmp(field, "firmware"))
 			snprintf(out->firmware, sizeof out->firmware, "%s", v);
+		else if (!strcmp(field, "tz"))   snprintf(out->tz,   sizeof out->tz,   "%s", v);
 		else if (!strcmp(field, "tag"))  snprintf(out->tag,  sizeof out->tag,  "%s", v);
 		else if (!strcmp(field, "slot")) snprintf(out->slot,  sizeof out->slot,  "%s", v);
 		else if (!strcmp(field, "resume"))
